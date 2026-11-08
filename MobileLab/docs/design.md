@@ -1,7 +1,7 @@
 # design.md — MobileLab UI/UX
 
-**Date:** 2026-11-08 · **Status:** PHASE 0 baseline; PHASE 3 finalize karega.
-**Source:** har value `J:\Ai Agent\MobileLab\web\style.css` aur `web\index.html` se parh kar likhi gayi hai — koi value andaz se nahi.
+**Date:** 2026-11-08 · **Status:** PHASE 0 baseline + PHASE 1 proposed UX requirements; PHASE 3 finalize karega.
+**Source:** design tokens `J:\Ai Agent\MobileLab\web\style.css` aur `web\index.html` se parhe gaye; P1 requirements `PRD.md` §4 / §12 se aaye hain — koi CSS/HTML code abhi nahi badla.
 
 ---
 
@@ -110,3 +110,14 @@ Roman Urdu prose (`ur-PK-Latn` Latin script), **RTL nahi**. Technical terms (`pr
 ## 11. Pending (P3 finalize, P9 implement)
 
 Design tokens ka doc-vs-CSS audit · a11y markup fixes · `prefers-reduced-motion` · focus styles · reduced-motion gate · har view ke liye illustrated empty/error/success states audit.
+
+## 12. PHASE 1 proposed UX requirements (code abhi nahi)
+
+| Journey | Proposed UI | State / copy | P3 decision |
+|---|---|---|---|
+| J8 provenance | Research card par `source`, `date checked`, `fact`/`recommendation` badge, local `sha256` | Empty: `Koi verified source nahi` · Loading: `checking` · Success: `verified 2026-11-08` | O9: naya view ya Research Agent panel |
+| J9 Telegram | Settings mein masked bot token, `Test`, `Alerts ON/OFF`, last status | Invalid token / webhook conflict / offline / 24h update loss ke saaf Roman Urdu errors | O4 token storage · O9 placement |
+| J10 task plan | Task textarea → `Plan + report` result with facts / assumptions / open / risks / safe steps | Prohibited request par refusal + official route, kabhi bypass step nahi | O6 rule-based vs LLM · O9 placement |
+| J11 legal research | Source allowlist table + `Legal/authorized` warning (BSI) | Unauthorized source `403` + reason; Tor-only URL `not configured` | O5 allowlist approval · O9 placement |
+
+**Design rules:** koi bhi status sirf rang se na bataya jaye; har badge ka text ho. Token, IMEI ya customer data kabhi plain text toast/log mein na ho. Har naya control keyboard accessible, labeled aur `aria-live` status ke sath. Light theme aur existing tokens barqarar; koi external font / CDN nahi.

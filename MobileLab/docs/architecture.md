@@ -1,9 +1,9 @@
 # architecture.md — MobileLab System Architecture
 
-**Date:** 2026-11-08 · **Status:** PHASE 0 baseline; PHASE 2 finalize + real research.
+**Date:** 2026-11-08 · **Status:** PHASE 0 baseline + PHASE 1 research snapshot; PHASE 2 finalize karega.
 **Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab`
 
-> **Research honesty:** is file mein koi bhi source URL / `date checked` nahi likha gaya, kyunke P0 mein naya web browse nahi kiya gaya. Technology decisions ke liye asli browsing + URL + `date checked` **PHASE 2** mein darj hongi. Koi citation banawati nahi.
+> **Research honesty:** P0 mein koi naya web browse nahi tha. P1 mein 16 official / verified sources `PRD.md` §5.3 (S1–S16) mein `URL + date checked = 2026-11-08` ke sath darj hain. Is file ka technology table abhi P0 baseline hai; P2 usay S1–S16 se jor kar final karega. Koi citation banawati nahi.
 
 ---
 
@@ -150,3 +150,21 @@ Distribution = `run.bat` aik Windows PC par. Koi cloud deploy, hosted CI/CD, con
 ## 16. 12-gate mapping
 
 P0 Bootstrap → P1 PRD → P2 Architecture+research → P3 Design → P4 Setup → P5 Auth (N/A+why) → P6 Core fixes → P7 Integrations → P8 Tests → P9 Security/Perf/A11y → P10 Deploy (N/A+why) → P11 Docs/Monitoring. Tafseel `phases.md`.
+
+---
+
+## 17. PHASE 1 research snapshot — external boundaries (P2 final karega)
+
+**Source register:** `PRD.md` §5.3, S1–S16, `date checked = 2026-11-08`. Ye section unhi ka architecture impact hai; koi naya citation nahi.
+
+| Area | P1 finding | Architecture impact |
+|---|---|---|
+| Runtime | App local `127.0.0.1`; internet scoped to research/firmware/Telegram (C11). | `research.py`, Telegram adapter aur provenance fetch alag adapter layer mein; core `firmware.py` / `db.py` offline rehte hain. |
+| Telegram | Official Bot API HTTPS template; `getUpdates` 1–100, 24h retention, webhook mutually exclusive, `message` / `channel_post` alag; historical channel fetch documented nahi (S9). | P7: `telegram.py` adapter with `urllib.request`; `getUpdates` pehle; `sendMessage` alert; koi MTProto/TDLib/Telethon dependency nahi; token O2/O4. |
+| Deep/dark web | BSI: deep web ~90% non-indexed; dark net subset needs Tor; browsing alone illegal nahi, illegal content/download/goods/services illegal; malware risk zyada (S10). | P7: policy gate **before** fetch; legal/public/authorized allowlist; koi default Tor automation, executable download ya private data nahi. |
+| Competitors | Paid suites subscription/loader coverage; open-source low-level read/write; OEM tools narrow; enterprise SBOM/vulnerability platforms (S1–S8). | MobileLab ka boundary **read/validate/provenance/plan** hai — koi device write/erase ya bypass integration nahi. |
+| Platform security | AOSP Verified Boot + rollback protection; Play Integrity genuine-device check; Apple Activation Lock server-side (S11–S13). | Firmware mismatch/downgrade ko high-risk flag; official-route job records; koi rollback/integrity spoofing nahi. |
+| Regulatory | EU 2024/1799 applies from 31 July 2026 (S15). | Future demand assumption; local record/provenance features ko justify karta hai, koi cloud compliance claim nahi. |
+| Security | OWASP SSRF allowlist, scheme/host validation, private/loopback/link-local/metadata block, redirects off (S16). | `llm_endpoint`, research URL aur Telegram endpoint ke liye common allowlist P9; connection-time validation. |
+
+**P2 due:** technology table ki har row ko S1–S16 se jorna, adapter interfaces finalize karna, evidence/provenance DB schema ADR likhna, aur O4/O5/O9/O10 band karna. P1 ne koi code nahi badla.

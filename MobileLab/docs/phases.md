@@ -1,7 +1,7 @@
 # phases.md — 12 Phases, Gates aur PHASE REVIEW
 
-**Date:** 2026-11-08 · **Current phase:** PHASE 0 (Bootstrap)
-**Rule:** koi phase skip nahi. Jin items ka is app par matlab nahi, unhein **"N/A + wajah"** likh kar gate pass kiya jaye ga. Har `READY` ke baad **user ki ijazat** zaroori; khud aage na barhna.
+**Date:** 2026-11-08 · **Current phase:** PHASE 1 (Requirements / PRD)
+**Rule:** koi phase skip nahi. Jin items ka is app par matlab nahi, unhein **"N/A + wajah"** likh kar gate pass kiya jaye ga. Har `READY` ke baad **user ki ijazat** zaroori; khud aage na barhna. C15: har phase mukammal, kuch incomplete na chhorhein.
 
 ---
 

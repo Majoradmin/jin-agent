@@ -6,6 +6,15 @@
 
 ## 2026-11-08
 
+### `docs:` — PHASE 1 PRD + verified research (P1)
+**User-visible app behavior:** koi badlao nahi. Is entry ka matlab sirf requirements / documentation hai; koi Python, JS, CSS ya DB code nahi badla.
+- `PRD.md` `1.0.0` → `1.1.0`: product vision, competitor map, future outlook, C11–C16, FR-01…FR-20, AC-01…AC-11, edge cases aur success metrics mukammal.
+- 16 sources S1–S16 `URL + date checked = 2026-11-08` ke sath darj: ChimeraTool, UnlockTool distributor, Android Flash Tool, GitHub API `edl` / `mtkclient`, Binarly, NetRise, Telegram Bot API, BSI, AOSP Verified Boot, Play Integrity, Apple, Samsung, EUR-Lex, OWASP. Facts aur recommendations alag; low-authority price/market claims exclude.
+- Naye confirmed decisions: C11 scoped internet · C12 Telegram Bot command/alert · C13 legal/authorized deep/dark web · C14 safe task plan/report · C15 phase completeness · C16 provenance.
+- `decisions.md` D13–D18 · `agent.md` addendum C1–C16 (verbatim block untouched) · `architecture.md` §17 · `design.md` §12 · `rules.md` §14 · `memory.md` / `progress.md` P1 update.
+- Open questions O4–O10 aur risks R6–R10 register mein darj; P1 ko nahi rokte, implementation se pehle band honge.
+- **Koi breaking change / DB migration / deployment change nahi hua.**
+
 ### `chore:` — Local git + verbatim line-ending guard (P0 verification)
 - Commit `c25c3c6` — `chore: adopt agent.md governance + project docs` (38 files, `.git` 502K, **koi remote nahi**, `git status` clean).
 - Repo-local `core.autocrlf=false` taake checkout par `agent.md` ka verbatim block CRLF na ho jaye (R1). Raw-byte check: `CRLF present: False`, sha256 `1de53535…` barqarar.

@@ -1,6 +1,6 @@
 # rules.md — MobileLab Coding & Operating Rules
 
-**Date:** 2026-11-08 · **Status:** PHASE 0 baseline. Ye file `agent.md` ke verbatim prompt ka project-level amal hai; us prompt ki koi shaq is file se kam nahi hoti.
+**Date:** 2026-11-08 · **Status:** PHASE 0 baseline + PHASE 1 rules. Ye file `agent.md` ke verbatim prompt ka project-level amal hai; us prompt ki koi shaq is file se kam nahi hoti.
 **Root:** sab kaam `J:\Ai Agent` mein (C10).
 
 ---
@@ -119,3 +119,14 @@
 - Har meaningful decision ke baad `memory.md`, `progress.md`, `decisions.md` (ADR), `changelog.md` (user-visible badlao) update.
 - Naye task se pehle relevant docs parho.
 - Special commands: `next / continue / status / review / research / explain / fix / stop`.
+
+## 14. PHASE 1 research / integration rules (C11–C16)
+
+- **Internet boundary:** app local; outbound sirf research agent, firmware/provenance aur Telegram Bot API. Arbitrary URL default `OFF`; har outbound host allowlist se guzare.
+- **Provenance:** har fact ka `source_url` + `date checked`; `fact` aur `recommendation` alag labels; koi speculation ko fact na likho; low-authority price/market claims exclude karo. Source register `PRD.md` §5.3 S1–S16.
+- **Telegram:** sirf official HTTPS `https://api.telegram.org/bot<token>/METHOD_NAME`; stdlib `urllib.request`; koi MTProto/TDLib/Telethon nahi. Token kabhi API response, log, toast ya doc mein plaintext na ho. `getUpdates` aur webhook dono ek sath nahi; `limit` 1–100; `offset` har response ke baad recalculate; 24h retention ka dawa na karo; `channel_post` ko historical public-channel history na samjho.
+- **Deep/dark web:** sirf legal, public ya authorized sources. Policy check **fetch se pehle**. Illegal marketplace, stolen credential, leaked/proprietary firmware, bypass service, malware, private database, unauthorized access sab reject. Koi downloaded executable execute na ho. BSI definition aur warning docs/UI mein rehni chahiye.
+- **Task plan/report:** koi bhi mobile-software task ka Roman Urdu safe plan/report; facts, assumptions, open questions, risks aur safe steps alag. HARD POLICY classifier har output par lage; koi device write/erase, flash, bootloader/IMEI operation ya lock bypass step generate na ho. Prohibited request par refusal + official route.
+- **Security:** OWASP SSRF allowlist, scheme/host validation, private/loopback/link-local/metadata block, redirects off, connection-time IP validation. Ye `llm_endpoint`, research sources aur Telegram endpoint sab par lage.
+- **Competitor boundary:** paid suites ya open-source low-level tools ki device-operation capabilities copy nahi karni; MobileLab read/validate/provenance/plan par rehta hai.
+- **Phase completeness:** har phase ka `PHASE REVIEW` aur `READY` gate; koi incomplete item agle phase par na chhorhein (C15).

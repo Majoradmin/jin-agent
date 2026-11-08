@@ -26,18 +26,21 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 | P9 | Skills / MCP installs abhi **defer** (O1). |
 | P10 | Scan default workspace-restricted, zarurat par **explicit opt-in** (C6). |
 
-## 3. Confirmed decisions (C1–C10)
+## 3. Confirmed decisions (C1–C16)
 
-`decisions.md` → "Classification Register" aur ADRs. Khulasa: existing MobileLab (C1) · `agent.md` root + 9 docs `MobileLab\docs\` (C2) · adapted saare 12 gates (C3) · static QA + stdlib unittest (C4) · verbatim prompt + alag addendum (C5) · scan opt-in (C6) · local git (C7) · skills/MCP defer (C8) · Roman Urdu (C9) · J: root (C10).
+`decisions.md` → "Classification Register" aur ADRs D1–D18. Khulasa: existing MobileLab (C1) · `agent.md` root + 9 docs `MobileLab\docs\` (C2) · adapted saare 12 gates (C3) · static QA + stdlib unittest (C4) · verbatim prompt + alag addendum (C5) · scan opt-in (C6) · local git (C7) · skills/MCP defer (C8) · Roman Urdu (C9) · J: root (C10) · scoped internet (C11) · Telegram Bot command/alert (C12) · legal/authorized deep/dark web (C13) · safe task plan/report (C14) · phase completeness (C15) · provenance/URL/date (C16).
 
 ## 4. Current progress
 
-**PHASE 0 — Bootstrap** ✅ **READY**.
+**PHASE 0 — Bootstrap** ✅ **READY** · **PHASE 1 — Requirements / PRD** 🔄 documentation complete, final review due.
 - P0-1 `agent.md` ✅ — verbatim byte-identical (17,816 chars, 22 sections, sha256 `1de53535…`) + alag addendum.
 - P0-2 9 docs ✅ — `PRD, architecture, design, rules, phases, memory, progress, decisions, changelog`.
 - P0-3 `.gitignore` + local git ✅ — commit `c25c3c6`, 38 files, koi remote nahi, clean status, `core.autocrlf=false`.
 - P0-4 verification + `PHASE REVIEW — PHASE 0` ✅ — gate `READY`.
-- **Ab intezar:** user ki PHASE 1 (PRD finalize) ki ijazat.
+- P1-1 docs inspection ✅ · P1-2 3+1 Roman Urdu clarifications ✅ · P1-3 16 verified sources S1–S16 ✅.
+- P1-4 `PRD.md` 1.1.0 ✅ — competitor map, future outlook, C11–C16, FR-01…FR-20, AC-01…AC-11, 16-source register.
+- P1-5 `decisions.md` D13–D18 ✅ · `agent.md` addendum C1–C16 ✅ · `architecture / design / rules` P1 sections ✅.
+- **Baaki:** `progress.md`, `changelog.md`, `phases.md` P1 review, workspace memory, verification + commit.
 
 ## 5. Known constraints / environment
 
@@ -49,11 +52,12 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 - WorkBuddy ka session transcript / plan cache `C:\Users\...\.workbuddy-ai\` mein app-managed hai; project source of truth ab `J:\Ai Agent\agent.md` + `docs\` hain.
 - Browser headless screenshot ke waqt Chrome ka `docs.google.com ... failed to install` error harmless noise tha.
 
-## 6. Pending questions (critical nahi, kaam nahi rokte)
+## 6. Pending questions (P1 ko nahi rokte; implementation se pehle band)
 
 - **O1** — kaunsi skills / MCP, kyun, kis cost / credentials ke saath? Alag task mein shortlist + manzoori.
-- **O2** — `llm_key` plaintext-at-rest qabool hai (single-user loopback) ya Windows DPAPI / credential manager? P9 ADR.
+- **O2** — `llm_key` / Telegram token plaintext-at-rest qabool hai ya Windows DPAPI / Credential Manager? P9 ADR.
 - **O3** — monitoring log retention (kitne din / kitna MB)? P11.
+- **O4** — Telegram token storage, rotation, rate-limit/backoff. **O5** — legal deep/dark allowlist approval. **O6** — task plan rule-based vs LLM. **O7** — public channel history. **O8** — firmware provenance hash policy. **O9** — naya 8th view ya existing panels. **O10** — common SSRF allowlist.
 
 ## 7. Lessons learned
 
@@ -67,4 +71,4 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 
 ## 8. Next recommended action
 
-PHASE 0 `READY` hai → **ruk kar user se PHASE 1 (PRD finalize) ki ijazat maango**. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` ka PHASE REVIEW parho.
+PHASE 1 ka documentation mukammal hai; ab **verification + `PHASE REVIEW — PHASE 1` + commit** karna hai. Gate `READY` hone ke baad **ruk kar user se PHASE 2 (Architecture / Tech Stack) ki ijazat maango**. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` ka PHASE REVIEW parho.

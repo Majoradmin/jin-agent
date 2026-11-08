@@ -1,67 +1,65 @@
 # progress.md — Current Progress
 
-**Date:** 2026-11-08 · **Current phase:** `PHASE 0 — Discovery / Bootstrap` — ✅ **READY**
-**Current task:** koi nahi. P0 mukammal; PHASE 1 ke liye user ki ijazat ka intezar.
-**Gate status:** `READY` — `PHASE REVIEW — PHASE 0` `phases.md` §8 mein darj hai.
+**Date:** 2026-11-08 · **Current phase:** `PHASE 1 — Requirements / PRD` — 🔄 **in progress**
+**Current task:** P1 verification, `PHASE REVIEW — PHASE 1`, workspace memory update aur conventional commit.
+**Gate status:** abhi `PENDING`; final `PHASE REVIEW` `phases.md` mein darj hoga.
+**Previous gate:** `PHASE 0 — Discovery / Bootstrap` ✅ `READY` (`phases.md` §8).
 
 ---
 
-## 1. Task board (PHASE 0)
+## 1. Task board (PHASE 1)
 
 | Task | Status | Files | Verification |
 |---|---|---|---|
-| P0-1 `agent.md` verbatim + addendum | ✅ completed | `J:\Ai Agent\agent.md` | byte-compare `True`; 22 sections; sha256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840`; addendum C1–C10 / C9 / C10 / HARD POLICY present |
-| P0-2 9 source-of-truth docs | ✅ completed | `MobileLab\docs\*.md` (9) | design tokens / media queries / DB indexes asli code se parhe gaye; koi banawati citation nahi |
-| P0-3 `.gitignore` + local git + `chore:` commit | ✅ completed | `J:\Ai Agent\.gitignore`, `.git\` | 38 staged → commit `c25c3c6`; `git status` clean; `git remote -v` empty; 3/3 ignore checks; `.git` 502K |
-| P0-4 verification + `PHASE REVIEW` | ✅ completed | `progress.md`, `changelog.md`, `phases.md`, `decisions.md`, `memory.md` | 9 docs + `agent.md` + `.gitignore` = 11; verbatim re-check after git; `core.autocrlf=false`; `PHASE REVIEW` READY |
+| P1-1 9 docs + Git state inspect | ✅ completed | `MobileLab\docs\*.md`, `.git` | `git status` clean, koi remote nahi, 2 commits, date `2026-11-08` |
+| P1-2 chhoti Roman Urdu clarification | ✅ completed | user answers | 3+1 sawal: Telegram `Bot command+alert`, legal/authorized deep/dark web, `Plan + report bhi` |
+| P1-3 verified research / source register | ✅ completed | `PRD.md` §5, §5.3 | 16 official/verified sources S1–S16, `date checked = 2026-11-08`, facts vs recommendations alag |
+| P1-4 `PRD.md` 1.1.0 finalize | ✅ completed | `PRD.md` | competitor map, future outlook, C11–C16, FR-01…FR-20, AC-01…AC-11, edge cases, metrics |
+| P1-5 decisions + addendum | ✅ completed | `decisions.md`, `agent.md` | D13–D18; C1–C16; A8–A10; O4–O10; R6–R10; verbatim block untouched |
+| P1-6 architecture / design / rules P1 sections | ✅ completed | `architecture.md`, `design.md`, `rules.md` | P1 research snapshot, proposed UX, integration/security rules |
+| P1-7 progress / memory / changelog / phases | 🔄 in progress | `progress.md`, `memory.md`, `changelog.md`, `phases.md` | is file + P1 review pending |
+| P1-8 verification + commit + review | ⏳ pending | `.git`, workspace memory | byte-integrity, docs count, git clean, conventional commit |
 
 ## 2. Completed work (poora project ka context)
 
 - **v1.0.0 app** (P0 se pehle): `server.py`, `db.py`, `firmware.py`, `research.py`, `knowledge.py`, `web\*`, `run.bat`, `samples\*`, `data\mobilelab.db`. MTK + QCOM scanners, research agent, 7-view UI, live preview @ `127.0.0.1:8765`.
 - **Read-only QA**: 13 findings; do high-risk source par dobara verify (QA #1 `server.py:286-290` + `db.py:143-148`; QA #3 `server.py:292-304`).
-- **Governance**: 12 adapted gates, classification, QA→test mapping, DoD. Purana planning artifact `C:\Users\Rohaani\.workbuddy-ai\plans\...md` historical hai; **source of truth ab `J:\Ai Agent`** (C10).
+- **PHASE 0**: 12 adapted gates, classification, QA→test mapping, `agent.md` verbatim + addendum, 9 docs, `.gitignore`, local-only git, `PHASE REVIEW` `READY`.
+- **PHASE 1 research**: ChimeraTool, UnlockTool distributor, Android Flash Tool, `bkerler/edl`, `bkerler/mtkclient`, Binarly, NetRise, Telegram Bot API, BSI, AOSP Verified Boot, Play Integrity, Apple Activation Lock, Samsung FRP, EU 2024/1799, OWASP SSRF — sab `PRD.md` S1–S16.
+- **PHASE 1 decisions**: C11 scoped internet · C12 Telegram Bot command/alert · C13 legal/authorized deep/dark web · C14 safe task plan/report · C15 phase completeness · C16 provenance.
 
 ## 3. In-progress / blocked
 
-- **In-progress:** koi nahi — PHASE 0 ke saare 4 tasks mukammal.
+- **In-progress:** P1-7 / P1-8 — docs final sync, verification, commit aur `PHASE REVIEW`.
 - **Blocked:** koi nahi.
-- **Blocker resolved:** pehle Plan mode, phir Ask mode tha (dono writes band). Ab Agent mode hai. `ExitPlanMode` is environment mein maujood nahi tha — approval seedha user se liya gaya, koi jhootha claim nahi.
-- **Waiting on:** user ki PHASE 1 ki ijazat (workflow ka phase-gate rule).
+- **Code changes:** **koi nahi** — P1 sirf documentation / requirements phase hai.
+- **Clarification resolved:** pehle `Sirf research` choose hua, dobara poochhne par user ne `Plan + report bhi` pakka kiya; PRD C14 mein yahi likha hai.
+- **Waiting on:** apna P1 verification + gate; uske baad user ki PHASE 2 ijazat.
 
 ## 4. Tests / verification completed
 
 | Check | Command / method | Result |
 |---|---|---|
-| `agent.md` verbatim | transcript parse + byte-compare | ✅ `True` |
-| Section count | regex `^\d{1,2}\. [A-Z…]+$` | ✅ 22 |
-| Exact boundaries | first + last line assert | ✅ dono match |
-| Addendum integrity | heading / C9 / C10 / HARD POLICY | ✅ present |
-| Windows paths | `J:\Ai Agent` × 9, zero `J:/Ai Agent` | ✅ path-conversion bug theek kiya gaya |
-| Raw line endings | `open(...,"rb")` + `CRLF` check | ✅ `CRLF present: False` |
-| Docs count | `ls -1 docs \| wc -l` | ✅ 9 |
-| Design tokens | `style.css:1-45` read | ✅ exact values `design.md` mein |
-| Responsive rules | `@media` grep | ✅ 7 breakpoints |
-| A11y baseline | `aria-` grep | ✅ 1 `aria-hidden`; gaps documented |
-| DB schema | `CREATE TABLE/INDEX/PRAGMA` grep | ✅ 6 tables, 3 indexes, WAL + FK |
-| Toolchain | `git --version`, `python --version` | ✅ 2.55.0 / 3.13.14 |
-| Git identity | `git config --global user.*` | ⚠️ empty → A5 / D11 neutral local identity |
-| Local git | `git init -b main` + `add -A` + `commit` | ✅ `c25c3c6 chore: adopt agent.md governance + project docs` |
-| No remote | `git remote -v` | ✅ empty |
-| Clean tree | `git status --short` | ✅ empty (final commit ke baad bhi) |
-| `.gitignore` | `git check-ignore -v` on DB / pycache / workspace memory | ✅ 3/3 ignored |
-| Line-ending guard | `core.autocrlf=false` + raw-byte re-check | ✅ sha256 barqarar |
+| Docs read-back | 9 docs + `agent.md` addendum | ✅ P0 state parhi gayi |
+| Git state | `git -C "J:/Ai Agent" status --short` + `remote -v` + `log --oneline -5` | ✅ clean, koi remote nahi, `d84aff4` / `c25c3c6` |
+| Date | `date '+%Y-%m-%d %H:%M:%S %z'` | ✅ `2026-11-08 14:25:57 +0500` |
+| Research sources | `WebFetch` / `WebSearch` / `domain_search` | ✅ 16 official/verified sources; low-authority claims excluded |
+| `agent.md` verbatim | P0 sha256 + addendum-only edits | 🔄 final byte re-check pending |
+| Docs count | `ls -1 docs` | 🔄 final check pending |
+| Git final | `git status --short`, `git log -1` | 🔄 commit ke baad pending |
 
 **Automated test suite:** ❌ abhi nahi bana (P8 deliverable). `python -m unittest discover -s tests -v` abhi chalane ka koi matlab nahi — is ka koi jhootha "green" claim nahi kiya gaya.
 
 ## 5. Remaining work
 
-**Is phase:** koi nahi — `READY`.
-**Agle phases (sab gates, user ki ijazat ke saath):** P1 PRD finalize · P2 Architecture + real research · P3 Design · P4 Setup · P5 Auth N/A · P6 Core fixes · P7 Integrations · P8 Tests · P9 Security/Perf/A11y · P10 Deploy N/A · P11 Docs/Monitoring.
+**Is phase:** `progress.md` final P1 status · `changelog.md` P1 entry · `phases.md` `PHASE REVIEW — PHASE 1` · workspace memory · verbatim/docs/git verification · conventional commit · user se PHASE 2 ki ijazat.
+
+**Agle phases (sab gates, user ki ijazat ke saath):** P2 Architecture + S1–S16 technology citations · P3 Design (O9) · P4 Setup · P5 Auth N/A · P6 Core fixes · P7 Integrations (Telegram / legal research / task plan / provenance) · P8 Tests · P9 Security/Perf/A11y (O2/O4/O10) · P10 Deploy N/A · P11 Docs/Monitoring (O3/O8).
 
 ## 6. Known risks
 
-R1 verbatim drift (mitigated: byte-compare + `core.autocrlf=false`) · R2 banawati citations (P2 mein asli browsing + URL + `date checked`) · R3 security fixes workflow tod dein · R4 doc drift (P11 audit) · R5 default scan restriction rozana ke bahar wale scan ko roke (C6 opt-in).
+R1 verbatim drift (byte-compare + `core.autocrlf=false`) · R2 banawati citations (P1 S1–S16 se mitigated; P2 final) · R3 security fixes workflow tod dein · R4 doc drift · R5 default scan restriction · R6 Telegram token/update loss · R7 illegal research/malware · R8 planner HARD POLICY se bahar · R9 competitor claims outdated · R10 AI hallucination ko fact samajhna.
 
 ## 7. Next action
 
-PHASE 0 `READY` hai. **Ab rukna hai** — user se PHASE 1 (PRD finalize) ki ijazat maango. Khud aage na barho.
+P1 verification + `PHASE REVIEW — PHASE 1` + commit. Gate `READY` hone ke baad **rukna hai** — user se PHASE 2 (Architecture / Tech Stack) ki ijazat maango. Khud aage na barho.

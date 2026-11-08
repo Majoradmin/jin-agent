@@ -753,7 +753,7 @@ Huawei ID, Google FRP, Samsung Account / Knox Guard, MDM, carrier lock aur iClou
 Phase-by-phase: aik chhota sawal → user ka jawab → sirf usi approved task par `TASK / IMPLEMENTATION / VERIFICATION / RESULT` → phase review → agla sawal. Har task ke baad `docs\memory.md`, `docs\progress.md`, zarurat par `docs\decisions.md` (ADR) aur `docs\changelog.md` update. Naye task se pehle relevant docs parho.
 Special commands: `next` · `continue` · `status` · `review` · `research` · `explain` · `fix` · `stop`.
 
-### G. Classification (Confirmed C1–C10)
+### G. Classification (Confirmed C1–C16)
 | # | Faisla |
 |---|---|
 | C1 | Core app = existing MobileLab; koi naya product nahi |
@@ -766,10 +766,16 @@ Special commands: `next` · `continue` · `status` · `review` · `research` · 
 | C8 | Skills / MCP installs defer = Open question O1 |
 | C9 | Hamesha Roman Urdu (sawal + jawab + docs) |
 | C10 | Har project file / progress `J:\Ai Agent` mein; C: par project files nahi |
+| C11 | App local runtime; internet sirf research agent / firmware / Telegram tak |
+| C12 | Telegram Bot API command + alert; purani public channel history ka dawa nahi |
+| C13 | Deep/dark web sirf legal, public/authorized; illegal sources reject |
+| C14 | Koi bhi mobile-software task → safe Roman Urdu plan + report under HARD POLICY |
+| C15 | Step-by-step phases; har phase mukammal, kuch incomplete na chhorhein |
+| C16 | Har research fact ka URL + `date checked`; facts aur recommendations alag |
 
-**Assumptions:** A1 docs Roman Urdu prose + English headings/codes · A2 verbatim block = `<long_text_quote>` ke andar ka poora text · A3 tests production DB aur live internet kabhi touch na karein · A4 `.gitignore` data/db/secrets/logs ignore karega · A5 local commit ke liye neutral repo-local identity (`MobileLab Local <mobilelab@localhost.invalid>`), kyunke global git identity set nahi hai.
-**Open questions:** O1 skills/MCP shortlist · O2 `llm_key` plaintext-at-rest ya DPAPI (P9 ADR) · O3 log retention (P11).
-**Risks:** R1 verbatim drift · R2 banawati citations · R3 security fixes workflow tod dein · R4 doc drift · R5 default scan restriction rozana ke bahar wale scan ko roke (C6 isi liye).
+**Assumptions:** A1 docs Roman Urdu prose + English headings/codes · A2 verbatim block = `<long_text_quote>` ke andar ka poora text · A3 tests production DB aur live internet kabhi touch na karein · A4 `.gitignore` data/db/secrets/logs ignore karega · A5 local commit ke liye neutral repo-local identity (`MobileLab Local <mobilelab@localhost.invalid>`), kyunke global git identity set nahi hai · A6 responsive single-column fallback (P3) · A7 migration strategy P6 ADR · A8 Telegram pehle `getUpdates`, webhook baad mein · A9 research sources user-editable allowlist se · A10 task plan pehle rule-based.
+**Open questions:** O1 skills/MCP shortlist · O2 `llm_key` / bot token at-rest · O3 log retention · O4 Telegram token storage/rotation/rate-limit · O5 legal deep/dark allowlist approval · O6 task plan LLM vs rule-based · O7 public channel history · O8 firmware provenance hash policy · O9 naya view ya existing panels · O10 common SSRF allowlist.
+**Risks:** R1 verbatim drift · R2 banawati citations (P1 source register se mitigated) · R3 security fixes workflow tod dein · R4 doc drift · R5 default scan restriction · R6 Telegram token/update loss · R7 illegal research/malware · R8 planner HARD POLICY se bahar · R9 competitor claims outdated · R10 AI hallucination ko fact samajhna.
 
 ### H. Docs map
 | File | Zimmedari |
@@ -785,4 +791,11 @@ Special commands: `next` · `continue` · `status` · `review` · `research` · 
 | `changelog.md` | user-visible changes, fixes, breaking/DB/deploy changes |
 
 ### I. Research
-Is addendum aur P0 docs mein koi naya web browse nahi kiya gaya. Technology decisions ke liye **asli browsing + source URL + `date checked = YYYY-MM-DD`** `PHASE 2` mein darj hongi. Koi citation banawati nahi.
+P0 mein koi naya web browse nahi tha. **PHASE 1** mein 16 official / verified sources S1–S16 `PRD.md` mein `URL + date checked = 2026-11-08` ke sath darj hain; facts aur recommendations alag hain. Low-authority reseller / market-size claims exclude kiye gaye. `PHASE 2` inhi sources ko technology-selection table se jorega aur `architecture.md` final karega. Koi citation banawati nahi.
+
+### J. PHASE 1 confirmed boundary
+- Runtime local; internet scoped (C11).
+- Telegram: Bot API command + alert; koi MTProto/TDLib/Telethon dependency nahi; koi historical public-channel scrape nahi (C12).
+- Deep/dark web: sirf legal, public/authorized sources; koi illegal marketplace, stolen credential, leaked firmware, bypass service, malware ya private data nahi (C13).
+- Agent: koi bhi mobile-software task ka safe plan/report; HARD POLICY gate; koi device write/erase ya bypass steps nahi (C14).
+- Har phase poora, kuch incomplete na chhorhein (C15).
