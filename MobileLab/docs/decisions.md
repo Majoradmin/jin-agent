@@ -154,6 +154,48 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **Consequences:** mojooda docs pehle se is pattern par hain (English headings + Roman Urdu prose) — koi bulk rewrite nahi. Naye docs / reports isi split par likhe jayenge. In-app Roman Urdu microcopy (toasts, hints, letter text) **content** hai, is liye Roman Urdu rehti hai; UI chrome / labels agle phases mein English surface ki taraf align honge (O12). Koi jhootha "poora app English ho gaya" claim nahi.
 - **Risk:** is split ko "C9 khatam" samajhna — C9 zinda hai, sirf us ki domain ab clear hai.
 
+### D23 — Retain Python stdlib stack after verified P2 selection (C20)
+- **Date:** 2026-11-08 · **Context:** P2 ko 11 governing selection criteria aur official sources ke sath technology stack finalize karna tha; purana table unverified tha.
+- **Options:** Flask / FastAPI / aiohttp par migrate · JS/Node runtime · existing Python stdlib stack barqarar.
+- **Decision:** **existing Python 3.13 stdlib stack barqarar** — `ThreadingHTTPServer`, `sqlite3` + WAL, `urllib.request`, `xml.etree.ElementTree`, `ThreadPoolExecutor`, vanilla JS/CSS, `unittest`, `run.bat`. P2 me koi dependency, framework ya app code change nahi.
+- **Reason:** local-only, zero-`pip`, offline, single-user requirement; existing app chal raha hai; Flask `3.1.x` mature alternative hai lekin Werkzeug / Jinja / Click dependencies aur production deployment model lata hai (`P2-11`). Official `http.server` warning is liye loopback boundary aur mazboot karta hai (`P2-01`).
+- **Consequences:** `architecture.md` §2.1 / §2.2 final; app `VERSION` `1.1.0` barqarar; migration sirf naye ADR + user ijazat se. P5/P10 N/A justification zinda rehti hai.
+
+### D24 — Adapter boundaries for modular replacement (C21)
+- **Date:** 2026-11-08 · **Context:** governing prompt 2–5 saal ke upgrade / migration risks aur modular-replaceable architecture maangta hai.
+- **Options:** direct calls chhorh dena · sab kuch aik framework me rewrite · explicit adapter contracts likhna.
+- **Decision:** **teesra raasta**: `server.py` route registry, `db.py` repository, `research.fetch` outbound client, `parse_*` parsers, `sahulat.py` policy data, `app.js` UI modules, settings secrets, aur P7 `telegram.py` / `llm_client.py` adapters ke contracts `architecture.md` §21 me darj.
+- **Reason:** har technology row ki replacement strategy ko code se jorna, bina P2 rewrite ke; feed / Bot API / LLM schema drift ka asar aik layer tak seemit.
+- **Consequences:** P6/P7/P9 me code badalte waqt contracts pehle parhein; SQL ya framework migration me adaptern hi badalna padega. Koi jhootha "ab sab replaceable ho gaya" implementation claim nahi — contracts documented hain.
+
+### D25 — SQLite WAL + 7-table schema + parameterized SQL
+- **Date:** 2026-11-08 · **Context:** `architecture.md` §1 / §6 me purana `6 tables, 3 indexes` tha; PHASE 1B ne `cases` table aur `idx_cases_created` add kiye.
+- **Options:** docs ko purana chhorhna · schema ko normalization kar ke rewrite · doc-vs-code sync + placeholder/security rules.
+- **Decision:** **7 tables / 4 indexes** exact sync; `cases` ko main DB design me darj; WAL facts (`-wal` / `-shm`, network FS limit, auto-checkpoint, long-reader impact) aur `?` placeholder rule architecture me likhe.
+- **Reason:** official `sqlite3` docs string-formatted SQL ko injection vulnerable kehti hain; SQLite WAL docs DB state aur copy behavior batate hain (`P2-02`, `P2-08`). Doc drift R4 ka seedha risk tha.
+- **Consequences:** `/api/article` f-string SQL identifier QA #8 P9 me allowlist se fix hoga; WAL-aware backup policy P11; versioned migration P6 (`A7`).
+
+### D26 — Loopback-only HTTP security baseline
+- **Date:** 2026-11-08 · **Context:** `http.server` official docs production ke liye recommended nahi, CRLF header injection aur symlink warnings dete hain; MDN CSP aur OWASP SSRF bhi verify hue.
+- **Options:** abhi WSGI framework + auth laga dena · loopback boundary likh kar P9 hardening schedule karna · kuch na likhna.
+- **Decision:** **loopback-only boundary + P9 hardening schedule**: CSP, body cap, `realpath` / `commonpath`, XML pre-validation, SSRF allowlist with resolved-IP binding, redirects off, secret masking. P2 code nahi badalta.
+- **Reason:** single-user local app; par official warning ko ignore karna bhi galat tha. P5 auth N/A sirf `127.0.0.1` par hi qabool hai.
+- **Consequences:** LAN / Internet exposure ke liye naya framework + auth + TLS + deployment ADR aur user ijazat lazmi (`R13`). P9 regression tests `phases.md` §6 me maujood.
+
+### D27 — External integrations via Bot API + stdlib HTTP (C11 / C12)
+- **Date:** 2026-11-08 · **Context:** P1 `S9` aur P2 anchor re-check; user ne Telegram command + alert manzoor kiya tha.
+- **Options:** MTProto / TDLib / Telethon · vendor SDK · official Bot API + `urllib.request` · arbitrary public-channel scraper.
+- **Decision:** **official Bot API + stdlib `urllib.request`**, user-supplied token, P7 `telegram.py` adapter; optional OpenAI-compatible LLM bhi alag `llm_client.py` adapter se. Koi MTProto/TDLib/Telethon dependency, koi historical public-channel scrape claim nahi.
+- **Reason:** zero-dependency policy; endpoint template `https://api.telegram.org/bot<token>/METHOD_NAME` P2 me directly verify hua; `getUpdates.limit` 1–100 aur 24h retention bhi P2 anchor se mile (`P2-10`). Webhook / `getUpdates` mutual-exclusivity aur `message` / `channel_post` P1 `S9` se retained.
+- **Consequences:** token storage / rotation `O2/O4`, common SSRF allowlist `O10`, LLM rule-based fallback `O6`; core features offline rehte hain.
+
+### D28 — P2 research provenance and version honesty (C22)
+- **Date:** 2026-11-08 · **Context:** governing prompt har research result ke liye `source URL`, `date checked`, facts/recommendations separation aur speculation-not-fact maangta hai.
+- **Options:** sirf summary · purane P1 sources par bharosa · P2 official re-check + explicit limitations.
+- **Decision:** **12 P2 sources + 16 P1 sources** `architecture.md` §19 me full URL aur `date checked = 2026-11-08` ke sath; facts §20.1, assumptions §20.2, recommendations §20.3 alag. Python docs `3.13.18` vs local `3.13.14`, SQLite `3.53.1`, Expat `expat_2.8.1`; Telegram partial re-check aur transient fetch failures explicitly darj.
+- **Reason:** `R2` banawati citations aur `R10` hallucination ko fact banana; purane generic `/3/` docs `3.15.2` dikhate the, unhe local runtime behavior ka saboot banana ghalat tha.
+- **Consequences:** `architecture.md` §19.3 / §22, `rules.md` §17, `agent.md` addendum §M me yahi honesty rule; P7/P11 me sources dobara check honge. Koi low-authority price / market-size claim P2 facts me nahi.
+
 ---
 
 ## Classification Register
@@ -180,6 +222,9 @@ Har ADR: date · context · options · final decision · reason · consequences.
 | C17 | Policy ka naam/andaaz `Sahulat & Safe Service Policy`; **boundary unchanged**, koi chhoot nahi (D19) |
 | C18 | Sahulat toolkit (8th view, routes, checklist, consent, letters, case register, refusal-with-reason) scope mein (D20/D21) |
 | C19 | Language split (D22): **information / report / plan / user communication = Roman Urdu**; **baqi sab = English** (headings, labels, code, identifiers, paths, API routes, commits, technical terms) — professional look ke liye |
+| C20 | P2 verified stack: Python 3.13 stdlib, loopback `ThreadingHTTPServer`, SQLite WAL, vanilla JS/CSS, `unittest`, `run.bat`; koi dependency / framework / code migration nahi (D23) |
+| C21 | Modular replacement via documented adapter contracts; P2 rewrite nahi karta (D24) |
+| C22 | P2 research provenance: 12 P2 + 16 P1 sources, `URL + date checked`, facts/assumptions/recommendations alag, version nuance aur Telegram partial re-check explicitly darj (D28) |
 
 ### Assumptions (A — implementation se pehle / usi phase mein confirm)
 - **A1** docs Roman Urdu prose + English headings/codes.
@@ -193,6 +238,10 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **A8** Telegram pehle `getUpdates` long polling; webhook tab hi jab user maange (S9).
 - **A9** research sources user-editable allowlist se; arbitrary URL default `OFF`.
 - **A10** task plan pehle rule-based; optional LLM rewrite sirf configured endpoint par.
+- **A12** Python `3.13.18` docs local `3.13.14` ke liye relevant hain, lekin patch-level behavior barabar hone ka dawa nahi; runtime-specific checks local command / P8 tests se (D28).
+- **A13** Telegram ke P1 `S9` facts abhi sahih hain; P2 ne endpoint / limit / 24h directly dobara dekhe, baqi facts ko "P1 verified, P2 re-check nahi" ke tor par rakha gaya hai.
+- **A14** agle 2–5 saal me hardware-backed integrity, anti-rollback, provenance aur official-route record keeping ki ahmiyat barhegi; ye trend assumption hai, revenue ya market-share fact nahi.
+- **A15** feed schemas, Bot API aur optional LLM endpoints badal sakte hain; adapter layer aur offline degradation is liye zaruri hai.
 
 ### Open questions (O — P1 ko nahi rokte; implementation se pehle band)
 - **O1** skills / MCP shortlist + cost / credentials + manzoori.
@@ -207,16 +256,22 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **O10** `llm_endpoint`, research sources aur Telegram endpoint ke liye common SSRF allowlist (P9).
 - **O11** case register retention / export / deletion policy (P11).
 - **O12** C19/D22 ke mutabiq existing in-app Roman Urdu *chrome* (nav labels, buttons, toasts) ko English surface par kab / kis phase mein migrate karna hai; content strings (letters, reasons, hints) Roman Urdu rehte hain (P3/P11).
+- **O13** agar kabhi app ko `127.0.0.1` se bahar LAN / Internet par expose karna ho to kaunsa framework, auth, TLS aur deployment model chahiye; tab P5/P10 N/A dobara khulenge (P2 se naya, `R13`).
 
 ### Risks (R)
 - **R1** verbatim drift → byte-compare + 22-section count (mitigated).
-- **R2** banawati citations → P1 S1–S16 source register se mitigated; P2 final technology citations due.
+- **R2** banawati citations → P1 S1–S16 + P2 P2-01…P2-12 source registers se **mitigated**; `date checked = 2026-11-08`, koi generic `/3/` version claim local behavior ke tor par nahi.
 - **R3** strict security fixes legitimate feeds / scan workflow tod dein → mocked regression + `run.bat` smoke.
-- **R4** doc drift → P11 doc-vs-code audit.
+- **R4** doc drift → P2 ne 7 tables / 4 indexes, `cases`, `/api/sahulat/*`, `tests\test_sahulat.py` sync kiya; final audit P11.
 - **R5** default restriction rozana ke bahar wale scan ko roke → C6 opt-in.
 - **R6** Telegram token leak / 24h update loss / webhook conflict → O2/O4 + AC-07 tests.
 - **R7** illegal deep/dark source ya malware → C13 + AC-08 policy gate.
 - **R8** task planner Sahulat & Safe Service Policy se bahar step de de → C14 + AC-09 refusal tests.
 - **R9** competitor claims ya pricing outdated ho jayein → `date checked` + P2/P11 re-check.
-- **R10** AI hallucination ko fact mana jaye → C16 + `fact_or_recommendation` label + provenance.
+- **R10** AI hallucination ko fact mana jaye → C16 / C22 + `fact_or_recommendation` label + provenance.
 - **R11** policy ke naam badalne ko "boundary hata di" samajh liya jaye → D19 canonical note har section + `test_policy_boundary_unchanged` + `PRD.md` out-of-scope list unchanged (mitigated).
+- **R12** C19/D22 language split ko C9 ki mansookhi samajhna → D22 + `rules.md` §16 + `agent.md` §L; C9 zinda hai (clarified).
+- **R13** `http.server` ko production / LAN par expose karna → P2 loopback boundary + P5/P10 N/A sirf isi shart par; exposure ke liye naya ADR / auth / TLS / framework (D26).
+- **R14** official docs `3.13.18` vs local runtime `3.13.14` patch drift → `A12` / `D28`; runtime-specific behavior local verify, docs se patch equality ka dawa nahi.
+- **R15** outbound XML / SSRF / CSP / path-authz / secret handling abhi P9 pending → `P2-03`, `P2-05`, `P2-09`, `P2-12`, QA #1–#8 regression map.
+- **R16** Telegram P2 anchor re-check juzwi raha aur kuch fetches transient fail hue → P1 `S9` retained, P7 implementation se pehle dobara full re-check; koi naya unverified claim nahi.

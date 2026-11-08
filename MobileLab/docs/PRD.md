@@ -1,10 +1,10 @@
 # PRD — MobileLab
 
-**Version:** 1.2.0 (PHASE 1B — Sahulat & Safe Service Toolkit) · **Date:** 2026-11-08 · **Root:** `J:\Ai Agent`
-**Status:** PHASE 1 `READY` + PHASE 1B `READY`. Dono ke `PHASE REVIEW` `phases.md` §9 / §10 mein. **PHASE 2 abhi shuru nahi** — user ki ijazat ka intezar hai.
+**Version:** 1.3.0 (PHASE 2 — Architecture / Tech Stack linkage) · **Date:** 2026-11-08 · **Root:** `J:\Ai Agent`
+**Status:** PHASE 1 `READY` + PHASE 1B `READY` + **PHASE 2 `READY`**. Reviews `phases.md` §9 / §10 / §11 mein. **PHASE 3 abhi shuru nahi** — user ki ijazat ka intezar hai.
 **Language (C19 / D22):** information, report, plan aur tamam prose = **Roman Urdu**; headings, table headers, code, identifiers, paths, API routes, commit messages, UI labels aur technical terms = **English** (professional surface). C9 refined, khatam nahi.
 
-> **Research honesty:** is file mein sirf wo sources hain jo 2026-11-08 ko directly fetch ya official search result se verify kiye gaye. Har fact ke saath URL aur `date checked` hai. **Facts** aur **Recommendations** alag sections mein hain. Market-size ya reseller ke ghair-tasdeeq numbers PRD mein shamil nahi kiye gaye. Koi citation banawati nahi.
+> **Research honesty:** is file mein sirf wo sources hain jo 2026-11-08 ko directly fetch ya official search result se verify kiye gaye. Har fact ke saath URL aur `date checked` hai. **Facts** aur **Recommendations** alag sections mein hain. P2 ke 12 official technology / security sources `architecture.md` §19 me darj hain; is PRD me unka §16 linkage hai. Market-size ya reseller ke ghair-tasdeeq numbers PRD mein shamil nahi kiye gaye. Koi citation banawati nahi.
 
 ---
 
@@ -496,6 +496,7 @@ Khali folder · 4000+ files · depth > 6 · symlink / junction / UNC / remote pa
 ## 14. Success metrics
 
 - S1–S16 ke 100% facts ka URL + `date checked = 2026-11-08` maujood; facts aur recommendations 100% alag.
+- P2-01…P2-12 ke 100% technology / security sources ka URL + `date checked = 2026-11-08` `architecture.md` §19 me; 15 required headings, 11 selection criteria aur 10 major technology rows verify.
 - Sahulat & Safe Service Policy violations: `0` — koi bypass step, write/erase command ya illegal source PRD/docs/code mein nahi.
 - 12/12 `PHASE REVIEW` gates `READY`; koi phase incomplete nahi (C15).
 - 13/13 QA findings band, har aik ka named passing regression test.
@@ -509,4 +510,21 @@ Khali folder · 4000+ files · depth > 6 · symlink / junction / UNC / remote pa
 
 ## 15. Open items / next gate
 
-O1–O8, O10, O11, O12 upar `decisions.md` mein; **O9 resolved** (D21). **C19 / D22** ab language ka pakka qaida hai: information / report / plan aur user communication Roman Urdu, professional surface English. **PHASE 2** ka kaam: S1–S16 ko technology-selection table se jorna, adapter boundaries finalize karna, aur `architecture.md` ko verified citations ke sath final karna. P1 ne koi code nahi badla; **PHASE 1B** ne `sahulat.py`, `db.py`, `server.py`, `web/*` aur docs badle (sirf sahulat features, koi bypass capability nahi). PHASE 2 abhi tak **user ki ijazat ka intezar** kar raha hai.
+O1–O8, O10, O11, O12, O13 upar `decisions.md` mein; **O9 resolved** (D21). **C19 / D22** ab language ka pakka qaida hai: information / report / plan aur user communication Roman Urdu, professional surface English. **PHASE 2** mukammal: S1–S16 ko technology-selection table se jora, 12 naye P2 official sources verify kiye, adapter boundaries finalize kiye aur `architecture.md` ko verified citations ke sath final kiya (`READY`, `phases.md` §11). P1 ne koi code nahi badla; **PHASE 1B** ne `sahulat.py`, `db.py`, `server.py`, `web/*` aur docs badle (sirf sahulat features, koi bypass capability nahi). **PHASE 2** bhi documentation-only tha — koi app code, dependency, DB migration ya deployment change nahi. **PHASE 3** ab **user ki ijazat ka intezar** kar raha hai.
+
+## 16. PHASE 2 — Architecture linkage (documentation-only)
+
+**Source of truth:** `MobileLab\docs\architecture.md` 2.0.0. Is PRD ka product scope waisa ka waisa hai; P2 ne naya feature ya code nahi add kiya.
+
+| PRD area | P2 architecture linkage |
+|---|---|
+| FR-01…FR-06 firmware validation | `architecture.md` §1 / §5 / §11 — `firmware.py` read/validate only, sensitive partitions flag only |
+| FR-07…FR-13 research + provenance | §2.1 / §10 / §19 — stdlib `urllib.request`, ElementTree, `ThreadPoolExecutor`, P2-01…P2-12 verified sources |
+| FR-14…FR-20 local records / official routes | §6 / §7 / §18 — 7 tables, 4 indexes, `cases`, 6 `/api/sahulat/*` routes |
+| FR-21…FR-26 Sahulat toolkit | §18 unchanged code snapshot; policy boundary unchanged (`D19`) |
+| NFR local / offline / zero dependency | §2.2 selection criteria, §14 deployment N/A, `C20 / D23` |
+| Security expectations | §5 / §9 / §20 — `http.server` production warning, OWASP SSRF, XML security, MDN CSP; fixes scheduled P9 |
+| Future outlook / migration | §20.2 / §20.3 / §21 — assumptions, recommendations, adapter contracts |
+| Acceptance criteria | `architecture.md` §22 AC-P2-01…AC-P2-11; gate evidence `phases.md` §11 |
+
+**P2 confirmed decisions:** C20 verified stdlib stack · C21 adapter boundaries · C22 research provenance. ADRs D23–D28. Naye assumptions A12–A15, open question O13, risks R12–R16. `agent.md` addendum §M me P2 boundary; verbatim prefix untouched. Full project test suite P8 aur 12 baqi QA findings P6/P9 par apne gates ke mutabiq pending hain — P2 ne unhe fix hone ka jhootha dawa nahi kiya.

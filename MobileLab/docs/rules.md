@@ -159,3 +159,15 @@
 - **Reframe nahi:** C9 khatam nahi hua, sirf refined hua. Koi bhi purani doc ko "ab English karo" ke naam par bulk rewrite na karein.
 - **In-app text:** letters, refusal reasons, checklist hints, consent = **content** (Roman Urdu rehta). Nav / button / chrome labels = **surface** (English ki taraf O12 / P3/P11). Har naye string ko is table par classify kar ke likhein.
 - **Tests:** language rules ka koi automated gate nahi; `PHASE REVIEW` me documentation status par read-back verify karein.
+
+## 17. PHASE 2 — Research honesty / technology-selection rules (C20–C22)
+
+- **Verified stack (P2):** Python 3.13 stdlib, loopback `ThreadingHTTPServer`, `sqlite3` + WAL, `urllib.request`, `xml.etree.ElementTree`, explicit `ThreadPoolExecutor`, vanilla JS/CSS, `unittest`, `run.bat`. Koi dependency, framework ya code migration P2 mein nahi (D23).
+- **Provenance:** har technology fact ka `source URL` + `date checked`; `P2-01…P2-12` aur P1 `S1–S16` `architecture.md` §19 mein. Har item ko `fact` / `assumption` / `recommendation` ke label se likhein; speculation ko fact na banayein (C16 / C22 / D28).
+- **Version honesty:** official docs `Python 3.13.18 documentation` hain, local runtime `Python 3.13.14`. Docs patch-level behavior ka saboot nahi; runtime-specific dawa local command ya P8 test se verify karein. Generic `/3/` pages `3.15.2` dikhate the — unhein local runtime ka hawala na banayein (A12 / R14).
+- **Partial verification:** jo source fetch fail ya juzwi re-check hua (Telegram anchors), usay explicitly darj karein aur purane verified source ko "P1 verified, P2 re-check nahi" ka label dein. Koi naya unverified claim na likhein (R16).
+- **Architecture truth:** `architecture.md` ko `db.py` / `server.py` / `web\*` se match rakhein — 7 tables / 4 indexes, `cases`, 6 `/api/sahulat/*` routes, 8 views, `tests\test_sahulat.py`, `VERSION 1.1.0`. Doc drift R4 hai.
+- **Technology fields:** har major technology ke 5 fields (selected option, alternatives, why selected, trade-offs, replacement strategy) aur 11 governing selection criteria `architecture.md` §2.1 / §2.2 se kam na hon.
+- **No scope creep:** P2 documentation-only. Security fixes P9, integrations P7, full suite P8, `run.bat` guard P4 — P2 unhe fix hone ka jhootha dawa na kare.
+- **Loopback boundary:** `http.server` production ke liye recommended nahi; app sirf `127.0.0.1` par. LAN / Internet exposure ke liye naya ADR + auth + TLS + framework + user ijazat lazmi (D26 / R13).
+- **Adapter contracts:** replacement `architecture.md` §21 ke documented contracts se; P2 khud rewrite nahi karta (D24).
