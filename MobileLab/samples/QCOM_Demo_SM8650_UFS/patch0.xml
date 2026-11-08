@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MobileLab synthetic demo patch file. -->
+<patches>
+  <patch BYTE_OFFSET="16" SECTOR_SIZE_IN_BYTES="4096" filename="DISK" physical_partition_number="0" size_in_bytes="8" start_sector="0" value="0000000000000000" what="Update PrimaryGPT header backup LBA"/>
+  <patch BYTE_OFFSET="32" SECTOR_SIZE_IN_BYTES="4096" filename="DISK" physical_partition_number="0" size_in_bytes="4" start_sector="0" value="01000000" what="GPT header CRC placeholder"/>
+</patches>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MobileLab synthetic demo rawprogram. NOT a real Qualcomm firmware. -->
+<data>
+  <program SECTOR_SIZE_IN_BYTES="4096" file_sector_offset="0" filename="gpt_main0.bin" label="PrimaryGPT" num_partition_sectors="6" physical_partition_number="0" size_in_KB="24.0" sparse="false" start_byte_hex="0x0" start_sector="0"/>
+  <program SECTOR_SIZE_IN_BYTES="4096" file_sector_offset="0" filename="gpt_backup0.bin" label="BackupGPT" num_partition_sectors="6" physical_partition_number="0" size_in_KB="24.0" sparse="false" start_byte_hex="0x12000" start_sector="6"/>
+  <program SECTOR_SIZE_IN_BYTES="4096" file_sector_offset="0" filename="xbl_a.mbn" label="xbl_a" num_partition_sectors="200" physical_partition_number="0" size_in_KB="800.0" sparse="false" start_byte_hex="0x3000" start_sector="12"/>
+  <program SECTOR_SIZE_IN_BYTES="4096" file_sector_offset="0" filename="boot.img" label="boot_a" num_partition_sectors="4096" physical_partition_number="0" size_in_KB="16384.0" sparse="false" start_byte_hex="0x35000" start_sector="212"/>
+  <program SECTOR_SIZE_IN_BYTES="4096" file_sector_offset="0" filename="missing_userdata.img" label="userdata" num_partition_sectors="8192" physical_partition_number="0" size_in_KB="32768.0" sparse="false" start_byte_hex="0x100000" start_sector="300"/>
+  <program SECTOR_SIZE_IN_BYTES="4096" file_sector_offset="0" filename="" label="frp" num_partition_sectors="256" physical_partition_number="0" size_in_KB="1024.0" sparse="false" start_byte_hex="0x900000" start_sector="9000"/>
+  <program SECTOR_SIZE_IN_BYTES="4096" file_sector_offset="0" filename="" label="modemst1" num_partition_sectors="256" physical_partition_number="0" size_in_KB="1024.0" sparse="false" start_byte_hex="0x910000" start_sector="9300"/>
+</data>
