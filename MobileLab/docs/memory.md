@@ -32,7 +32,7 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 
 ## 4. Current progress
 
-**PHASE 0 — Bootstrap** ✅ **READY** · **PHASE 1 — Requirements / PRD** 🔄 documentation complete, final review due.
+**PHASE 0 — Bootstrap** ✅ **READY** · **PHASE 1 — Requirements / PRD** ✅ **READY**.
 - P0-1 `agent.md` ✅ — verbatim byte-identical (17,816 chars, 22 sections, sha256 `1de53535…`) + alag addendum.
 - P0-2 9 docs ✅ — `PRD, architecture, design, rules, phases, memory, progress, decisions, changelog`.
 - P0-3 `.gitignore` + local git ✅ — commit `c25c3c6`, 38 files, koi remote nahi, clean status, `core.autocrlf=false`.
@@ -40,7 +40,7 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 - P1-1 docs inspection ✅ · P1-2 3+1 Roman Urdu clarifications ✅ · P1-3 16 verified sources S1–S16 ✅.
 - P1-4 `PRD.md` 1.1.0 ✅ — competitor map, future outlook, C11–C16, FR-01…FR-20, AC-01…AC-11, 16-source register.
 - P1-5 `decisions.md` D13–D18 ✅ · `agent.md` addendum C1–C16 ✅ · `architecture / design / rules` P1 sections ✅.
-- **Baaki:** `progress.md`, `changelog.md`, `phases.md` P1 review, workspace memory, verification + commit.
+- P1-7 / P1-8 ✅ — `progress.md`, `changelog.md`, `phases.md` P1 review, workspace memory, verification aur do conventional `docs:` commits; `git status` clean, koi remote nahi.
 
 ## 5. Known constraints / environment
 
@@ -71,4 +71,4 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 
 ## 8. Next recommended action
 
-PHASE 1 ka documentation mukammal hai; ab **verification + `PHASE REVIEW — PHASE 1` + commit** karna hai. Gate `READY` hone ke baad **ruk kar user se PHASE 2 (Architecture / Tech Stack) ki ijazat maango**. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` ka PHASE REVIEW parho.
+PHASE 1 `READY` hai. **Ab ruk kar user se PHASE 2 (Architecture / Tech Stack) ki ijazat maango** — S1–S16 ko technology-selection table se jorna, adapter boundaries finalize karna aur `architecture.md` final karna. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` ka PHASE REVIEW parho.

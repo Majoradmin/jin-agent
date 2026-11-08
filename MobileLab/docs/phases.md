@@ -96,3 +96,19 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Definition of done:** **met**.
 - **Gate:** **READY**
 - **Next:** PHASE 1 (PRD finalize) — **user ki ijazat ke baghair shuru nahi**.
+
+---
+
+## 9. PHASE REVIEW — PHASE 1 — Requirements / PRD — 2026-11-08
+
+- **Confirmed:** C1–C16 (naye C11 scoped internet · C12 Telegram Bot command/alert · C13 legal/authorized deep/dark web · C14 safe plan/report · C15 phase completeness · C16 provenance). User ne 3+1 chhote Roman Urdu sawalon mein ye pakke kiye; aakhri clarification me `Plan + report bhi` confirm hua.
+- **Assumptions:** A1–A10. **Open questions:** O1–O10 (P1 ko nahi rokte; P2/P3/P7/P9/P11 me band honge). **Risks:** R1–R10; R2 P1 source register se mitigated, R6–R10 naye tracked.
+- **Deliverables:** [x] `PRD.md` 1.1.0 (competitor map, future outlook, S1–S16, FR-01…FR-20, AC-01…AC-11, edge cases, metrics) · [x] `decisions.md` D13–D18 + classification · [x] `agent.md` addendum C1–C16 (verbatim block untouched) · [x] `architecture.md` §17 · [x] `design.md` §12 · [x] `rules.md` §14 · [x] `memory.md` / `progress.md` / `changelog.md` P1 update.
+- **Verification evidence:** `agent.md` verbatim prefix sha256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` → **MATCH** · `CRLF present: False` · Windows `J:\Ai Agent` count `9`, `J:/Ai Agent` count `0` · C11–C16 present `True` · docs count `9` · PRD checks `8/8 True` (`1.1.0`, S1–S16, `date checked`, FR-01…FR-20, AC-01…AC-11, C11–C16, Facts/Recommendations, HARD POLICY) · `git diff --name-only` sirf `agent.md` + 9 docs · `git remote -v` empty · commit `94ae743 docs: finalize PHASE 1 PRD and decisions` · `git status --short` clean us commit ke baad.
+- **N/A items + justification:** is phase par koi N/A nahi; P5/P10 apne apne gates par N/A + wajah ke sath aayenge.
+- **Security review:** HARD POLICY `PRD.md`, `rules.md`, `agent.md` mein barqarar. C13 legal research boundary, C14 policy gate, OWASP SSRF S16 aur O2/O4/O10 tracked. Koi token, credential, IMEI ya private data docs mein darj nahi. Koi code change nahi, is liye naya attack surface nahi.
+- **Documentation status:** 9/9 docs maujood, Roman Urdu prose, C9/C10 barqarar; 16 sources ke URL + `date checked = 2026-11-08`; facts aur recommendations alag; low-authority claims exclude.
+- **Tests passed:** verbatim byte/hash check, line-ending check, Windows-path check, docs count, PRD marker checks, Git diff/remote/status checks. **Tests failed:** koi nahi. **Automated `unittest` suite:** P8 deliverable hai — abhi nahi bana; is ka koi jhootha green claim nahi.
+- **Definition of done:** **met** — PRD finalize, har feature ka AC block, source register, classification, ADRs aur docs sync mukammal; C15 ke mutabiq koi P1 item incomplete nahi chhora.
+- **Gate:** **READY**
+- **Next:** PHASE 2 (Architecture / Tech Stack + S1–S16 technology citations) — **user ki ijazat ke baghair shuru nahi**. Final review commit: `docs: record PHASE 1 verification and PHASE REVIEW`.

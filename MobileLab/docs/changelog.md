@@ -13,6 +13,8 @@
 - Naye confirmed decisions: C11 scoped internet · C12 Telegram Bot command/alert · C13 legal/authorized deep/dark web · C14 safe task plan/report · C15 phase completeness · C16 provenance.
 - `decisions.md` D13–D18 · `agent.md` addendum C1–C16 (verbatim block untouched) · `architecture.md` §17 · `design.md` §12 · `rules.md` §14 · `memory.md` / `progress.md` P1 update.
 - Open questions O4–O10 aur risks R6–R10 register mein darj; P1 ko nahi rokte, implementation se pehle band honge.
+- Verification: `agent.md` verbatim sha256 MATCH, `CRLF present: False`, docs `9/9`, PRD checks `8/8 True`, diff docs-only, `git remote -v` empty.
+- Commits: `94ae743 docs: finalize PHASE 1 PRD and decisions` · `docs: record PHASE 1 verification and PHASE REVIEW`. Dono local-only.
 - **Koi breaking change / DB migration / deployment change nahi hua.**
 
 ### `chore:` — Local git + verbatim line-ending guard (P0 verification)
