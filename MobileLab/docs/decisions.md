@@ -75,6 +75,13 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **Reason:** global config user ka personal data hai, usay chherna manzoor nahi; commit ke liye identity zaroori hai.
 - **Consequences:** author obviously placeholder hai; agar user apna naam chahein to badal sakte hain (new commit, history rewrite nahi).
 
+### D12 — Line endings / verbatim integrity
+- **Date:** 2026-11-08 · **Context:** Windows Git ne `LF will be replaced by CRLF` warnings diye; `agent.md` ka verbatim prompt LF par hai.
+- **Options:** kuch na karna / `.gitattributes` add karna / repo-local `core.autocrlf=false`.
+- **Decision:** repo-local `core.autocrlf=false` + raw-byte verification.
+- **Reason:** CRLF conversion checkout par prompt ke bytes badal deti → R1 (verbatim drift). Is se koi nayi file ya dependency nahi aati.
+- **Consequences:** aane wale checkouts bhi LF rakhenge; agar kabhi repo doosre OS par jaye to `.gitattributes` ka faisla naya ADR hoga.
+
 ---
 
 ## Classification Register

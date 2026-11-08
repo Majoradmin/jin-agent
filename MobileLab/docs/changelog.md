@@ -6,6 +6,12 @@
 
 ## 2026-11-08
 
+### `chore:` — Local git + verbatim line-ending guard (P0 verification)
+- Commit `c25c3c6` — `chore: adopt agent.md governance + project docs` (38 files, `.git` 502K, **koi remote nahi**, `git status` clean).
+- Repo-local `core.autocrlf=false` taake checkout par `agent.md` ka verbatim block CRLF na ho jaye (R1). Raw-byte check: `CRLF present: False`, sha256 `1de53535…` barqarar.
+- Commit `docs: record PHASE 0 verification and PHASE REVIEW` — progress / changelog / decisions / memory / phases update.
+- **User-visible app behavior:** koi badlao nahi.
+
 ### `chore:` — Governance adoption (PHASE 0)
 **User-visible app behavior:** koi badlao nahi. Is entry ka matlab sirf documentation / repo setup hai.
 - `J:\Ai Agent\agent.md` — governing prompt **verbatim** (22 sections, 17,816 chars) + alag `## Project Addendum — MobileLab`.

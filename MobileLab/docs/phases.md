@@ -81,3 +81,18 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 ## 7. Definition of Done (poora project)
 
 `agent.md` verbatim + addendum · 9 docs consistent, Roman Urdu, HARD POLICY encoded · 12 `PHASE REVIEW` sab READY · suite fully green bina live internet / production DB · 13 QA findings band with passing tests · default scan workspace-restricted + explicit opt-in · `run.bat` Python ≥3.10 guard · local git, koi remote nahi · skills/MCP `Open question` (O1) · stdlib-only, local, light theme, koi cloud / paid / secret exposure nahi · **sab files `J:\Ai Agent` mein (C10)**.
+
+---
+
+## 8. PHASE REVIEW — PHASE 0 — Discovery / Bootstrap — 2026-11-08
+
+- **Confirmed:** C1–C10 (khaas kar C9 Roman Urdu, C10 `J:\Ai Agent` root). **Assumptions:** A1–A7. **Open questions:** O1–O3 (critical nahi). **Risks:** R1 mitigated (byte-compare + `core.autocrlf=false`), R2 (P2 mein asli browsing due), R3 / R4 / R5 tracked.
+- **Deliverables:** [x] `J:\Ai Agent\agent.md` · [x] 9 `MobileLab\docs\*.md` · [x] `J:\Ai Agent\.gitignore` · [x] local `.git` + conventional commit.
+- **Verification evidence:** `agent.md` byte-identical `True` · 22 sections · sha256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` · `CRLF present: False` · docs count `9` · staged files `38` · `git log -1` → `c25c3c6 chore: adopt agent.md governance + project docs` · `git status --short` → empty · `git remote -v` → empty · `git check-ignore` → 3/3.
+- **N/A items + justification:** is phase par koi N/A nahi.
+- **Security review:** secrets / runtime DB / logs / workspace-memory `.gitignore` se bahar; plaintext `llm_key` leak ka fix **P9 pending** (acknowledged, is phase ka scope nahi); koi remote / cloud / credentials nahi; HARD POLICY 3 jagah encoded.
+- **Documentation status:** 9/9 docs maujood, Roman Urdu, HARD POLICY `rules.md` + `PRD.md` + `agent.md` addendum mein.
+- **Tests passed:** verbatim read-back, 22-section count, Windows-path check, design-token / media-query / DB-schema source checks, toolchain, git checks. **Tests failed:** koi nahi. **Automated `unittest` suite:** P8 deliverable hai — abhi nahi bana, is ka koi jhootha claim nahi.
+- **Definition of done:** **met**.
+- **Gate:** **READY**
+- **Next:** PHASE 1 (PRD finalize) — **user ki ijazat ke baghair shuru nahi**.

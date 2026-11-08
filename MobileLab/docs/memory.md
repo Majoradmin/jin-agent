@@ -32,11 +32,12 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 
 ## 4. Current progress
 
-**PHASE 0 — Bootstrap** chal raha hai.
-- P0-1 `agent.md` ✅ — verbatim prompt byte-identical (17,816 chars, 22 sections, sha256 `1de53535…`) + alag addendum.
+**PHASE 0 — Bootstrap** ✅ **READY**.
+- P0-1 `agent.md` ✅ — verbatim byte-identical (17,816 chars, 22 sections, sha256 `1de53535…`) + alag addendum.
 - P0-2 9 docs ✅ — `PRD, architecture, design, rules, phases, memory, progress, decisions, changelog`.
-- P0-3 `.gitignore` + local git + aik `chore:` commit — is waqt chal raha hai.
-- P0-4 verification + `PHASE REVIEW — PHASE 0` — baqi.
+- P0-3 `.gitignore` + local git ✅ — commit `c25c3c6`, 38 files, koi remote nahi, clean status, `core.autocrlf=false`.
+- P0-4 verification + `PHASE REVIEW — PHASE 0` ✅ — gate `READY`.
+- **Ab intezar:** user ki PHASE 1 (PRD finalize) ki ijazat.
 
 ## 5. Known constraints / environment
 
@@ -66,4 +67,4 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 
 ## 8. Next recommended action
 
-`P0-3` mukammal karo → `P0-4` verification → `PHASE REVIEW — PHASE 0` → `READY` → **ruk kar user se PHASE 1 ki ijazat maango**. Khud aage na barho.
+PHASE 0 `READY` hai → **ruk kar user se PHASE 1 (PRD finalize) ki ijazat maango**. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` ka PHASE REVIEW parho.
