@@ -80,7 +80,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 
 ## 7. Definition of Done (poora project)
 
-`agent.md` verbatim + addendum · 9 docs consistent, Roman Urdu, HARD POLICY encoded · 12 `PHASE REVIEW` sab READY · suite fully green bina live internet / production DB · 13 QA findings band with passing tests · default scan workspace-restricted + explicit opt-in · `run.bat` Python ≥3.10 guard · local git, koi remote nahi · skills/MCP `Open question` (O1) · stdlib-only, local, light theme, koi cloud / paid / secret exposure nahi · **sab files `J:\Ai Agent` mein (C10)**.
+`agent.md` verbatim + addendum · 9 docs consistent, Roman Urdu, Sahulat & Safe Service Policy encoded · 12 `PHASE REVIEW` sab READY · suite fully green bina live internet / production DB · 13 QA findings band with passing tests · default scan workspace-restricted + explicit opt-in · `run.bat` Python ≥3.10 guard · local git, koi remote nahi · skills/MCP `Open question` (O1) · stdlib-only, local, light theme, koi cloud / paid / secret exposure nahi · **sab files `J:\Ai Agent` mein (C10)**.
 
 ---
 
@@ -90,8 +90,8 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Deliverables:** [x] `J:\Ai Agent\agent.md` · [x] 9 `MobileLab\docs\*.md` · [x] `J:\Ai Agent\.gitignore` · [x] local `.git` + conventional commit.
 - **Verification evidence:** `agent.md` byte-identical `True` · 22 sections · sha256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` · `CRLF present: False` · docs count `9` · staged files `38` · `git log -1` → `c25c3c6 chore: adopt agent.md governance + project docs` · `git status --short` → empty · `git remote -v` → empty · `git check-ignore` → 3/3.
 - **N/A items + justification:** is phase par koi N/A nahi.
-- **Security review:** secrets / runtime DB / logs / workspace-memory `.gitignore` se bahar; plaintext `llm_key` leak ka fix **P9 pending** (acknowledged, is phase ka scope nahi); koi remote / cloud / credentials nahi; HARD POLICY 3 jagah encoded.
-- **Documentation status:** 9/9 docs maujood, Roman Urdu, HARD POLICY `rules.md` + `PRD.md` + `agent.md` addendum mein.
+- **Security review:** secrets / runtime DB / logs / workspace-memory `.gitignore` se bahar; plaintext `llm_key` leak ka fix **P9 pending** (acknowledged, is phase ka scope nahi); koi remote / cloud / credentials nahi; Sahulat & Safe Service Policy 3 jagah encoded.
+- **Documentation status:** 9/9 docs maujood, Roman Urdu, Sahulat & Safe Service Policy `rules.md` + `PRD.md` + `agent.md` addendum mein.
 - **Tests passed:** verbatim read-back, 22-section count, Windows-path check, design-token / media-query / DB-schema source checks, toolchain, git checks. **Tests failed:** koi nahi. **Automated `unittest` suite:** P8 deliverable hai — abhi nahi bana, is ka koi jhootha claim nahi.
 - **Definition of done:** **met**.
 - **Gate:** **READY**
@@ -104,11 +104,39 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Confirmed:** C1–C16 (naye C11 scoped internet · C12 Telegram Bot command/alert · C13 legal/authorized deep/dark web · C14 safe plan/report · C15 phase completeness · C16 provenance). User ne 3+1 chhote Roman Urdu sawalon mein ye pakke kiye; aakhri clarification me `Plan + report bhi` confirm hua.
 - **Assumptions:** A1–A10. **Open questions:** O1–O10 (P1 ko nahi rokte; P2/P3/P7/P9/P11 me band honge). **Risks:** R1–R10; R2 P1 source register se mitigated, R6–R10 naye tracked.
 - **Deliverables:** [x] `PRD.md` 1.1.0 (competitor map, future outlook, S1–S16, FR-01…FR-20, AC-01…AC-11, edge cases, metrics) · [x] `decisions.md` D13–D18 + classification · [x] `agent.md` addendum C1–C16 (verbatim block untouched) · [x] `architecture.md` §17 · [x] `design.md` §12 · [x] `rules.md` §14 · [x] `memory.md` / `progress.md` / `changelog.md` P1 update.
-- **Verification evidence:** `agent.md` verbatim prefix sha256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` → **MATCH** · `CRLF present: False` · Windows `J:\Ai Agent` count `9`, `J:/Ai Agent` count `0` · C11–C16 present `True` · docs count `9` · PRD checks `8/8 True` (`1.1.0`, S1–S16, `date checked`, FR-01…FR-20, AC-01…AC-11, C11–C16, Facts/Recommendations, HARD POLICY) · `git diff --name-only` sirf `agent.md` + 9 docs · `git remote -v` empty · commit `94ae743 docs: finalize PHASE 1 PRD and decisions` · `git status --short` clean us commit ke baad.
+- **Verification evidence:** `agent.md` verbatim prefix sha256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` → **MATCH** · `CRLF present: False` · Windows `J:\Ai Agent` count `9`, `J:/Ai Agent` count `0` · C11–C16 present `True` · docs count `9` · PRD checks `8/8 True` (`1.1.0`, S1–S16, `date checked`, FR-01…FR-20, AC-01…AC-11, C11–C16, Facts/Recommendations, Sahulat & Safe Service Policy) · `git diff --name-only` sirf `agent.md` + 9 docs · `git remote -v` empty · commit `94ae743 docs: finalize PHASE 1 PRD and decisions` · `git status --short` clean us commit ke baad.
 - **N/A items + justification:** is phase par koi N/A nahi; P5/P10 apne apne gates par N/A + wajah ke sath aayenge.
-- **Security review:** HARD POLICY `PRD.md`, `rules.md`, `agent.md` mein barqarar. C13 legal research boundary, C14 policy gate, OWASP SSRF S16 aur O2/O4/O10 tracked. Koi token, credential, IMEI ya private data docs mein darj nahi. Koi code change nahi, is liye naya attack surface nahi.
+- **Security review:** Sahulat & Safe Service Policy `PRD.md`, `rules.md`, `agent.md` mein barqarar. C13 legal research boundary, C14 policy gate, OWASP SSRF S16 aur O2/O4/O10 tracked. Koi token, credential, IMEI ya private data docs mein darj nahi. Koi code change nahi, is liye naya attack surface nahi.
 - **Documentation status:** 9/9 docs maujood, Roman Urdu prose, C9/C10 barqarar; 16 sources ke URL + `date checked = 2026-11-08`; facts aur recommendations alag; low-authority claims exclude.
 - **Tests passed:** verbatim byte/hash check, line-ending check, Windows-path check, docs count, PRD marker checks, Git diff/remote/status checks. **Tests failed:** koi nahi. **Automated `unittest` suite:** P8 deliverable hai — abhi nahi bana; is ka koi jhootha green claim nahi.
 - **Definition of done:** **met** — PRD finalize, har feature ka AC block, source register, classification, ADRs aur docs sync mukammal; C15 ke mutabiq koi P1 item incomplete nahi chhora.
 - **Gate:** **READY**
 - **Next:** PHASE 2 (Architecture / Tech Stack + S1–S16 technology citations) — **user ki ijazat ke baghair shuru nahi**. Final review commit: `docs: record PHASE 1 verification and PHASE REVIEW`.
+
+---
+
+## 10. PHASE REVIEW — PHASE 1B — Sahulat & Safe Service Toolkit — 2026-11-08
+
+> **Sub-phase note:** PHASE 1B user ke naye request (`HARD POLICY` → "easy policy", sahulat-first tooling) par PHASE 1 ke andar ek scoped addendum tha. 12-phase matrix badli nahi; P2 abhi bhi agla gate hai.
+
+- **Confirmed:** C1–C19. Naye: **C17** policy reframe — boundary unchanged, koi chhoot nahi (D19) · **C18** Sahulat toolkit scope (D20/D21) · **C19** language split content Roman Urdu / surface English (D22). User ne `"Sab kuch upar wala (Behtar)"` manzoor kiya, jis mein `bypass wali line waisi hi rehti hai` shamil tha. User ne alag se kaha: *"information report plan sbb mjhy roman urdu mein chiye werna baki sbb for professional looking eng use kro"* → D22.
+- **Assumptions:** A1–A11. **A11** sarkari mulazim hona koi technical/legal exception paida nahi karta; sirf documentation tooling.
+- **Open questions:** O1–O8 · ~~**O9**~~ **RESOLVED (D21): 8th view** · O10 · **O11** case retention/export/deletion (P11) · **O12** in-app Roman Urdu chrome → English surface migration phase (P3/P11). Koi bhi P1B ko nahi rokta.
+- **Risks:** R1–R12. **R11** (naam badalne ko boundary hatana samajhna) canonical note + `test_policy_boundary_unchanged` + unchanged out-of-scope list se mitigated. **R12** (C19 ko C9 ki mansookhi samajhna) D22 se clarify.
+- **Deliverables:** [x] `MobileLab\sahulat.py` (new) · [x] `MobileLab\tests\test_sahulat.py` (new) · [x] `db.py` `cases` table + `add_case()` / `list_cases()` / `counts()` · [x] `server.py` 6 `/api/sahulat/*` routes + `VERSION 1.1.0` + `/api/status` policy/cases · [x] `knowledge.py` policy reframe · [x] `web\index.html` 8th view · [x] `web\app.js` `safe_url()` / `linkHtml()` / Sahulat state · [x] `web\style.css` `.sah-*` · [x] `PRD.md` 1.2.0 · [x] `decisions.md` D19–D22 + C17–C19 · [x] `agent.md` addendum §K/§L (verbatim untouched) · [x] `architecture.md` §18 · [x] `design.md` §13 · [x] `rules.md` §15–§16 · [x] `progress.md` / `memory.md` / `changelog.md` · [x] `phases.md` §10.
+- **Verification evidence:**
+  - `python -m py_compile db.py firmware.py research.py knowledge.py sahulat.py server.py` → `PY_COMPILE_OK`
+  - `node --check web/app.js` → `NODE_CHECK_OK`
+  - `python -m unittest discover -s tests -p "test_*.py" -v` → `Ran 47 tests in 1.845s` → **OK** (failures `0`, hook noise `0`)
+  - `agent.md` verbatim prefix sha256 → `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` **MATCH**; `CRLF present: False`; `HARD POLICY` in verbatim `False`
+  - API smoke (loopback): `overview 200`, `cases 200`, `check GET/POST 200`, `letter 200/400`, `case 200/400`, `status 200`, unknown `404`; `status=policy` → `Sahulat & Safe Service Policy`, `counts.cases` present
+  - Acceptance criteria: AC-12 (6 routes, sab links `https://`, steps me 0 bypass tokens) · AC-13 (9 banned queries par 100% official links, 0 instruction tokens) · AC-14 (4/4 required proof enforced, unknown ids dropped) · AC-15 (dono languages + 4 validation errors → `400`) · AC-16 (1 case round-trip, `limit` clamp, pre-1B DB auto-migrate) · AC-17 (canonical note, boundary list unchanged, hash MATCH, 9 docs)
+  - Static assets `/`, `/index.html`, `/app.js`, `/style.css` → 200; `class="view` × 8, `id="view-` × 8, `data-view="` × 8, 27 `sah*` IDs
+  - `git remote -v` → empty; `git status --short` → clean after P1B commit; `core.autocrlf=false`
+- **N/A items + justification:** is sub-phase par koi N/A nahi. P5 (multi-user auth) aur P10 (cloud deploy) apne apne gates par "N/A + wajah" ke sath aayenge; yahan unhe skip nahi kiya gaya.
+- **Security review:** boundary **unchanged** — koi bypass automation / step-by-step tareeqa / exploit / loader trick / partition write-erase command nahi; tests is par gate hain. Naye 6 endpoints input-validated, read-only ya local validated write; koi arbitrary URL fetch nahi. `safe_url()` se `javascript:` / `data:` reject (QA #4 partial fix). Letter `<pre>` me `textContent` (koi HTML injection). `cases` parameterized SQL; koi credential / full IMEI / document upload; `data/` gitignored. Koi naya port, cloud, dependency ya remote. **Baaki 12 QA findings abhi P6/P9 par pending** — is phase ne unhe chheda nahi, jhootha "sab fix" claim nahi.
+- **Documentation status:** 9/9 docs maujood aur sync; Roman Urdu content + English headings/labels (C19). C17 canonical note `agent.md` §D, `PRD.md` out-of-scope, `rules.md` §4/§15, `decisions.md` D19, `knowledge.py`, `sahulat.py` me. `agent.md` verbatim block par koi edit nahi. PHASE 1B me koi naya web browse nahi — sirf P1 ke verified S1–S16 aur unhin ke andar ke official links reuse hue; koi naya unverified URL / citation nahi.
+- **Tests passed:** 47/47 targeted (`test_sahulat.py`), py_compile, JS check, loopback API smoke, static asset checks, verbatim byte/hash, line endings, docs count, boundary/read-back checks, additive migration simulation. **Tests failed:** koi nahi (pehle 7 failures the — 5 test assumptions + 2 asli gaps; gaps code me fix kiye aur assumptions theek kiye, dobara 47/47 green). **Full automated project suite:** P8 deliverable hai; abhi nahi bana — koi jhootha green claim nahi.
+- **Definition of done:** **met** — C15 ke mutabiq PHASE 1B ka koi item incomplete nahi chhora. Jo kaam baqi hai wo apne apne gates ka scheduled kaam hai (P2…P11), is sub-phase ka adhoora kaam nahi.
+- **Gate:** **READY**
+- **Next:** PHASE 2 (Architecture / Tech Stack + S1–S16 technology citations) — **user ki ijazat ke baghair shuru nahi**. Har report / plan / jawab Roman Urdu me (C19).

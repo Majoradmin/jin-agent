@@ -6,6 +6,28 @@
 
 ## 2026-11-08
 
+### `feat:` — Sahulat & Safe Service Toolkit `v1.1.0` (PHASE 1B)
+**User-visible app behavior:** naya 8th view `Sahulat / Official Route`, `VERSION` `1.0.0` → `1.1.0`. Koi bypass capability nahi; boundary bilkul barqarar.
+- **Naya module** `MobileLab/sahulat.py`: 6 brand-wise official routes (Huawei, Google FRP, Samsung, Apple, Carrier, Department), 8-item proof-of-ownership checklist (4 required), printable Roman Urdu customer consent, Roman Urdu + English official service-request letters, aur request classifier jo blocked request par **sirf "nahi" nahi — wajah + official link + documents + 4 safe next steps** deta hai.
+- **Naye API:** `GET /api/sahulat/overview`, `GET /api/sahulat/cases`, `GET|POST /api/sahulat/check`, `POST /api/sahulat/letter`, `POST /api/sahulat/case`. `GET /api/status` me ab `policy`, `policy_id` aur `counts.cases`.
+- **Naya DB table** `cases` (additive): `case_no UNIQUE`, proof flags, consent, `status` (`ready` / `draft`), timestamp, `idx_cases_created`. Purani DB `db.init()` par auto-migrate — koi destructive migration nahi.
+- **UI:** 8 views / 8 nav items, 27 `sah*` element IDs, `.sah-*` CSS, dashboard par `Sahulat cases` stat. `safe_url()` + `linkHtml()` har external href ko `http/https` allowlist se guzarte hain (QA #4 ka partial fix, XSS band).
+- **Policy reframe (C17 / D19):** internal naam `HARD POLICY` → `Sahulat & Safe Service Policy`, pehli line "hum kya madad karte hain". **Sirf naam aur andaaz; har qaida waisa ka waisa**, koi role-based / sarkari-mulazim exception nahi. Canonical note har policy section mein.
+
+### `fix:` — PHASE 1B verification me mile do gaps
+- `make_letter()` `validate_case()` ki jagah `validate_letter()` call karta tha → required proof items enforce na hona (AC-15 / AC-16 toot rahe the). Ab letter sirf 4/4 proof + consent par banta hai; incomplete proof par case `draft` save + `letter_error`, aur `/api/sahulat/letter` `400`.
+- `check_request()` 500 chars par truncate kar ke classify karta tha → lambi request ke aakhir me likha banned phrase cut off ho kar "ye kaam app ke andar hai" wajah se bach jata tha. Ab `MAX_QUERY_CHARS = 4000` hard-bounded window. Sath mein `GENERIC_LINKS` fallback se **har** blocked answer me kam-az-kam aik official `https://` link guaranteed; generic "bypass" wording par jhootha brand diagnosis band (`route_id = ""`).
+
+### `test:` — Targeted regression suite (PHASE 1B)
+- Naya `MobileLab/tests/test_sahulat.py` — stdlib `unittest`, **47/47 green**: routes / policy, classifier (9 banned queries), validation + dono letter languages, `cases` round-trip + pre-1B schema migration, live loopback HTTP endpoints, static assets / 8-view wiring, `agent.md` verbatim hash, 9-doc consistency.
+- Production DB aur live internet kabhi touch nahi; throwaway `data/_p1b_test.db` (gitignored), SQL `DELETE FROM cases` se deterministic. **Full project suite abhi P8 ka deliverable hai** — ye targeted suite hai, koi jhootha "poora suite green" claim nahi.
+
+### `docs:` — PHASE 1B governance sync + language split (C19 / D22)
+- `PRD.md` `1.1.0` → `1.2.0` (J12–J15, FR-21…FR-26, AC-12…AC-17, canonical note) · `decisions.md` D19–D22 / C17–C19 / A11 / O11–O12 / R11 · `agent.md` addendum C1–C19 + §K / §L · `architecture.md` §18 · `design.md` §13 · `rules.md` §15–§16 · `phases.md` §10 `PHASE REVIEW — PHASE 1B` `READY` · `progress.md` / `memory.md` sync.
+- **C19 (user ki nai hidayat):** information / report / plan / user communication = **Roman Urdu**; headings, labels, code, identifiers, paths, API routes, commits, technical terms = **English** (professional surface). C9 refined, mansookh nahi; koi bulk rewrite nahi.
+- `agent.md` verbatim prefix SHA-256 `1de53535…0840` MATCH, `CRLF present: False`, koi remote nahi.
+- **Koi breaking change / destructive DB migration / deployment change nahi hua.**
+
 ### `docs:` — PHASE 1 PRD + verified research (P1)
 **User-visible app behavior:** koi badlao nahi. Is entry ka matlab sirf requirements / documentation hai; koi Python, JS, CSS ya DB code nahi badla.
 - `PRD.md` `1.0.0` → `1.1.0`: product vision, competitor map, future outlook, C11–C16, FR-01…FR-20, AC-01…AC-11, edge cases aur success metrics mukammal.
@@ -25,10 +47,10 @@
 
 ### `chore:` — Governance adoption (PHASE 0)
 **User-visible app behavior:** koi badlao nahi. Is entry ka matlab sirf documentation / repo setup hai.
-- `J:\Ai Agent\agent.md` — governing prompt **verbatim** (22 sections, 17,816 chars) + alag `## Project Addendum — MobileLab`.
+- `J:\Ai Agent\agent.md` — governing prompt **verbatim** (22 sections, 17,844-byte prefix) + alag `## Project Addendum — MobileLab`.
 - 9 docs naye: `PRD.md`, `architecture.md`, `design.md`, `rules.md`, `phases.md`, `memory.md`, `progress.md`, `decisions.md`, `changelog.md`.
 - `J:\Ai Agent\.gitignore` + local-only git repo + aik `chore:` commit.
-- Naye rules darj: **Roman Urdu hamesha (C9)**, **sab files `J:\Ai Agent` mein (C10)**, local-only git (C7), 12 adapted gates (C3), HARD POLICY (D10).
+- Naye rules darj: **Roman Urdu hamesha (C9)**, **sab files `J:\Ai Agent` mein (C10)**, local-only git (C7), 12 adapted gates (C3), Sahulat & Safe Service Policy (D10).
 
 ### `docs:` — QA register (read-only, abhi fix nahi)
 13 findings `phases.md` aur `rules.md` mein darj. In mein se koi abhi fix nahi hua — fixes P6/P9 ke gates mein aayenge:
