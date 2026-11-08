@@ -26,13 +26,13 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 | P9 | Skills / MCP installs abhi **defer** (O1). |
 | P10 | Scan default workspace-restricted, zarurat par **explicit opt-in** (C6). |
 
-## 3. Confirmed decisions (C1–C19)
+## 3. Confirmed decisions (C1–C22)
 
-`decisions.md` → "Classification Register" aur ADRs D1–D22. Khulasa: existing MobileLab (C1) · `agent.md` root + 9 docs `MobileLab\docs\` (C2) · adapted saare 12 gates (C3) · static QA + stdlib unittest (C4) · verbatim prompt + alag addendum (C5) · scan opt-in (C6) · local git (C7) · skills/MCP defer (C8) · Roman Urdu (C9) · J: root (C10) · scoped internet (C11) · Telegram Bot command/alert (C12) · legal/authorized deep/dark web (C13) · safe task plan/report (C14) · phase completeness (C15) · provenance/URL/date (C16) · **policy reframe boundary unchanged (C17)** · **Sahulat toolkit scope (C18)** · **language split content/surface (C19)**.
+`decisions.md` → "Classification Register" aur ADRs D1–D28. Khulasa: existing MobileLab (C1) · `agent.md` root + 9 docs `MobileLab\docs\` (C2) · adapted saare 12 gates (C3) · static QA + stdlib unittest (C4) · verbatim prompt + alag addendum (C5) · scan opt-in (C6) · local git (C7) · skills/MCP defer (C8) · Roman Urdu (C9) · J: root (C10) · scoped internet (C11) · Telegram Bot command/alert (C12) · legal/authorized deep/dark web (C13) · safe task plan/report (C14) · phase completeness (C15) · provenance/URL/date (C16) · policy reframe boundary unchanged (C17) · Sahulat toolkit scope (C18) · language split content/surface (C19) · **P2 verified stdlib stack (C20)** · **modular adapter contracts (C21)** · **P2 research provenance / version honesty (C22)**.
 
 ## 4. Current progress
 
-**PHASE 0 — Bootstrap** ✅ **READY** · **PHASE 1 — Requirements / PRD** ✅ **READY** · **PHASE 1B — Sahulat Toolkit** ✅ **READY**.
+**PHASE 0 — Bootstrap** ✅ **READY** · **PHASE 1 — Requirements / PRD** ✅ **READY** · **PHASE 1B — Sahulat Toolkit** ✅ **READY** · **PHASE 2 — Architecture / Tech Stack** ✅ **READY**.
 - P0-1 `agent.md` ✅ — verbatim byte-identical (**17,844 bytes** prefix, 22 sections, sha256 `1de53535…0840`) + alag addendum.
 - P0-2 9 docs ✅ — `PRD, architecture, design, rules, phases, memory, progress, decisions, changelog`.
 - P0-3 `.gitignore` + local git ✅ — commit `c25c3c6`, 38 files, koi remote nahi, clean status, `core.autocrlf=false`.
@@ -42,11 +42,13 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 - P1-5 `decisions.md` D13–D18 ✅ · `agent.md` addendum C1–C16 ✅ · `architecture / design / rules` P1 sections ✅.
 - P1-7 / P1-8 ✅ — `progress.md`, `changelog.md`, `phases.md` P1 review, workspace memory, verification aur do conventional `docs:` commits; `git status` clean, koi remote nahi.
 - **P1B-1…P1B-8** ✅ — `sahulat.py` (6 official routes, 8-item checklist, consent, Roman Urdu + English letters, refusal-with-reason), additive `cases` table, 6 `/api/sahulat/*` endpoints, 8th view, `safe_url()` / `linkHtml()`, policy reframe (boundary unchanged), 2 QA fixes, `tests/test_sahulat.py` **47/47 green**, 9 docs + addendum sync, `PHASE REVIEW — PHASE 1B` §10 `READY`.
+- **P2-1…P2-7** ✅ — `architecture.md` **2.0.0** (15 governing headings, 10 technology rows × 5 fields, 11/11 selection criteria, `P2-01…P2-12` official sources + `S1–S16`, facts/assumptions/recommendations alag, adapter contracts §21, `AC-P2-01…AC-P2-11`) · `decisions.md` D23–D28 / C20–C22 / A12–A15 / O13 / R12–R16 · `agent.md` addendum §M · `PRD.md` 1.3.0 §16 · `rules.md` §17 · `phases.md` §11 `PHASE REVIEW — PHASE 2` `READY`. **Documentation-only gate — koi app code badla nahi.**
 - **User ki nai hidayat (C19 / D22):** "information report plan sbb roman urdu, baki sab professional English". C9 refined, khatam nahi.
 
 ## 5. Known constraints / environment
 
-- Python **3.13.14**, node 22, npm 10, PortableGit **2.55.0.windows.3**.
+- Python **3.13.14**, SQLite **3.53.1**, Expat **expat_2.8.1**, DB-API **2.0 / qmark**, `ThreadingHTTPServer` present, node 22, npm 10, PortableGit **2.55.0.windows.3** (P2 me local command se verify).
+- Official Python docs pages **3.13.18 documentation** hain — patch-level barabari ka dawa nahi (A12 / R14); generic `/3/` pages 3.15.2 dikhate the.
 - `pytest` PATH par nahi → sirf `unittest`.
 - Global `git user.name` / `user.email` **set nahi** → local commit ke liye neutral repo-local identity (A5).
 - `flask` / `feedparser` pehle `ModuleNotFoundError` de chuke hain → stdlib-only pakka.
@@ -54,12 +56,12 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 - WorkBuddy ka session transcript / plan cache `C:\Users\...\.workbuddy-ai\` mein app-managed hai; project source of truth ab `J:\Ai Agent\agent.md` + `docs\` hain.
 - Browser headless screenshot ke waqt Chrome ka `docs.google.com ... failed to install` error harmless noise tha.
 
-## 6. Pending questions (P1 ko nahi rokte; implementation se pehle band)
+## 6. Pending questions (P1/P2 ko nahi rokte; implementation se pehle band)
 
 - **O1** — kaunsi skills / MCP, kyun, kis cost / credentials ke saath? Alag task mein shortlist + manzoori.
 - **O2** — `llm_key` / Telegram token plaintext-at-rest qabool hai ya Windows DPAPI / Credential Manager? P9 ADR.
 - **O3** — monitoring log retention (kitne din / kitna MB)? P11.
-- **O4** — Telegram token storage, rotation, rate-limit/backoff. **O5** — legal deep/dark allowlist approval. **O6** — task plan rule-based vs LLM. **O7** — public channel history. **O8** — firmware provenance hash policy. ~~**O9**~~ — **RESOLVED** (D21): 8th view `Sahulat / Official Route`. **O10** — common SSRF allowlist. **O11** — case register retention / export / deletion (P11). **O12** — in-app Roman Urdu chrome ko English surface par migrate karne ka phase (P3/P11).
+- **O4** — Telegram token storage, rotation, rate-limit/backoff. **O5** — legal deep/dark allowlist approval. **O6** — task plan rule-based vs LLM. **O7** — public channel history. **O8** — firmware provenance hash policy. ~~**O9**~~ — **RESOLVED** (D21): 8th view `Sahulat / Official Route`. **O10** — common SSRF allowlist. **O11** — case register retention / export / deletion (P11). **O12** — in-app Roman Urdu chrome ko English surface par migrate karne ka phase (P3/P11). **O13** — agar app ko `127.0.0.1` se bahar LAN / Internet par expose karna ho to framework / auth / TLS / deployment model; tab P5/P10 N/A dobara khulenge (P2 naya, R13).
 
 ## 7. Lessons learned
 
@@ -74,7 +76,9 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 - **truncation ≠ validation:** 500-char cap par classify karne se lambi request ka aakhiri banned phrase cut off ho jata tha. Bounded 4000-char classification window se theek.
 - **sandbox safe-delete hook:** Python `shutil.rmtree` / `os.remove` ko recycle bin me bhejne me fail hota hai (`SAFE_DELETE_FAIL_CLOSED`). Tests me file delete ki jagah SQL `DELETE FROM cases` reset istemal karo; cleanup zaroori ho to Bash `rm` se karo.
 - **hash boundary:** `agent.md` verbatim prefix `\n---\n\n## Project Addendum` par khatam hota hai (byte `17844`), na ke heading par — galat slice par hash `no-match` deta hai.
+- **verification script khud bhi verify karo:** P2 me aik regex `^## N. exact-heading$` tha jis ne parenthetical suffixes wale 5 headings miss kiye (`10/15`), aur `S\d\d` ne `S1–S9` miss kiye (`7/16`). Doc theek tha, script ghalat tha. Asli headings/IDs print kar ke check dobara chalaya → `15/15` + `16/16`. Kabhi bhi tool ke galat output ko doc ki ghalti na likho.
+- **version honesty:** official docs aur local runtime ka patch farq explicitly darj karo; docs se runtime behavior ka dawa na banao (C22 / D28 / `rules.md` §17).
 
 ## 8. Next recommended action
 
-PHASE 1 aur PHASE 1B dono `READY` hain. **Ab ruk kar user se PHASE 2 (Architecture / Tech Stack) ki ijazat maango** — S1–S16 ko technology-selection table se jorna, adapter boundaries finalize karna aur `architecture.md` final karna. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` §9/§10 parho; `review` bole to §10 ka PHASE REVIEW dikhao. Har reply / report / plan Roman Urdu me (C19).
+PHASE 0, 1, 1B aur **PHASE 2** sab `READY` hain. `architecture.md` 2.0.0 final, `phases.md` §11 review darj, do local `docs:` commits ho chuke hain. **Ab ruk kar user se PHASE 3 (Design / UX) ki ijazat maango** — design tokens audit, a11y plan aur O12 (UI chrome language migration) ka faisla. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` §11 parho; `review` bole to §11 ka PHASE REVIEW dikhao. Har reply / report / plan Roman Urdu me (C19).

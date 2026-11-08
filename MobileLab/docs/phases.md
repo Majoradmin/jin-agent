@@ -1,6 +1,6 @@
 # phases.md — 12 Phases, Gates aur PHASE REVIEW
 
-**Date:** 2026-11-08 · **Current phase:** PHASE 1 (Requirements / PRD)
+**Date:** 2026-11-08 · **Current phase:** PHASE 2 (Architecture / Tech Stack) — ✅ **READY** · **Next:** PHASE 3 (user ki ijazat ke baghair shuru nahi)
 **Rule:** koi phase skip nahi. Jin items ka is app par matlab nahi, unhein **"N/A + wajah"** likh kar gate pass kiya jaye ga. Har `READY` ke baad **user ki ijazat** zaroori; khud aage na barhna. C15: har phase mukammal, kuch incomplete na chhorhein.
 
 ---
@@ -18,7 +18,7 @@
 | **P6 Core features / CRUD** | core gaps band | QA #2 safe numeric parse, #11 minor bugs, `_err` stack trace hatana, CRUD audit | P5 READY | bad-param checks + P8 suite; zero `500` | filter behavior badalna | darmiyana |
 | **P7 Integrations** | research integrations document + offline | `research.py` docs, offline graceful degradation, mocked tests | P6 READY | network mocked offline run | feed schema drift | darmiyana |
 | **P8 Testing / QA** | suite banana | `tests\` 8 files, helpers, regression + characterization tests | P7 READY | `python -m unittest discover -s tests -v` | DB/internet contamination | bara |
-| **P9 Security / Perf / A11y** | 13 QA findings band | fixes + `safe_url`, realpath, XML hardening, SSRF, headers, pagination, a11y | P8 READY (red tests) | poora suite green + `run.bat` 7-view smoke + `node --check` + `py_compile` | R3 workflow tootna | bara |
+| **P9 Security / Perf / A11y** | 13 QA findings band | fixes + `safe_url`, realpath, XML hardening, SSRF, headers, pagination, a11y | P8 READY (red tests) | poora suite green + `run.bat` 8-view smoke + `node --check` + `py_compile` | R3 workflow tootna | bara |
 | **P10 Deploy / CI-CD** | N/A justify | `decisions.md` mein local-only distribution | P9 READY | justification signed, koi remote na ho | — | bohot chhota |
 | **P11 Docs / Monitoring** | final consistency | 9 docs final, in-app KB, local logging, final `status`, doc-vs-code audit | P10 READY | suite final green, docs checklist, `status` output | R4 doc drift | darmiyana |
 
@@ -140,3 +140,27 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Definition of done:** **met** — C15 ke mutabiq PHASE 1B ka koi item incomplete nahi chhora. Jo kaam baqi hai wo apne apne gates ka scheduled kaam hai (P2…P11), is sub-phase ka adhoora kaam nahi.
 - **Gate:** **READY**
 - **Next:** PHASE 2 (Architecture / Tech Stack + S1–S16 technology citations) — **user ki ijazat ke baghair shuru nahi**. Har report / plan / jawab Roman Urdu me (C19).
+
+---
+
+## 11. PHASE REVIEW — PHASE 2 — Architecture / Tech Stack — 2026-11-08
+
+- **Confirmed:** C1–C22. Naye: **C20** verified Python 3.13 stdlib stack barqarar, koi dependency / framework / code migration nahi (D23) · **C21** modular replacement sirf documented adapter contracts se, P2 rewrite nahi karta (D24) · **C22** research provenance — 12 P2 + 16 P1 sources, `URL + date checked`, facts/assumptions/recommendations alag, version nuance aur Telegram partial re-check explicitly darj (D28). User ne `"ye phase 2 start"` se ijazat di; `"请继续执行任务"` aur continuation messages par kaam jari raha.
+- **Assumptions:** A1–A15. Naye **A12** docs `3.13.18` vs runtime `3.13.14` patch equality ka dawa nahi · **A13** Telegram P1 `S9` facts abhi sahih, P2 ne sirf endpoint / limit / 24h directly dobara dekhe · **A14** 2–5 saal ka trend assumption (revenue / market-share fact nahi) · **A15** feed / Bot API / LLM schema drift ke liye adapter layer zaruri.
+- **Open questions:** O1–O13. Naya **O13** LAN / Internet exposure ka framework / auth / TLS / deployment model (tab P5/P10 N/A dobara khulenge). Koi bhi P2 ko nahi rokta.
+- **Risks:** R1–R16. **R2** banawati citations ab P1 `S1–S16` + P2 `P2-01…P2-12` se **mitigated**. Naye **R13** `http.server` ko LAN/Internet par expose karna (loopback boundary + D26) · **R14** patch drift (A12/D28) · **R15** XML / SSRF / CSP / path-authz / secrets P9 pending · **R16** Telegram P2 anchor re-check juzwi, P7 me full re-check.
+- **Deliverables:** [x] `architecture.md` **2.0.0** (15 headings, §2.1 10 technology rows × 5 fields, §2.2 11 criteria, §19 `P2-01…P2-12` + `S1–S16`, §20 facts/assumptions/recommendations, §21 adapter contracts, §22 `AC-P2-01…AC-P2-11`) · [x] `decisions.md` D23–D28 + C20–C22 + A12–A15 + O13 + R12–R16 · [x] `agent.md` addendum §M (verbatim prefix untouched) · [x] `PRD.md` 1.3.0 + §16 architecture linkage · [x] `rules.md` §17 research-honesty rule · [x] `progress.md` / `memory.md` / `changelog.md` · [x] `phases.md` §11 · [x] workspace memory · [x] do local conventional `docs:` commits.
+- **Verification evidence:**
+  - `architecture.md` numbered-heading read-back → `headings 15 / 15`; §2.1 → `technology_rows 10`; §2.2 → `criteria 11 / 11`; source IDs → `P2-01…P2-12 = 12` aur `S1–S16 = 16`; `AC-P2-* = 11 / 11`; §20.1 / §20.2 / §20.3 present `True`; `date checked = 2026-11-08` × 35.
+  - Stale-wording checks → `stale_research_due False` · `stale_6_tables False` · `stale_p2_pending False`. Doc ↔ code → `cases` in DB design `True`, `4 indexes True`, `/api/sahulat/` mentions `22`, `test_sahulat.py True`, `VERSION 1.1.0 True`.
+  - `python -m py_compile db.py firmware.py research.py knowledge.py sahulat.py server.py` → `PY_COMPILE_OK` · `node --check web/app.js` → `NODE_CHECK_OK` · `python -m unittest discover -s tests -p "test_*.py"` → `Ran 47 tests in 2.059s` → **OK**; docs sync ke baad final re-run → `Ran 47 tests in 1.752s` → **OK**. `git diff --check` → `DIFF_CHECK_OK`.
+  - `agent.md` verbatim prefix SHA-256 → `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` **MATCH** · `32443 bytes` · `sep_index 17844` · `CRLF present: False` · docs `9 / 9`.
+  - `git remote -v` → empty · `core.autocrlf` → `false` · `git status --short` → clean after P2 commits · commits `docs: finalize PHASE 2 architecture and tech stack` + `docs: record PHASE 2 verification and PHASE REVIEW`.
+  - **Honesty note:** aik verification script ke apne regex ghalat the (`^## N. exact-heading$` ne parenthetical suffixes wale headings miss kiye → `10/15`; `S\d\d` ne `S1–S9` miss kiye → `7/16`). Asli headings/IDs print kar ke script dobara chalaya gaya → `15/15` aur `16/16`. Doc mein koi ghalti nahi thi; galat tool output ko result ke tor par darj nahi kiya gaya.
+- **N/A items + justification:** **P2 horizontal scaling / load balancer** — single-user local tool, scale ka matlab sirf bade folders aur zyada feeds (§2). **P5 auth** aur **P10 deploy** apne apne gates par `N/A + wajah` ke sath aayenge; yahan skip nahi kiye gaye. P2 ka authentication / authorization / deployment architecture loopback-only shart ke sath §8 / §9 / §14 mein darj hai.
+- **Security review:** koi code change nahi, is liye naya attack surface nahi. `http.server` official docs ka production warning, CRLF header-injection aur symlink caveat, XML security (Expat `expat_2.8.1`), parameterized SQL, OWASP SSRF allowlist / resolved-IP binding / redirects-off, aur MDN CSP sab `architecture.md` §19 / §20 mein verified facts ke tor par darj. **Baaki 12 QA findings P6/P9 par pending** — P2 ne fix hone ka dawa nahi kiya. Loopback `127.0.0.1` boundary barqarar; Sahulat & Safe Service Policy bilkul unchanged; koi token, credential, IMEI ya private data docs mein nahi.
+- **Documentation status:** 9/9 docs maujood aur P2 par sync; Roman Urdu content + English headings/labels (C19 / D22). `PRD.md` 1.3.0 §16 architecture se linked; `decisions.md` D23–D28; `rules.md` §17 ne `D28` ka referenced honesty rule poora kiya; `agent.md` verbatim block par koi edit nahi. Har P2 source ka full URL + `date checked = 2026-11-08`; facts aur recommendations alag; Python docs `3.13.18` vs local `3.13.14` aur Telegram partial re-check explicitly darj; koi banawati citation nahi.
+- **Tests passed:** architecture read-back checks, verbatim byte/hash, line-ending, docs count, 15 headings, 10 technology rows, 11 criteria, 12 P2 + 16 P1 sources, 11 acceptance criteria, `py_compile`, `node --check`, `47/47` targeted `unittest`, Git hygiene. **Tests failed:** koi nahi. **Full automated project suite:** P8 deliverable hai; 47 tests targeted regression hain — koi jhootha "poora suite green" claim nahi.
+- **Definition of done:** **met** — C15 ke mutabiq P2 ka koi item incomplete nahi chhora. Jo kaam baqi hai wo apne apne gates ka scheduled kaam hai (P3…P11), is phase ka adhoora kaam nahi.
+- **Gate:** **READY**
+- **Next:** PHASE 3 (Design / UX — design system finalize, tokens audit, a11y plan, O12) — **user ki ijazat ke baghair shuru nahi**. Har report / plan / jawab Roman Urdu me (C19).
