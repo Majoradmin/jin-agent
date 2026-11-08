@@ -63,7 +63,7 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **Reason:** user ka explicit rule; aik hi jagah sab kuch milna chahiye.
 - **Consequences:** `agent.md` hi source of truth; purana C: wala plan artifact historical hai; C: sirf aakhri dafa verbatim prompt nikalne ke liye parha gaya.
 
-### D10 — HARD POLICY
+### D10 — Sahulat & Safe Service Policy
 - **Decision:** Huawei ID / Google FRP / Samsung Account–Knox Guard / MDM / carrier / iCloud Activation Lock ka koi bypass automation ya steps nahi; sensitive partitions sirf flag.
 - **Reason:** ye server-side ownership / anti-theft controls hain; paid tools bhi server record nahi badal sakte.
 - **Consequences:** `PRD.md` out-of-scope + `rules.md` + `knowledge.py` + `agent.md` addendum; koi "research/test/hypothetical" exception nahi.
@@ -100,14 +100,14 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **Date:** 2026-11-08 · **Context:** user ne `Sirf legal, ijazat wala` choose kiya; BSI definitions verify kiye.
 - **Options:** bilkul na jaye / unrestricted Tor crawl / legal public/authorized allowlist.
 - **Decision:** sirf **legal, public ya authorized** sources; policy gate fetch se pehle; illegal marketplace, stolen credential, leaked firmware, bypass service, malware, private database reject.
-- **Reason:** BSI: dark net browsing apne aap mein illegal nahi, lekin illegal content/download/goods/services illegal hain aur malware risk zyada hai; HARD POLICY bhi yahi maangta hai.
+- **Reason:** BSI: dark net browsing apne aap mein illegal nahi, lekin illegal content/download/goods/services illegal hain aur malware risk zyada hai; Sahulat & Safe Service Policy bhi yahi maangta hai.
 - **Consequences:** koi default Tor automation nahi; koi downloaded executable nahi; har approved source ka provenance; O5 allowlist approval pending.
 
 ### D16 — Any mobile task → safe plan/report (C14)
 - **Date:** 2026-11-08 · **Context:** pehle user ne "koi bhi task" kaha, clarification me pehle `Sirf research` choose kiya, dobara poochhne par `Plan + report bhi` pakka kiya.
 - **Options:** full automation / sirf research / safe plan + report with policy gate.
 - **Decision:** agent koi bhi mobile-software task samjhe, research kare aur Roman Urdu mein **safe plan + report** de; device write/erase, flashing, bootloader/IMEI operations ya lock bypass steps kabhi na de.
-- **Reason:** user ka aakhri confirmed jawab + HARD POLICY.
+- **Reason:** user ka aakhri confirmed jawab + Sahulat & Safe Service Policy.
 - **Consequences:** task classifier, fact/assumption/open/risk sections, source provenance, refusal path; P7/P9 regression tests.
 
 ### D17 — Competitive differentiation, bypass race nahi
@@ -124,6 +124,36 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **Reason:** user ne research maangi; governing prompt har result ke liye URL + date aur fact/recommendation separation maangta hai.
 - **Consequences:** low-authority reseller/market-size claims exclude; speculation ko fact nahi likha; P2 technology table bhi inhi sources se jorega.
 
+### D19 — Policy reframe: `HARD POLICY` → `Sahulat & Safe Service Policy` (C17)
+- **Date:** 2026-11-08 · **Context:** user ne kaha `"ye jo hard policy ha esko remove krdo easy policy rakho mainy logo ki sahult k leay km krna ha na k koi galt km krna main gov of pakistan ka official employe hon"`.
+- **Options:** (a) boundary hata dena / (b) sirf naam aur andaaz badalna + sahulat features add karna, boundary barqarar / (c) kuch na badalna. User ne (b) choose kiya — jis option me likha tha `bypass wali line waisi hi rehti hai`.
+- **Decision:** docs + app + `knowledge.py` me policy ka naam `Sahulat & Safe Service Policy` aur pehli line **"hum kya madad karte hain"**. Har policy section me canonical note: purana naam `HARD POLICY`, **qaida bilkul waisa ka waisa**. Sath mein 6 sahulat features (FR-21…FR-26) add kiye.
+- **Reason:** account / activation locks server-side ownership controls hain; local tool in server records ko badal nahi sakta, aur bypass automation chori-shuda devices ko dobara chalane ka sabse aam raasta hai. Sarkari mulazim hona is technical / legal haqeeqat ko nahi badalta — ulta documented, consent-based workflow un ke liye zyada mehfooz hai. User ki sahulat wali niyat poori karne ka raasta **official-route tooling** hai, na ke boundary hatana.
+- **Consequences:** koi chhoot, role-based exception, "research/test/hypothetical" exception nahi. `PRD.md` out-of-scope list unchanged. R11 track; `test_policy_boundary_unchanged` regression. `agent.md` verbatim block untouched (SHA-256 re-checked).
+
+### D20 — `cases` table additive, koi destructive migration nahi (C18)
+- **Date:** 2026-11-08 · **Context:** case / asset register chahiye tha; user ki runtime DB `data/mobilelab.db` pehle se maujood hai.
+- **Options:** naya DB file / ALTER migration script / `CREATE TABLE IF NOT EXISTS` in existing `SCHEMA`.
+- **Decision:** teesra raasta. `db.init()` har run par `executescript(SCHEMA)` chalata hai, is liye purani DB par `cases` table + index khud ban jate hain — koi data loss, koi manual step.
+- **Reason:** A7 (migration P6 ADR) aur C10 (sab local). Zero-dependency, offline, backward compatible.
+- **Consequences:** `counts()` me `cases`; `/api/status` me naya count; dashboard stat 7th item. `data/` gitignored. Koi full IMEI / document upload nahi — `device_id` 40 char cap aur UI me "sirf aakhri 4 harkat" hint. O11 retention/export P11.
+
+### D21 — 8th view `Sahulat / Official Route` — O9 resolved (C18)
+- **Date:** 2026-11-08 · **Context:** P1 me O9 tha ke J8–J11 ke liye naya view ya existing panels.
+- **Options:** existing panels me distribute / naya 8th view.
+- **Decision:** naya 8th view, kyunke checklist + consent + letter + case register + request-check aik hi workflow hai aur alag jagah hone par technician ko 3–4 tabs ghoomne padte.
+- **Reason:** user ne "sahulat" ko primary banaya; aik jagah sab kuch hona zyada aasan. `design.md` §4 ab 8 views.
+- **Consequences:** `TITLES`, `nav()`, `#view-sahulat`, CSS `.sah-*` classes. J8–J11 ke **proposed integrations** abhi P7 par hain — PHASE 1B ne unhe implement nahi kiya (C15 ke mutabiq unhe P1B ka incomplete item nahi, balkay apne gate ka pending kaam mana gaya hai).
+
+### D22 — Language split: content Roman Urdu, surface English (C19)
+- **Date:** 2026-11-08 · **Context:** user ki nai hidayat: *"information report plan sbb mjhy roman urdu mein chiye werna baki sbb for professional looking eng use kro"*.
+- **Decision:** C9 ko refine kiya (replace nahi):
+  - **Roman Urdu:** tamam *information*, reports, plans, PRD / docs ki prose, PHASE REVIEW, status summaries, aur user se har baat (sawal + jawab).
+  - **English (professional surface):** headings, section titles, table headers, code, identifiers, file paths, API routes, commit messages, technical terms, version strings, UI labels / navigation / button text.
+- **Reason:** user ko apni zaban mein samajh chahiye, lekin deliverable ka structural / technical presentation professional aur industry-standard English rehna chahiye. Dono ka amal alag hai: *content* vs *surface*.
+- **Consequences:** mojooda docs pehle se is pattern par hain (English headings + Roman Urdu prose) — koi bulk rewrite nahi. Naye docs / reports isi split par likhe jayenge. In-app Roman Urdu microcopy (toasts, hints, letter text) **content** hai, is liye Roman Urdu rehti hai; UI chrome / labels agle phases mein English surface ki taraf align honge (O12). Koi jhootha "poora app English ho gaya" claim nahi.
+- **Risk:** is split ko "C9 khatam" samajhna — C9 zinda hai, sirf us ki domain ab clear hai.
+
 ---
 
 ## Classification Register
@@ -139,14 +169,17 @@ Har ADR: date · context · options · final decision · reason · consequences.
 | C6 | Scan default restrict + explicit opt-in |
 | C7 | Sirf local git, koi remote/cloud/credentials |
 | C8 | Skills/MCP defer = O1 |
-| C9 | Hamesha Roman Urdu |
+| C9 | Hamesha Roman Urdu — ab D22/C19 se refined: content Roman Urdu, surface English |
 | C10 | Sab project files / progress `J:\Ai Agent` mein |
 | C11 | App local runtime; internet sirf agent / firmware / Telegram tak |
 | C12 | Telegram Bot API: command + alert; purani public channel history ka dawa nahi |
 | C13 | Deep/dark web sirf legal, public/authorized sources; illegal sources reject |
-| C14 | Koi bhi mobile-software task → safe Roman Urdu plan + report under HARD POLICY |
+| C14 | Koi bhi mobile-software task → safe Roman Urdu plan + report under Sahulat & Safe Service Policy |
 | C15 | Step-by-step phases; har phase mukammal, kuch incomplete na chhorhein |
 | C16 | Har research fact ka URL + `date checked`; facts aur recommendations alag |
+| C17 | Policy ka naam/andaaz `Sahulat & Safe Service Policy`; **boundary unchanged**, koi chhoot nahi (D19) |
+| C18 | Sahulat toolkit (8th view, routes, checklist, consent, letters, case register, refusal-with-reason) scope mein (D20/D21) |
+| C19 | Language split (D22): **information / report / plan / user communication = Roman Urdu**; **baqi sab = English** (headings, labels, code, identifiers, paths, API routes, commits, technical terms) — professional look ke liye |
 
 ### Assumptions (A — implementation se pehle / usi phase mein confirm)
 - **A1** docs Roman Urdu prose + English headings/codes.
@@ -155,7 +188,8 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **A4** `.gitignore` data/db/secrets/logs ignore karega.
 - **A5** neutral repo-local git identity (D11).
 - **A6** dedicated mobile nav nahi; responsive single-column fallback kaafi (P3 confirm).
-- **A7** migration strategy ka faisla P6 ADR; aaj `CREATE TABLE IF NOT EXISTS` hai.
+- **A7** migration strategy ka faisla P6 ADR; aaj `CREATE TABLE IF NOT EXISTS` hai (D20 ne isi ko PHASE 1B me istemal kiya).
+- **A11** user ka sarkari mulazim hona koi technical/legal exception paida nahi karta; sirf documentation tooling (D19).
 - **A8** Telegram pehle `getUpdates` long polling; webhook tab hi jab user maange (S9).
 - **A9** research sources user-editable allowlist se; arbitrary URL default `OFF`.
 - **A10** task plan pehle rule-based; optional LLM rewrite sirf configured endpoint par.
@@ -169,8 +203,10 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **O6** task plan sirf rule-based ya optional LLM rewrite; model / endpoint / cost (P7).
 - **O7** public channel history chahiye to Bot API se bahar ka legal/technical faisla (P7).
 - **O8** firmware provenance hash policy: kaunse files, kab, aur retention (P7/P11).
-- **O9** J8–J11 ke liye naya 8th view ya existing 7 views mein panels (P3).
+- **O9** ~~naya 8th view ya existing panels (P3)~~ **RESOLVED (D21): 8th view `Sahulat / Official Route`**.
 - **O10** `llm_endpoint`, research sources aur Telegram endpoint ke liye common SSRF allowlist (P9).
+- **O11** case register retention / export / deletion policy (P11).
+- **O12** C19/D22 ke mutabiq existing in-app Roman Urdu *chrome* (nav labels, buttons, toasts) ko English surface par kab / kis phase mein migrate karna hai; content strings (letters, reasons, hints) Roman Urdu rehte hain (P3/P11).
 
 ### Risks (R)
 - **R1** verbatim drift → byte-compare + 22-section count (mitigated).
@@ -180,6 +216,7 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **R5** default restriction rozana ke bahar wale scan ko roke → C6 opt-in.
 - **R6** Telegram token leak / 24h update loss / webhook conflict → O2/O4 + AC-07 tests.
 - **R7** illegal deep/dark source ya malware → C13 + AC-08 policy gate.
-- **R8** task planner HARD POLICY se bahar step de de → C14 + AC-09 refusal tests.
+- **R8** task planner Sahulat & Safe Service Policy se bahar step de de → C14 + AC-09 refusal tests.
 - **R9** competitor claims ya pricing outdated ho jayein → `date checked` + P2/P11 re-check.
 - **R10** AI hallucination ko fact mana jaye → C16 + `fact_or_recommendation` label + provenance.
+- **R11** policy ke naam badalne ko "boundary hata di" samajh liya jaye → D19 canonical note har section + `test_policy_boundary_unchanged` + `PRD.md` out-of-scope list unchanged (mitigated).

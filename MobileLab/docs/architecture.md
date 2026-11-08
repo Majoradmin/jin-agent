@@ -65,7 +65,7 @@ J:\Ai Agent\
 
 ## 4. Frontend architecture
 
-- Single page, 7 `.view` sections, hash routing (`location.hash`, `hashchange`, `nav(view)`).
+- Single page, 8 `.view` sections, hash routing (`location.hash`, `hashchange`, `nav(view)`). 8th view = `Sahulat / Official Route` (PHASE 1B).
 - `state` object + `api()` / `post()` wrappers; `esc()` output encoding.
 - `TITLES` map, `refreshCounts()`, view-specific loaders (`loadPackages`, `fetchResearch`, `loadDashNews`, …).
 - Static allowlist server par; koi bundler / CDN / external font nahi.
@@ -141,7 +141,7 @@ Distribution = `run.bat` aik Windows PC par. Koi cloud deploy, hosted CI/CD, con
 
 ## 15. Architecture boundaries
 
-- **HARD POLICY:** koi bypass automation / steps; sensitive partitions sirf flag.
+- **Sahulat & Safe Service Policy:** koi bypass automation / steps; sensitive partitions sirf flag.
 - Koi cloud / telemetry / paid service / naya dependency.
 - Frontend kabhi DB ko directly touch nahi karta.
 - `firmware.py` sirf **padhta / validate** karta hai — kabhi device ya partition ko write nahi karta.
@@ -167,4 +167,45 @@ P0 Bootstrap → P1 PRD → P2 Architecture+research → P3 Design → P4 Setup 
 | Regulatory | EU 2024/1799 applies from 31 July 2026 (S15). | Future demand assumption; local record/provenance features ko justify karta hai, koi cloud compliance claim nahi. |
 | Security | OWASP SSRF allowlist, scheme/host validation, private/loopback/link-local/metadata block, redirects off (S16). | `llm_endpoint`, research URL aur Telegram endpoint ke liye common allowlist P9; connection-time validation. |
 
-**P2 due:** technology table ki har row ko S1–S16 se jorna, adapter interfaces finalize karna, evidence/provenance DB schema ADR likhna, aur O4/O5/O9/O10 band karna. P1 ne koi code nahi badla.
+**P2 due:** technology table ki har row ko S1–S16 se jorna, adapter interfaces finalize karna, evidence/provenance DB schema ADR likhna, aur O4/O5/O9/O10 band karna. P1 ne koi code nahi badla. **O9 ab resolved hai (D21).**
+
+## 18. PHASE 1B — Sahulat toolkit (code change, 2026-11-08)
+
+> **Boundary:** is section ki har capability documentation / read-only guidance hai. `Sahulat & Safe Service Policy` ka naam badla hai, **qaida nahi** (D19). Koi naya outbound service, koi naya dependency, koi device operation nahi.
+
+### 18.1 Naya module
+| Module | Zimmedari | Dependency |
+|---|---|---|
+| `sahulat.py` | `POLICY`, `ROUTES` (6), `CHECKLIST` (8), `CONSENT_TEXT`, `letter_roman()` / `letter_english()`, `validate_case()` / `validate_letter()`, `check_request()`, `overview()` | stdlib `os`, `re`, `time` only |
+
+`check_request()` regex-only classifier hai — koi network call, koi LLM, koi file I/O nahi. Banned request par `reason + official_route + official_links[] + documents[] + safe_next_steps[] + refusal_line` return karta hai; **kabhi bypass step nahi**.
+
+### 18.2 Database (additive — D20)
+`cases` table: `case_no UNIQUE`, `technician`, `shop`, `customer`, `contact`, `brand`, `model`, `device_id`, `issue_type`, `route_id`, `proof_json`, `proof_ok`, `consent`, `status`, `notes`, `created_at`. Index `idx_cases_created`. Purani DB par `db.init()` ke `CREATE TABLE IF NOT EXISTS` se auto-create; koi destructive migration nahi. `counts()` me `cases` add hua.
+
+### 18.3 API
+| Method | Route | Input | Output |
+|---|---|---|---|
+| GET | `/api/sahulat/overview` | — | policy, routes, checklist, consent text, letter languages |
+| GET | `/api/sahulat/cases` | `limit` (1–500, invalid→200) | case list, newest first |
+| GET | `/api/sahulat/check` | `q` | classification + reason + official links + safe steps |
+| POST | `/api/sahulat/check` | `{q}` | same |
+| POST | `/api/sahulat/letter` | case payload + `lang` | letter text ya `400` with reason |
+| POST | `/api/sahulat/case` | case payload + `lang` | saved case + letter (+ `letter_error` if proof incomplete) |
+| GET | `/api/status` | — | ab `policy`, `policy_id` aur `counts.cases` bhi |
+
+**Validation chain:** `validate_case()` → field caps / unknown id drop / consent required → `validate_letter()` → required proof set → `db.add_case()` parameterized insert. Ghalat `lang`, `limit`, `route_id` ya `proof` kabhi `500` nahi dete.
+
+`make_letter()` `validate_letter()` (na ke `validate_case()`) call karta hai: letter sirf 4/4 required proof + consent par banta hai; `/api/sahulat/case` incomplete proof par case `draft` save kar ke `letter_error` wapas karta hai (AC-15 / AC-16). `check_request()` ka `MAX_QUERY_CHARS = 4000` hard-bounded classification window hai — UI 500-char field se pehle truncate karne par aakhir wala banned phrase cut off ho jata tha; ab nahi. Har blocked response mein kam-az-kam aik official `https://` link `GENERIC_LINKS` fallback se guaranteed hai; generic wording par `route_id = ""` (koi jhootha brand diagnosis nahi).
+
+### 18.3b Tests (targeted, PHASE 1B)
+`tests/test_sahulat.py` — stdlib `unittest`, 47 tests: routes/policy, request classifier, validation + letters, `cases` round-trip + additive migration (pre-1B schema simulation), live loopback HTTP endpoints, static assets / 8-view wiring, `agent.md` verbatim hash aur 9-doc consistency. Throwaway DB `MobileLab/data/_p1b_test.db` (gitignored), SQL `DELETE FROM cases` se deterministic; production DB aur live internet kabhi touch nahi. **Full project suite P8 ka deliverable hai.**
+
+### 18.4 Data flow
+`web/app.js` → `GET /api/sahulat/overview` → 8th view render → user checklist + form → `POST /api/sahulat/letter` (preview) ya `POST /api/sahulat/case` (save + letter) → `db.cases` → `GET /api/sahulat/cases` table. Letter `<pre>` me `textContent` se render (koi `innerHTML`). Har `<a>` `safe_url()` se guzarta hai (`http/https` only, QA #4 partial fix).
+
+### 18.5 Deployment / security impact
+- Koi naya port, koi cloud, koi remote, koi `pip install`; `VERSION` `1.0.0` → `1.1.0`.
+- Naya attack surface: 5 local JSON endpoints — sab input-validated, read-only ya local validated write; koi arbitrary URL fetch nahi.
+- `data/` gitignored; koi token, credential ya full IMEI zaroori nahi. Case retention/export = O11 (P11).
+- **P2 abhi pending** — is section ne technology-selection table finalize nahi ki; wo agle gate par user ki ijazat se hoga.

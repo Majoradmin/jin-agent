@@ -84,6 +84,27 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at  REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS cases (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_no      TEXT UNIQUE NOT NULL,
+    technician   TEXT DEFAULT '',
+    shop         TEXT DEFAULT '',
+    customer     TEXT NOT NULL,
+    contact      TEXT DEFAULT '',
+    brand        TEXT DEFAULT '',
+    model        TEXT DEFAULT '',
+    device_id    TEXT DEFAULT '',
+    issue_type   TEXT DEFAULT '',
+    route_id     TEXT DEFAULT '',
+    proof_json   TEXT DEFAULT '[]',
+    proof_ok     INTEGER DEFAULT 0,
+    consent      INTEGER DEFAULT 0,
+    status       TEXT DEFAULT 'draft',
+    notes        TEXT DEFAULT '',
+    created_at   REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -233,6 +254,43 @@ def cached_articles(max_age_minutes: int) -> list[dict]:
     return rows("SELECT * FROM articles WHERE fetched_at>=? ORDER BY score DESC, fetched_at DESC", (cutoff,))
 
 
+def add_case(d: dict) -> dict:
+    """Sahulat case / asset register. Additive schema — existing DB auto-migrates via init()."""
+    case_no = d.get("case_no") or ("ML-" + time.strftime("%Y%m%d") + "-" + os.urandom(3).hex().upper())
+    cid = execute(
+        """INSERT INTO cases
+           (case_no,technician,shop,customer,contact,brand,model,device_id,issue_type,
+            route_id,proof_json,proof_ok,consent,status,notes,created_at)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (case_no, d.get("technician", ""), d.get("shop", ""), d["customer"],
+         d.get("contact", ""), d.get("brand", ""), d.get("model", ""),
+         d.get("device_id", ""), d.get("issue_type", ""), d.get("route_id", ""),
+         json.dumps(d.get("proof", []), ensure_ascii=False),
+         1 if d.get("proof_ok") else 0, 1 if d.get("consent") else 0,
+         d.get("status", "draft"), d.get("notes", ""), time.time()),
+    )
+    row = one("SELECT * FROM cases WHERE id=?", (cid,)) or {}
+    try:
+        row["proof"] = json.loads(row.get("proof_json") or "[]")
+    except Exception:
+        row["proof"] = []
+    return row
+
+
+def list_cases(limit: int = 200) -> list[dict]:
+    try:
+        limit = max(1, min(500, int(limit)))
+    except (TypeError, ValueError):
+        limit = 200
+    items = rows("SELECT * FROM cases ORDER BY created_at DESC LIMIT ?", (limit,))
+    for r in items:
+        try:
+            r["proof"] = json.loads(r.get("proof_json") or "[]")
+        except Exception:
+            r["proof"] = []
+    return items
+
+
 def counts() -> dict:
     return {
         "packages": one("SELECT COUNT(*) n FROM packages")["n"],
@@ -241,4 +299,5 @@ def counts() -> dict:
         "saved": one("SELECT COUNT(*) n FROM articles WHERE saved=1")["n"],
         "models": one("SELECT COUNT(*) n FROM models")["n"],
         "jobs": one("SELECT COUNT(*) n FROM jobs")["n"],
+        "cases": one("SELECT COUNT(*) n FROM cases")["n"],
     }

@@ -741,10 +741,12 @@ Har reply, har sawal, har option, har toast aur har doc ki prose **Roman Urdu** 
 - `C:\Users\...\.workbuddy-ai\` sirf WorkBuddy ka apna internal session log / plan cache hai jo app khud banata hai; **project files ke liye C: istemal nahi karna**. Is project ka source of truth `agent.md` + `docs\` hain.
 
 ### C. App — C1
-Existing **MobileLab**: local Windows mobile-software / firmware workbench. Koi naya product nahi. **Python standard library only** (koi pip install), `127.0.0.1:8765`, SQLite WAL, light theme, 7 views. Koi cloud, paid subscription ya lazmi API key nahi.
+Existing **MobileLab**: local Windows mobile-software / firmware workbench. Koi naya product nahi. **Python standard library only** (koi pip install), `127.0.0.1:8765`, SQLite WAL, light theme, 8 views. Koi cloud, paid subscription ya lazmi API key nahi.
 
-### D. HARD POLICY (kabhi na todhein)
-Huawei ID, Google FRP, Samsung Account / Knox Guard, MDM, carrier lock aur iCloud Activation Lock ka **koi bypass automation ya step-by-step tareeqa nahi**. Sirf official routes + proof-of-ownership. Hassas partitions (`frp`, `persistent`, `config`, `devinfo`, `modemst1/2`, `nvram`, `nvdata`, `seccfg`, `proinfo`, `metadata`) sirf **FLAG** kiye jate hain — kabhi write/erase nahi.
+### D. Sahulat & Safe Service Policy (kabhi na todhein)
+> **Canonical note (D19 / C17):** purana internal naam `HARD POLICY` tha. PHASE 1B mein **sirf naam aur andaaz** badla gaya hai — pehli line ab "hum kya madad karte hain" hai. Neeche wali **har qaida bilkul waisi ki waisi** hai; koi chhoot, role-based exception ya "research / test / hypothetical" exception nahi. User ne khud ye option manzoor kiya (`bypass wali line waisi hi rehti hai`).
+
+Huawei ID, Google FRP, Samsung Account / Knox Guard, MDM, carrier lock aur iCloud Activation Lock ka **koi bypass automation ya step-by-step tareeqa nahi**. Sirf official routes + proof-of-ownership. Hassas partitions (`frp`, `persistent`, `config`, `devinfo`, `modemst1/2`, `nvram`, `nvdata`, `seccfg`, `proinfo`, `metadata`) sirf **FLAG** kiye jate hain — kabhi write/erase nahi. Sarkari mulazim hona koi technical/legal exception paida nahi karta (A11); is liye madad documentation, official route, consent aur audit trail tak hai.
 
 ### E. 12 phases — adapted gates — C3
 `PHASE 0` se `PHASE 11` tak **saare gates barqarar**. Jin ka is app par matlab nahi (multi-user auth, sessions, tenant isolation, cloud deploy, hosted CI/CD, cross-origin CORS) unhein **"N/A + wajah"** likh kar gate pass kiya jaye ga — **kabhi skip nahi**. Har phase par `PHASE REVIEW` + `READY / NOT READY`. `NOT READY` par ruk jao; `READY` par **user ki ijazat maango**, khud aage na barho.
@@ -753,7 +755,7 @@ Huawei ID, Google FRP, Samsung Account / Knox Guard, MDM, carrier lock aur iClou
 Phase-by-phase: aik chhota sawal → user ka jawab → sirf usi approved task par `TASK / IMPLEMENTATION / VERIFICATION / RESULT` → phase review → agla sawal. Har task ke baad `docs\memory.md`, `docs\progress.md`, zarurat par `docs\decisions.md` (ADR) aur `docs\changelog.md` update. Naye task se pehle relevant docs parho.
 Special commands: `next` · `continue` · `status` · `review` · `research` · `explain` · `fix` · `stop`.
 
-### G. Classification (Confirmed C1–C16)
+### G. Classification (Confirmed C1–C19)
 | # | Faisla |
 |---|---|
 | C1 | Core app = existing MobileLab; koi naya product nahi |
@@ -769,21 +771,24 @@ Special commands: `next` · `continue` · `status` · `review` · `research` · 
 | C11 | App local runtime; internet sirf research agent / firmware / Telegram tak |
 | C12 | Telegram Bot API command + alert; purani public channel history ka dawa nahi |
 | C13 | Deep/dark web sirf legal, public/authorized; illegal sources reject |
-| C14 | Koi bhi mobile-software task → safe Roman Urdu plan + report under HARD POLICY |
+| C14 | Koi bhi mobile-software task → safe Roman Urdu plan + report under Sahulat & Safe Service Policy |
 | C15 | Step-by-step phases; har phase mukammal, kuch incomplete na chhorhein |
 | C16 | Har research fact ka URL + `date checked`; facts aur recommendations alag |
+| C17 | `HARD POLICY` ka **sirf naam / andaaz** badal kar `Sahulat & Safe Service Policy` — qaida waisa ka waisa, koi chhoot nahi (D19) |
+| C18 | Sahulat toolkit scope mein: 8th view, official routes, checklist, consent, letters, case register, refusal-with-reason (D20/D21) |
+| C19 | **Language split (D22):** information / report / plan / user communication = **Roman Urdu**; baqi sab = **English** (headings, labels, code, identifiers, paths, API routes, commits, technical terms) — professional look ke liye. C9 refined, khatam nahi |
 
-**Assumptions:** A1 docs Roman Urdu prose + English headings/codes · A2 verbatim block = `<long_text_quote>` ke andar ka poora text · A3 tests production DB aur live internet kabhi touch na karein · A4 `.gitignore` data/db/secrets/logs ignore karega · A5 local commit ke liye neutral repo-local identity (`MobileLab Local <mobilelab@localhost.invalid>`), kyunke global git identity set nahi hai · A6 responsive single-column fallback (P3) · A7 migration strategy P6 ADR · A8 Telegram pehle `getUpdates`, webhook baad mein · A9 research sources user-editable allowlist se · A10 task plan pehle rule-based.
-**Open questions:** O1 skills/MCP shortlist · O2 `llm_key` / bot token at-rest · O3 log retention · O4 Telegram token storage/rotation/rate-limit · O5 legal deep/dark allowlist approval · O6 task plan LLM vs rule-based · O7 public channel history · O8 firmware provenance hash policy · O9 naya view ya existing panels · O10 common SSRF allowlist.
-**Risks:** R1 verbatim drift · R2 banawati citations (P1 source register se mitigated) · R3 security fixes workflow tod dein · R4 doc drift · R5 default scan restriction · R6 Telegram token/update loss · R7 illegal research/malware · R8 planner HARD POLICY se bahar · R9 competitor claims outdated · R10 AI hallucination ko fact samajhna.
+**Assumptions:** A1 docs Roman Urdu prose + English headings/codes · A2 verbatim block = `<long_text_quote>` ke andar ka poora text · A3 tests production DB aur live internet kabhi touch na karein · A4 `.gitignore` data/db/secrets/logs ignore karega · A5 local commit ke liye neutral repo-local identity (`MobileLab Local <mobilelab@localhost.invalid>`), kyunke global git identity set nahi hai · A6 responsive single-column fallback (P3) · A7 migration strategy P6 ADR · A8 Telegram pehle `getUpdates`, webhook baad mein · A9 research sources user-editable allowlist se · A10 task plan pehle rule-based · A11 sarkari mulazim hona koi technical/legal exception nahi, sirf documentation tooling.
+**Open questions:** O1 skills/MCP shortlist · O2 `llm_key` / bot token at-rest · O3 log retention · O4 Telegram token storage/rotation/rate-limit · O5 legal deep/dark allowlist approval · O6 task plan LLM vs rule-based · O7 public channel history · O8 firmware provenance hash policy · ~~O9 naya view ya existing panels~~ **RESOLVED (D21): 8th view `Sahulat / Official Route`** · O10 common SSRF allowlist · O11 case register retention / export / deletion policy (P11) · O12 existing in-app Roman Urdu chrome ko English surface par migrate karne ka phase (P3/P11).
+**Risks:** R1 verbatim drift · R2 banawati citations (P1 source register se mitigated) · R3 security fixes workflow tod dein · R4 doc drift · R5 default scan restriction · R6 Telegram token/update loss · R7 illegal research/malware · R8 planner Sahulat & Safe Service Policy se bahar · R9 competitor claims outdated · R10 AI hallucination ko fact samajhna · R11 policy ke naam badalne ko "boundary hata di" samajh liya jaye → D19 canonical note + `test_policy_boundary_unchanged` (mitigated).
 
 ### H. Docs map
 | File | Zimmedari |
 |---|---|
 | `PRD.md` | vision, problem, persona, journeys, FR/NFR, acceptance criteria, out-of-scope |
 | `architecture.md` | modules, tech stack + alternatives, DB, API, data flow, boundaries |
-| `design.md` | design tokens, 7 views, states, a11y, localization |
-| `rules.md` | coding / security / DB / API / test / git / AI rules + HARD POLICY |
+| `design.md` | design tokens, 8 views, states, a11y, localization |
+| `rules.md` | coding / security / DB / API / test / git / AI rules + Sahulat & Safe Service Policy |
 | `phases.md` | 12 phases, gates, risks, PHASE REVIEW template |
 | `memory.md` | project context, preferences, decisions, pending questions |
 | `progress.md` | current phase/task, completed, blocked, tests, remaining |
@@ -791,11 +796,28 @@ Special commands: `next` · `continue` · `status` · `review` · `research` · 
 | `changelog.md` | user-visible changes, fixes, breaking/DB/deploy changes |
 
 ### I. Research
-P0 mein koi naya web browse nahi tha. **PHASE 1** mein 16 official / verified sources S1–S16 `PRD.md` mein `URL + date checked = 2026-11-08` ke sath darj hain; facts aur recommendations alag hain. Low-authority reseller / market-size claims exclude kiye gaye. `PHASE 2` inhi sources ko technology-selection table se jorega aur `architecture.md` final karega. Koi citation banawati nahi.
+P0 aur **PHASE 1B** mein koi naya web browse nahi hua (1B sirf P1 ke verified S1–S16 URLs aur unhin ke andar ke official links ko reuse karta hai; koi naya unverified URL nahi). **PHASE 1** mein 16 official / verified sources S1–S16 `PRD.md` mein `URL + date checked = 2026-11-08` ke sath darj hain; facts aur recommendations alag hain. Low-authority reseller / market-size claims exclude kiye gaye. `PHASE 2` inhi sources ko technology-selection table se jorega aur `architecture.md` final karega. Koi citation banawati nahi.
 
 ### J. PHASE 1 confirmed boundary
 - Runtime local; internet scoped (C11).
 - Telegram: Bot API command + alert; koi MTProto/TDLib/Telethon dependency nahi; koi historical public-channel scrape nahi (C12).
 - Deep/dark web: sirf legal, public/authorized sources; koi illegal marketplace, stolen credential, leaked firmware, bypass service, malware ya private data nahi (C13).
-- Agent: koi bhi mobile-software task ka safe plan/report; HARD POLICY gate; koi device write/erase ya bypass steps nahi (C14).
+- Agent: koi bhi mobile-software task ka safe plan/report; Sahulat & Safe Service Policy gate; koi device write/erase ya bypass steps nahi (C14).
 - Har phase poora, kuch incomplete na chhorhein (C15).
+
+### K. PHASE 1B confirmed boundary (policy barqarar)
+- **K1** `Sahulat & Safe Service Policy` sirf naam / andaaz hai; `POLICY_ID = SAHULAT-SAFE-SERVICE-v1`; bypass, step-by-step tareeqa, exploit, loader trick aur partition write/erase **phir bhi mana** hai. Koi role-based ya sarkari-mulazim exception nahi (C17 / A11 / D19).
+- **K2** Naya toolkit sirf sahulat: 6 brand-wise official routes, 8-item checklist (4 required), customer consent, Roman Urdu + English service-request letter, request classifier (`refusal with reason + official link`), aur local `cases` register. Koi device operation nahi.
+- **K3** Har blocked response mein wajah + kam-az-kam aik official `https://` link + safe next steps. Generic "bypass" wording par koi brand ka jhootha dawa nahi (`route_id = ""`).
+- **K4** Letter sirf tab jab 4/4 required proof items aur consent hon (`validate_letter`); incomplete proof par case `draft` save hota hai aur `letter_error` milta hai. `check_request` ka classification window `MAX_QUERY_CHARS = 4000` hard-bounded hai taake padding se banned phrase cut na ho.
+- **K5** `cases` table additive (`CREATE TABLE IF NOT EXISTS`); purani DB auto-migrate; koi destructive migration, koi credential / full IMEI zaroori nahi; sab local.
+- **K6** Tests production DB aur live internet kabhi touch nahi karte; `MobileLab\data\_p1b_test.db` fixed throwaway DB (gitignored). Full project suite abhi **P8** ka deliverable hai; 1B ka targeted suite 47 tests hai.
+- **K7** `agent.md` verbatim block par koi edit nahi; SHA-256 `1de535…0840` barqarar.
+
+### L. Language split — operational rule (C19 / D22)
+| Layer | Zaban | Misal |
+|---|---|---|
+| Information, report, plan, PRD/docs prose, PHASE REVIEW, status, har sawal + jawab | **Roman Urdu** | "PHASE 1B mukammal; 47/47 tests green" |
+| Headings, section titles, table headers, code, identifiers, paths, API routes, commit messages, version strings, technical terms, UI labels / nav / buttons | **English** | `## 10. PHASE REVIEW`, `POST /api/sahulat/case`, `feat: add Sahulat toolkit` |
+
+Is ka matlab **content vs surface** hai. C9 zinda hai, sirf domain clear hua. Mojooda docs pehle se is pattern par hain — bulk rewrite nahi. In-app letter / reason / hint text content hai (Roman Urdu rehta); UI chrome migration O12 (P3/P11).

@@ -6,7 +6,23 @@ FRP, MDM, carrier or activation locks.
 """
 
 BOUNDARY = {
-    "title": "MobileLab kya karta hai, kya nahi",
+    "title": "Sahulat & Safe Service Policy — hum kya madad karte hain",
+    "policy_name": "Sahulat & Safe Service Policy",
+    "canonical": (
+        "Purana internal naam HARD POLICY tha. Sirf naam aur andaaz badla hai — "
+        "qaida bilkul waisa ka waisa hai: koi bypass automation ya step-by-step "
+        "tareeqa nahi, koi role-based chhoot nahi."
+    ),
+    "lead": (
+        "Hum logon ki sahulat ke liye kaam karte hain: sahi firmware, saaf documentation "
+        "aur jahan malik ki tasdeeq chahiye wahan seedha official raasta."
+    ),
+    "helps": [
+        "Sahulat / Official Route view: customer request ki wajah + official link + agla jaez qadam.",
+        "6 brand-wise official routes with required documents aur verified links.",
+        "Proof-of-ownership checklist, customer consent form aur Roman Urdu / English service-request letter.",
+        "Case / asset register — sarkari aur department devices ka local audit trail.",
+    ],
     "does": [
         "Local firmware packages scan, parse aur validate karta hai (MTK scatter/preloader/DA, Qualcomm Firehose/rawprogram/patch/GPT).",
         "Missing images, storage mismatch (eMMC vs UFS), sector overlap, image-size-overshoot, duplicate partition aur corrupt/tiny loader pakarta hai.",
@@ -139,6 +155,7 @@ HELP = [
     ("Filters", "Include query, exclude words, days (freshness), min score, category, source. Bookmark ki hui khabarein 'Saved' mein rehti hain."),
     ("Model Brief", "Model number likhein → local model card + usi model par live news. Apna khud ka model card add/edit kar sakte hain (chipset, storage, official link, notes)."),
     ("Job Register", "Har device ka IMEI, customer, purchase proof aur official route note karain. Ye aap ka legal audit trail hai."),
+    ("Sahulat / Official Route", "Customer ki request likh kar check karain → wajah + official link + agla jaez qadam. Brand-wise documents, checklist, consent, Roman Urdu / English letter aur case register aik hi view mein. Bypass wali line barqarar hai."),
     ("Optional LLM", "Settings mein koi OpenAI-compatible endpoint + key + model bhar dein to top 12 khabaroon ka khulasa model se natural Roman Urdu mein likha jayega. Warna built-in offline rule-based khulasa chalta hai."),
     ("Privacy", "SQLite DB data/mobilelab.db mein hai. Scan aur catalog bilkul offline. Research tab hi internet use karta hai aur woh bhi sirf public RSS/JSON feeds se."),
     ("Band karne ke liye", "run.bat wali black window band kar dein ya Ctrl+C dabayein."),

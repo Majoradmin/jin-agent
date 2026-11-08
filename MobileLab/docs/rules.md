@@ -27,7 +27,11 @@
 **Wajah:** local, offline, zero-dependency Windows PC; pichhle turn mein `flask` aur `feedparser` ke `ModuleNotFoundError` aaye the, is liye stdlib-only faisla pakka hua.
 **Naya dependency:** sirf tab jab user ko wajah batayi jaye aur explicit manzoori mile — is project mein abhi koi nahi.
 
-## 4. HARD POLICY (sab se upar)
+## 4. Sahulat & Safe Service Policy (sab se upar)
+
+> **Pehle madad, phir hadd.** MobileLab law ful owner / technician ki sahulat ke liye hai: firmware validation, documentation, official-route guidance, consent aur local case register.
+>
+> **Canonical note (D19 / C17):** purana internal naam `HARD POLICY` tha. PHASE 1B mein **sirf naam aur andaaz** badla — neeche wali **har qaida bilkul barqarar** hai. Koi role-based, "research", "test" ya "hypothetical" exception nahi. User ne khud `bypass wali line waisi hi rehti hai` wala option manzoor kiya.
 
 - Huawei ID, Google FRP, Samsung Account / Knox Guard, MDM, carrier lock, iCloud Activation Lock ka **koi bypass automation ya step-by-step tareeqa nahi**.
 - Sirf official routes + proof-of-ownership (`knowledge.py`, `PRD.md` out-of-scope).
@@ -126,7 +130,32 @@
 - **Provenance:** har fact ka `source_url` + `date checked`; `fact` aur `recommendation` alag labels; koi speculation ko fact na likho; low-authority price/market claims exclude karo. Source register `PRD.md` §5.3 S1–S16.
 - **Telegram:** sirf official HTTPS `https://api.telegram.org/bot<token>/METHOD_NAME`; stdlib `urllib.request`; koi MTProto/TDLib/Telethon nahi. Token kabhi API response, log, toast ya doc mein plaintext na ho. `getUpdates` aur webhook dono ek sath nahi; `limit` 1–100; `offset` har response ke baad recalculate; 24h retention ka dawa na karo; `channel_post` ko historical public-channel history na samjho.
 - **Deep/dark web:** sirf legal, public ya authorized sources. Policy check **fetch se pehle**. Illegal marketplace, stolen credential, leaked/proprietary firmware, bypass service, malware, private database, unauthorized access sab reject. Koi downloaded executable execute na ho. BSI definition aur warning docs/UI mein rehni chahiye.
-- **Task plan/report:** koi bhi mobile-software task ka Roman Urdu safe plan/report; facts, assumptions, open questions, risks aur safe steps alag. HARD POLICY classifier har output par lage; koi device write/erase, flash, bootloader/IMEI operation ya lock bypass step generate na ho. Prohibited request par refusal + official route.
+- **Task plan/report:** koi bhi mobile-software task ka Roman Urdu safe plan/report; facts, assumptions, open questions, risks aur safe steps alag. Sahulat & Safe Service Policy classifier har output par lage; koi device write/erase, flash, bootloader/IMEI operation ya lock bypass step generate na ho. Prohibited request par refusal + official route.
 - **Security:** OWASP SSRF allowlist, scheme/host validation, private/loopback/link-local/metadata block, redirects off, connection-time IP validation. Ye `llm_endpoint`, research sources aur Telegram endpoint sab par lage.
 - **Competitor boundary:** paid suites ya open-source low-level tools ki device-operation capabilities copy nahi karni; MobileLab read/validate/provenance/plan par rehta hai.
 - **Phase completeness:** har phase ka `PHASE REVIEW` aur `READY` gate; koi incomplete item agle phase par na chhorhein (C15).
+
+## 15. PHASE 1B — Sahulat toolkit rules (C17 / C18)
+
+- **Boundary immutable:** `Sahulat & Safe Service Policy` sirf presentation reframe hai. Koi bhi doc, API, test ya UI string boundary ko kamzor na kare (R11). Canonical note har policy section mein zaroori hai.
+- **No bypass in generated content:** `sahulat.py` ke routes / steps / letters / `check_request()` output mein koi bypass tareeqa, exploit, loader trick, partition write/erase command ya account-removal step na ho. Regression test is par gate hai.
+- **Consent gate:** letter aur case save ke liye `consent=true` + tamam required proof items zaroori. Missing par `400` JSON with specific Roman Urdu reason — kabhi `500` ya stack trace nahi.
+- **Input caps:** `validate_case()` har field ko cap kare (`notes` 1000, `device_id` 40, baqi 200); unknown `proof` / `route_id` drop ya empty; `lang` allowlist `{roman, english}`; `limit` 1–500 clamp + invalid par `200`.
+- **URL safety:** koi bhi rendered link `safe_url()` se guzare — `http`/`https` only; `javascript:` / `data:` reject; sab `<a>` par `rel="noopener noreferrer"`.
+- **Plain-text output:** letter `<pre>` mein `textContent` se render ho, `innerHTML` se nahi — HTML injection ka raasta band.
+- **DB additive only:** `cases` table `CREATE TABLE IF NOT EXISTS` se bane; purani DB ko destructive migration na chhoo; `data/` gitignored; koi full IMEI / credential / customer document upload nahi.
+- **Privacy / official role:** user ka sarkari mulazim hona koi technical exception paida nahi karta. Department devices ke liye sirf documentation / authorization / asset-register tooling — koi device access automation nahi.
+- **Honesty:** PHASE 1B mein koi naya web browse nahi; links pehle se verified S1–S16 / `knowledge.py` sources hain. Koi naya citation, market claim ya "policy hata di" dawa nahi.
+- **Letter gate (QA fix):** `make_letter()` **sirf** `validate_letter()` use kare, `validate_case()` nahi — warna required proof items enforce na hon aur AC-15 / AC-16 tootein. Case `draft` save ho sakta hai, par us ke sath letter generate na ho (`letter_error` wapas jaye).
+- **Classification window (QA fix):** `check_request()` banned patterns ko `MAX_QUERY_CHARS = 4000` ke hard-bounded window par chalaye. 500-char UI cap par truncate karne se lambi request ke aakhir mein likha banned phrase cut off ho kar classification se bach jata hai. Window bounded rehni chahiye (regex DoS na ho).
+- **Har refusal ka link:** blocked response mein kam-az-kam aik `https://` official link ho. Jis route ke links khaali hon wahan `GENERIC_LINKS` fallback (sirf `ROUTES` ke andar se, koi naya URL nahi). Generic "bypass" wording par brand ka andaza na lagayein — `route_id = ""` aur brand-neutral `official_route`.
+- **Targeted tests:** `tests/test_sahulat.py` stdlib `unittest`, production DB / live internet touch na kare; throwaway DB `MobileLab/data/_p1b_test.db` (gitignored) aur SQL `DELETE FROM cases` se deterministic. Full project suite **P8** ka deliverable hai — targeted suite ko poora suite keh kar jhootha green claim na banayein.
+
+## 16. Language split (C19 / D22)
+
+- **Roman Urdu (content):** har information, report, plan, PRD / docs prose, PHASE REVIEW, status summary, aur user se har sawal + jawab. Ye C9 ka asli maqsad hai.
+- **English (professional surface):** headings, section titles, table headers, code, identifiers, file paths, API routes, commit messages, version strings, technical terms, UI labels / navigation / button text.
+- **Faisla ka amal:** *content* aur *surface* alag hain. Ek hi file mein English heading + Roman Urdu prose bilkul theek hai (mojooda 9 docs isi pattern par hain).
+- **Reframe nahi:** C9 khatam nahi hua, sirf refined hua. Koi bhi purani doc ko "ab English karo" ke naam par bulk rewrite na karein.
+- **In-app text:** letters, refusal reasons, checklist hints, consent = **content** (Roman Urdu rehta). Nav / button / chrome labels = **surface** (English ki taraf O12 / P3/P11). Har naye string ko is table par classify kar ke likhein.
+- **Tests:** language rules ka koi automated gate nahi; `PHASE REVIEW` me documentation status par read-back verify karein.

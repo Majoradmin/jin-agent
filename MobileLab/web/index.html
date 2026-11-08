@@ -33,6 +33,7 @@
       <button class="nav-item" data-view="research"><span class="ni">◎</span> Research Agent <span class="nav-dot"></span></button>
       <button class="nav-item" data-view="models"><span class="ni">⌗</span> Model Brief</button>
       <button class="nav-item" data-view="jobs"><span class="ni">✓</span> Job Register</button>
+      <button class="nav-item" data-view="sahulat"><span class="ni">✦</span> Sahulat / Official Route</button>
       <button class="nav-item" data-view="knowledge"><span class="ni">◇</span> Knowledge / Help</button>
       <button class="nav-item" data-view="settings"><span class="ni">⚙</span> Settings</button>
     </nav>
@@ -63,8 +64,8 @@
         <div class="notice">
           <div class="notice-icon">i</div>
           <div>
-            <strong>Pehle aik zaroori baat</strong>
-            <p>MobileLab firmware <em>files</em> par aap ka stuck hona door karta hai — scatter / preloader / DA aur Qualcomm Firehose / rawprogram packages ki scanning, validation aur research. Lekin Huawei ID, FRP, MDM ya iCloud Activation Lock <em>bypass</em> ka koi automation is mein nahi hai: ye anti-theft hain aur in ka faisla manufacturer ke server par hota hai. Un ke liye <a href="#" data-goto="knowledge">official routes</a> dekhein. (Research ke mutabiq paid tools bhi server-side ownership nahi badal sakte.)</p>
+            <strong>Logon ki sahulat pehle — Sahulat &amp; Safe Service Policy</strong>
+            <p>MobileLab firmware <em>files</em> par aap ka stuck hona door karta hai — scatter / preloader / DA aur Qualcomm Firehose / rawprogram packages ki scanning, validation aur research. Aur jahan malik ki tasdeeq chahiye wahan <a href="#" data-goto="sahulat">Sahulat / Official Route</a> view mein checklist, consent, service-request letter, case register aur <strong>wajah + official link ke saath</strong> raasta milta hai. Huawei ID, FRP, MDM ya iCloud Activation Lock ka bypass automation is mein nahi hai — ye server-side anti-theft hain; un ke liye <a href="#" data-goto="knowledge">official routes</a> dekhein.</p>
           </div>
         </div>
 
@@ -208,6 +209,81 @@
         <div class="card">
           <div class="card-head"><h2>Register</h2><button class="btn ghost sm" id="jobReload">Reload</button></div>
           <div id="jobList"></div>
+        </div>
+      </section>
+
+      <!-- ================= SAHULAT / OFFICIAL ROUTE ================= -->
+      <section class="view" id="view-sahulat">
+        <div class="notice soft">
+          <div class="notice-icon">✓</div>
+          <div>
+            <strong id="sahPolicyTitle">Sahulat &amp; Safe Service Policy</strong>
+            <p id="sahPolicyLead">loading…</p>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h2>Customer ki request check karein</h2><span class="tag">wajah + raasta</span></div>
+            <p class="muted">Customer ne kya manga? Likhein. Agar account / activation lock ka bypass hai to app <strong>wajah, official link aur agla jaez qadam</strong> dega — sirf "nahi" nahi.</p>
+            <div class="inline-form">
+              <input id="sahCheckQ" placeholder="Maslan: EMUI 16 mein Huawei ID remove kar do">
+              <button class="btn primary" id="sahCheckBtn">Check karein</button>
+            </div>
+            <div id="sahCheckOut" class="sah-out"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Official routes &amp; required documents</h2><span class="tag green" id="sahRouteCount">—</span></div>
+            <p class="muted">Brand-wise: kya documents chahiye, kaunsa official qadam uthana hai aur verified links.</p>
+            <div id="sahRoutes" class="sah-routes"><div class="skeleton"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Proof of ownership + consent + service request</h2><span class="tag">audit trail</span></div>
+          <div class="sah-grid">
+            <div>
+              <h3 class="sah-h3">Zaroori checklist</h3>
+              <div id="sahChecklist" class="sah-checklist"></div>
+              <h3 class="sah-h3">Consent form (print / sign karayein)</h3>
+              <pre id="sahConsent" class="sah-consent"></pre>
+              <button class="btn ghost sm" id="sahConsentCopy">Consent copy karein</button>
+            </div>
+            <div>
+              <div class="form-grid">
+                <label>Customer <input id="sahCustomer" placeholder="naam"></label>
+                <label>Contact <input id="sahContact" placeholder="phone / email"></label>
+                <label>Brand / Route <select id="sahBrand"></select></label>
+                <label>Model <input id="sahModel" placeholder="ELE-L29"></label>
+                <label>IMEI / Serial <input id="sahDevice" placeholder="sirf aakhri 4 harkat"></label>
+                <label>Masla / issue <input id="sahIssue" placeholder="account recovery / service request"></label>
+                <label class="wide">Notes <textarea id="sahNotes" rows="3" placeholder="invoice no, documents, department reference…"></textarea></label>
+                <label class="wide">Letter language <select id="sahLang">
+                  <option value="roman">Roman Urdu</option><option value="english">English</option>
+                </select></label>
+                <label class="checkline wide"><input type="checkbox" id="sahConsentChk"> Customer consent form par dastkhat ho gaya</label>
+              </div>
+              <div class="row-actions">
+                <button class="btn ghost" id="sahLetterBtn">Sirf letter preview</button>
+                <button class="btn primary" id="sahCaseBtn">Case save + letter</button>
+                <button class="btn ghost" id="sahLetterCopy">Letter copy</button>
+              </div>
+              <div id="sahFormMsg" class="small muted"></div>
+              <pre id="sahLetter" class="sah-letter">Letter yahan aayega. Pehla qadam: checklist tick karain, consent check karain, phir upar wala button dabayein.</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h2>Case / asset register</h2><button class="btn ghost sm" id="sahReload">Reload</button></div>
+            <div id="sahCases"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Service boundary</h2><span class="tag amber">qaida barqarar</span></div>
+            <div id="sahBoundary"></div>
+          </div>
         </div>
       </section>
 

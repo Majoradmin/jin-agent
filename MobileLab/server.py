@@ -19,8 +19,9 @@ import db            # noqa: E402
 import firmware      # noqa: E402
 import knowledge     # noqa: E402
 import research      # noqa: E402
+import sahulat       # noqa: E402
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 PORT = int(os.environ.get("MOBILELAB_PORT", "8765"))
 
 MIME = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8",
@@ -127,6 +128,7 @@ class Handler(BaseHTTPRequestHandler):
                 "python": sys.version.split()[0],
                 "db": db.DB_PATH, "web": "http://127.0.0.1:%d" % PORT,
                 "counts": db.counts(), "sources": len(research.ALL_SOURCES),
+                "policy": sahulat.POLICY["name"], "policy_id": sahulat.POLICY_ID,
                 "settings": {k: (("***" if k == "llm_key" and s.get(k) else s.get(k, ""))) for k in s},
                 "security_note": knowledge.SECURITY_NOTE,
             })
@@ -231,6 +233,16 @@ class Handler(BaseHTTPRequestHandler):
                 s["llm_key"] = "***"
             return self._json(s)
 
+        # ---- Sahulat & Safe Service Toolkit (PHASE 1B) ----
+        if path == "/api/sahulat/overview":
+            return self._json(sahulat.overview())
+
+        if path == "/api/sahulat/cases":
+            return self._json({"items": db.list_cases(q.get("limit", "200"))})
+
+        if path == "/api/sahulat/check":
+            return self._json(sahulat.check_request(q.get("q", "")))
+
         return self._err("Unknown API: " + path, 404)
 
     # ------------------------------------------------------------------ POST API
@@ -288,6 +300,36 @@ class Handler(BaseHTTPRequestHandler):
             if data.get("llm_key") == "***":
                 data.pop("llm_key")
             return self._json({"ok": True, "settings": db.set_settings(data)})
+
+        # ---- Sahulat & Safe Service Toolkit (PHASE 1B) ----
+        if path == "/api/sahulat/letter":
+            try:
+                lang = str(b.get("lang") or "roman").strip().lower()
+                text = sahulat.make_letter(b, lang)
+                return self._json({"ok": True, "lang": lang, "letter": text,
+                                   "policy": sahulat.POLICY_ID, "case_no": "(draft)"})
+            except ValueError as e:
+                return self._err(str(e), 400)
+
+        if path == "/api/sahulat/case":
+            # A case is always saved with consent; letter is generated from the SAME data.
+            cleaned, errors = sahulat.validate_case(b)
+            if errors:
+                return self._err("; ".join(errors), 400)
+            cleaned["case_no"] = sahulat.make_case_no()
+            cleaned["status"] = "ready" if cleaned["proof_ok"] else "draft"
+            row = db.add_case(cleaned)
+            letter = ""
+            letter_error = ""
+            try:
+                letter = sahulat.make_letter({**cleaned}, str(b.get("lang") or "roman").strip().lower())
+            except ValueError as e:
+                letter_error = str(e)
+            return self._json({"ok": True, "case": row, "letter": letter,
+                               "letter_error": letter_error, "policy": sahulat.POLICY_ID})
+
+        if path == "/api/sahulat/check":
+            return self._json(sahulat.check_request(b.get("q", "")))
 
         if path == "/api/reveal":
             target = (b.get("path") or "").strip()

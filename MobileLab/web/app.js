@@ -5,6 +5,19 @@ const $  = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const human = (n) => { n = +n || 0; const u=['B','KB','MB','GB','TB']; let i=0; while(n>=1024&&i<4){n/=1024;i++;} return (i?n.toFixed(1):n.toFixed(0))+' '+u[i]; };
+/* QA #4: only http/https links may become href. javascript:/data: rejected. */
+const safe_url = (u) => {
+  const s = String(u ?? '').trim();
+  if (!/^https?:\/\//i.test(s)) return '';
+  try { const p = new URL(s); return (p.protocol === 'http:' || p.protocol === 'https:') ? p.href : ''; }
+  catch { return ''; }
+};
+const linkHtml = (u, text, cls = '') => {
+  const href = safe_url(u);
+  const c = cls ? ` class="${esc(cls)}"` : '';
+  if (!href) return `<span${c}>${esc(text)}</span>`;
+  return `<a href="${esc(href)}"${c} target="_blank" rel="noopener noreferrer">${esc(text)}</a>`;
+};
 
 const TITLES = {
   dashboard: ['Dashboard', 'Aap ka local mobile-software workspace'],
@@ -12,6 +25,7 @@ const TITLES = {
   research:  ['Research Agent', 'Live browsing, filters aur Roman Urdu khulasa'],
   models:    ['Model Brief', 'Local model card + usi model par live information'],
   jobs:      ['Job Register', 'IMEI, ownership proof aur official route ka record'],
+  sahulat:   ['Sahulat / Official Route', 'Checklist, consent, service-request letter aur case register — wajah + official link ke saath'],
   knowledge: ['Knowledge / Help', 'Research findings, official routes, glossary aur setup'],
   settings:  ['Settings', 'Ikhtiyari LLM aur app preferences'],
 };
@@ -20,6 +34,7 @@ const state = {
   status: null, sources: [], presets: [], categories: [], knowledge: null,
   packages: [], selected: null, researchLoaded: false, savedMode: false,
   preset: 'all', lastItems: [], basePath: '',
+  sahulat: null, sahLoaded: false,
 };
 
 async function api(path, opts = {}) {
@@ -55,6 +70,7 @@ function nav(view, updateHash = true) {
   if (view === 'research' && !state.researchLoaded) fetchResearch(false);
   if (view === 'packages' && !state.packages.length) loadPackages();
   if (view === 'jobs') loadJobs();
+  if (view === 'sahulat') loadSahulat();
 }
 
 /* ------------------------------------------------------------------ dashboard */
@@ -63,7 +79,7 @@ function renderStats() {
   const items = [
     ['Packages', c.packages || 0], ['Scanned files', c.files || 0],
     ['Research items', c.articles || 0], ['Saved', c.saved || 0],
-    ['Model cards', c.models || 0], ['Jobs', c.jobs || 0],
+    ['Model cards', c.models || 0], ['Jobs', c.jobs || 0], ['Sahulat cases', c.cases || 0],
   ];
   $('#statGrid').innerHTML = items.map(([l, n]) =>
     `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
@@ -91,7 +107,7 @@ async function loadDashNews() {
     const r = await api('/api/research?preset=all&days=30&min_score=2&limit=8&sources=gnews,gsmarena,androidauthority,xda');
     const items = r.items.slice(0, 6);
     box.innerHTML = items.length ? items.map(i =>
-      `<div class="mn"><div class="mt"><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></div>
+      `<div class="mn"><div class="mt">${linkHtml(i.url, i.title)}</div>
        <div class="mk">${esc(i.khulasa)}</div></div>`).join('')
       : '<p class="muted small">Abhi koi matching khabar nahi mili. Research Agent mein filters khol kar dobara try karain.</p>';
   } catch (e) { box.innerHTML = `<p class="muted small">Fetch nahi hua: ${esc(e.message)}</p>`; }
@@ -256,13 +272,14 @@ async function fetchResearch(force) {
 
 function resCard(i) {
   const catColors = { huawei:'', mtk:'green', qcom:'green', apple:'amber', security:'red', tools:'', firmware:'' };
+  const href = safe_url(i.url);
   return `<div class="res-card ${i.saved ? 'saved' : ''}" data-g="${esc(i.guid)}">
     <div class="rc-top">
       <span class="tag ${catColors[i.category] || ''}">${esc(i.category_label)}</span>
       <span class="score">score ${i.score}</span>
       <span class="small muted">${esc(i.published || 'date nahi')}</span>
     </div>
-    <div class="rc-title"><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></div>
+    <div class="rc-title">${linkHtml(i.url, i.title)}</div>
     <div class="rc-khulasa">${esc(i.khulasa)}${i.llm ? ' <span class="tag">LLM</span>' : ''}</div>
     ${i.excerpt ? `<div class="rc-excerpt">${esc(i.excerpt)}</div>` : ''}
     ${i.matched ? `<div class="small muted" style="margin-bottom:9px">Match: ${esc(i.matched)}</div>` : ''}
@@ -270,7 +287,7 @@ function resCard(i) {
       <span class="src">${esc(i.source)}${i.age_days !== null && i.age_days !== undefined ? ' · ' + i.age_days + ' din pehle' : ''}</span>
       <button class="btn ghost sm" data-act="save">${i.saved ? '✓ Saved' : 'Save'}</button>
       <button class="btn ghost sm" data-act="read">${i.is_read ? 'Read ✓' : 'Mark read'}</button>
-      <a class="btn ghost sm" href="${esc(i.url)}" target="_blank" rel="noopener">Open ↗</a>
+      ${href ? `<a class="btn ghost sm" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ''}
     </div>
   </div>`;
 }
@@ -317,7 +334,7 @@ async function searchModel() {
        <div class="id">${esc(p.platform||'?')} / ${esc(p.chipset||'?')} / ${esc(p.storage||'?')}</div></div>`).join('')
       : '<p class="muted small">Is model ka koi scanned package nahi.</p>';
     const news = (r.live && r.live.items || []).map(i =>
-      `<div class="mn"><div class="mt"><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a></div>
+      `<div class="mn"><div class="mt">${linkHtml(i.url, i.title)}</div>
        <div class="mk">${esc(i.khulasa)}</div></div>`).join('') || '<p class="muted small">Koi live khabar nahi mili.</p>';
     out.innerHTML = `
       <div class="two-col">
@@ -358,7 +375,7 @@ async function searchModel() {
 function officialRoutesHtml(routes) {
   return (routes || []).map(r => `<div class="route"><div class="rt">${esc(r.issue)}</div>
     <ol>${(r.steps||[]).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
-    <div class="rl">${(r.links||[]).map(([t,u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)} ↗</a>`).join('')}</div>
+    <div class="rl">${(r.links||[]).map(([t,u]) => linkHtml(u, t + ' ↗')).join('')}</div>
     <div class="rn">${esc(r.note||'')}</div></div>`).join('');
 }
 
@@ -384,12 +401,167 @@ async function loadJobs() {
   } catch (e) { box.innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`; }
 }
 
+/* ------------------------------------------------------------------ sahulat */
+async function loadSahulat() {
+  if (!state.sahLoaded) {
+    try {
+      state.sahulat = await api('/api/sahulat/overview');
+      state.sahLoaded = true;
+      renderSahulat();
+    } catch (e) {
+      $('#sahRoutes').innerHTML = `<div class="issue error"><div class="it">Sahulat data load nahi hua</div><div class="id">${esc(e.message)}</div></div>`;
+      return;
+    }
+  }
+  loadSahCases();
+}
+
+function renderSahulat() {
+  const o = state.sahulat; if (!o) return;
+  $('#sahPolicyTitle').textContent = o.policy.name;
+  $('#sahPolicyLead').textContent = o.policy.lead;
+  $('#sahRouteCount').textContent = o.routes.length + ' routes';
+  $('#sahConsent').textContent = o.consent_text;
+  $('#sahBrand').innerHTML = o.routes.map(r =>
+    `<option value="${esc(r.id)}">${esc(r.brand)}</option>`).join('');
+  $('#sahChecklist').innerHTML = o.checklist.map(c =>
+    `<label class="sah-check"><input type="checkbox" value="${esc(c.id)}">
+      <span><b>${esc(c.label)}</b>${c.required ? ' <span class="tag amber">zaroori</span>' : ''}
+      <em>${esc(c.hint)}</em></span></label>`).join('');
+  $('#sahRoutes').innerHTML = o.routes.map((r, idx) =>
+    `<details class="sah-route" ${idx === 0 ? 'open' : ''}>
+      <summary><strong>${esc(r.brand)}</strong> — ${esc(r.issue)}</summary>
+      <div class="sr-body">
+        <div class="sr-docs"><b>Required documents:</b><ul>${r.documents.map(d => `<li>${esc(d)}</li>`).join('')}</ul></div>
+        <ol class="sr-steps">${r.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+        <div class="rl">${r.links.length
+          ? r.links.map(([t, u]) => linkHtml(u, t + ' ↗')).join('')
+          : '<span class="muted small">Apne department / operator ka official channel istemal karain.</span>'}</div>
+        <div class="rn">${esc(r.note)}</div>
+        <button class="btn ghost sm" data-pick="${esc(r.id)}">Is route ko form mein chunein</button>
+      </div>
+    </details>`).join('');
+  $$('#sahRoutes [data-pick]').forEach(b => b.onclick = () => {
+    $('#sahBrand').value = b.dataset.pick;
+    const r = o.routes.find(x => x.id === b.dataset.pick);
+    if (r && !$('#sahIssue').value.trim()) $('#sahIssue').value = r.issue;
+    toast('Route form mein select ho gaya');
+  });
+  $('#sahBoundary').innerHTML = `
+    <div class="notice" style="margin-bottom:12px"><div class="notice-icon">i</div>
+      <div><strong>${esc(o.policy.canonical)}</strong></div></div>
+    <h3 class="sah-h3">✓ Hum kya madad karte hain</h3>
+    <ul class="do-list">${o.policy.helps.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <h3 class="sah-h3">✕ Service boundary (barqarar)</h3>
+    <ul class="do-list no">${o.policy.boundary.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <p class="small muted" style="margin-top:10px">${esc(o.policy.why)}</p>`;
+}
+
+function sahFormData() {
+  const o = state.sahulat || { routes: [] };
+  const rid = $('#sahBrand').value;
+  const route = o.routes.find(r => r.id === rid) || {};
+  return {
+    customer: $('#sahCustomer').value, contact: $('#sahContact').value,
+    brand: route.brand || '', model: $('#sahModel').value,
+    device_id: $('#sahDevice').value, issue_type: $('#sahIssue').value,
+    notes: $('#sahNotes').value, route_id: rid, lang: $('#sahLang').value,
+    technician: ($('#setTech') && $('#setTech').value) || '',
+    shop: ($('#setShop') && $('#setShop').value) || '',
+    consent: $('#sahConsentChk').checked,
+    proof: $$('#sahChecklist input:checked').map(i => i.value),
+  };
+}
+function sahMsg(msg, bad = false) {
+  const el = $('#sahFormMsg');
+  el.textContent = msg; el.style.color = bad ? 'var(--red)' : 'var(--muted)';
+}
+function copyText(txt, okMsg) {
+  if (!txt) { toast('Pehle text tayyar karain', true); return; }
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast(okMsg); }
+    catch { toast('Copy nahi hua — text ko select karain', true); }
+    ta.remove();
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(txt).then(() => toast(okMsg)).catch(fallback);
+  } else fallback();
+}
+
+async function sahCheck() {
+  const q = $('#sahCheckQ').value.trim();
+  const out = $('#sahCheckOut');
+  if (!q) { out.innerHTML = '<p class="muted small">Pehle customer ki request likhein.</p>'; return; }
+  out.innerHTML = '<div class="skeleton"></div>';
+  try {
+    const r = await api('/api/sahulat/check?q=' + encodeURIComponent(q));
+    const links = r.official_links.length
+      ? `<div class="rl">${r.official_links.map(([t, u]) => linkHtml(u, t + ' ↗')).join('')}</div>` : '';
+    const docs = r.documents.length
+      ? `<div class="sr-docs"><b>Required documents:</b><ul>${r.documents.map(d => `<li>${esc(d)}</li>`).join('')}</ul></div>` : '';
+    out.innerHTML = `
+      <div class="issue ${r.blocked ? 'warn' : 'info'}">
+        <div class="it">${r.blocked ? 'Boundary request — official raasta diya gaya' : 'Ye kaam app ke andar hai'}</div>
+        <div class="id">${esc(r.reason)}</div></div>
+      ${r.blocked ? `<div class="small muted"><b>Official route:</b> ${esc(r.official_route)}</div>${links}${docs}` : ''}
+      <ol class="sr-steps">${r.safe_next_steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+      ${r.refusal_line ? `<div class="notice" style="margin-top:10px"><div class="notice-icon">i</div><div><p>${esc(r.refusal_line)}</p></div></div>` : ''}
+      <div class="small muted">Policy: ${esc(r.policy)}</div>`;
+  } catch (e) { out.innerHTML = `<div class="issue error"><div class="it">Check fail</div><div class="id">${esc(e.message)}</div></div>`; }
+}
+
+async function sahLetter() {
+  const btn = $('#sahLetterBtn'); busy(btn, true, 'Letter ban raha hai…');
+  try {
+    const r = await post('/api/sahulat/letter', sahFormData());
+    $('#sahLetter').textContent = r.letter;
+    sahMsg('✓ Letter preview tayyar. Abhi case save nahi hua — neeche wala button dabayein.');
+  } catch (e) { sahMsg(e.message, true); toast(e.message, true); }
+  finally { busy(btn, false); }
+}
+
+async function sahSaveCase() {
+  const btn = $('#sahCaseBtn'); busy(btn, true, 'Case save ho raha hai…');
+  try {
+    const r = await post('/api/sahulat/case', sahFormData());
+    if (r.letter) $('#sahLetter').textContent = r.letter;
+    sahMsg(r.letter_error
+      ? '✓ Case save (' + r.case.status + '). Letter ke liye: ' + r.letter_error
+      : '✓ Case ' + r.case.case_no + ' save ho gaya aur letter tayyar hai.', false);
+    toast('Case ' + r.case.case_no + ' save ho gaya');
+    loadSahCases(); refreshCounts();
+  } catch (e) { sahMsg(e.message, true); toast(e.message, true); }
+  finally { busy(btn, false); }
+}
+
+async function loadSahCases() {
+  const box = $('#sahCases'); if (!box) return;
+  try {
+    const r = await api('/api/sahulat/cases');
+    box.innerHTML = r.items.length ? `<table class="job-table"><thead><tr>
+      <th>Date</th><th>Case no</th><th>Customer</th><th>Device</th><th>Route</th><th>Proof</th><th>Status</th></tr></thead><tbody>
+      ${r.items.map(c => `<tr><td>${esc(new Date(c.created_at * 1000).toLocaleString())}</td>
+        <td>${esc(c.case_no)}</td><td>${esc(c.customer)}</td>
+        <td>${esc(c.model || c.brand || '—')}</td><td>${esc(c.route_id || '—')}</td>
+        <td>${c.proof_ok ? '<span class="tag green">complete</span>' : '<span class="tag amber">pending</span>'}</td>
+        <td>${esc(c.status)}</td></tr>`).join('')}</tbody></table>`
+      : '<div class="empty-state">Case register khaali hai. Upar form bhar kar pehla case save karain.</div>';
+  } catch (e) { box.innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`; }
+}
+
 /* ------------------------------------------------------------------ knowledge */
 function renderKnowledge() {
   const k = state.knowledge; if (!k) return;
   const b = k.boundary;
   $('#knowledgeOut').innerHTML = `
-    <div class="card"><div class="card-head"><h2>${esc(b.title)}</h2></div>
+    <div class="card"><div class="card-head"><h2>${esc(b.title)}</h2><span class="tag green">${esc(b.policy_name || 'Service Policy')}</span></div>
+      <div class="notice soft" style="margin-bottom:14px"><div class="notice-icon">✓</div>
+        <div><strong>${esc(b.lead || '')}</strong>
+        <p>${esc(b.canonical || '')}</p></div></div>
+      ${(b.helps || []).length ? `<div class="focus-grid" style="margin-bottom:14px">${b.helps.map(x => `<div class="focus-item"><div class="fd">${esc(x)}</div></div>`).join('')}</div>` : ''}
       <div class="two-col" style="gap:14px">
         <div><h3 style="color:var(--green);margin-bottom:6px">✓ Karta hai</h3>
           <ul class="do-list">${b.does.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
@@ -494,6 +666,15 @@ function bind() {
     } catch (e) { toast(e.message, true); }
   };
   $('#jobReload').onclick = loadJobs;
+
+  $('#sahCheckBtn').onclick = sahCheck;
+  $('#sahCheckQ').addEventListener('keydown', e => { if (e.key === 'Enter') sahCheck(); });
+  $('#sahLetterBtn').onclick = sahLetter;
+  $('#sahCaseBtn').onclick = sahSaveCase;
+  $('#sahReload').onclick = loadSahCases;
+  $('#sahLetterCopy').onclick = () => copyText($('#sahLetter').textContent, 'Letter copy ho gaya');
+  $('#sahConsentCopy').onclick = () => copyText($('#sahConsent').textContent, 'Consent form copy ho gaya');
+
   $('#setSave').onclick = async () => {
     try {
       await post('/api/settings', { technician:$('#setTech').value, shop:$('#setShop').value,
@@ -511,15 +692,16 @@ async function init() {
   bind();
   renderFocus();
   try {
-    const [status, sources, knowledge] = await Promise.all([
-      api('/api/status'), api('/api/sources'), api('/api/knowledge'),
+    const [status, sources, knowledge, sahulat] = await Promise.all([
+      api('/api/status'), api('/api/sources'), api('/api/knowledge'), api('/api/sahulat/overview'),
     ]);
     state.status = status; state.sources = sources.sources;
     state.presets = sources.presets; state.categories = sources.categories;
     state.knowledge = knowledge;
+    state.sahulat = sahulat; state.sahLoaded = true;
     const dbp = (status.db || '').replace(/[\\/]data[\\/]mobilelab\.db$/i, '');
     state.basePath = dbp ? (dbp.endsWith('\\') || dbp.endsWith('/') ? dbp : dbp + '\\') : '';
-    renderStats(); renderPresets(); renderCategories(); renderJobRoutes(); renderKnowledge();
+    renderStats(); renderPresets(); renderCategories(); renderJobRoutes(); renderKnowledge(); renderSahulat();
   } catch (e) { toast('Init fail: ' + e.message, true); }
   nav((location.hash || '').replace('#', '') || 'dashboard', false);
   loadPackages(); loadDashNews(); loadJobs(); loadSettings();

@@ -53,10 +53,10 @@
 
 Mobile-friendly single-column fallback inhi breakpoints se aati hai. Koi dedicated mobile nav nahi — **Assumed (A6)**, P3 mein confirm.
 
-## 4. Views (7)
+## 4. Views (8)
 
-`Dashboard` · `Firmware Packages` · `Research Agent` · `Model Brief` · `Job Register` · `Knowledge / Help` · `Settings`.
-Navigation: hash routing (`location.hash` + `hashchange`), `.nav-item[data-view]`, `.view.active`. `nav()` active class aur title update karta hai.
+`Dashboard` · `Firmware Packages` · `Research Agent` · `Model Brief` · `Job Register` · **`Sahulat / Official Route`** · `Knowledge / Help` · `Settings`.
+Navigation: hash routing (`location.hash` + `hashchange`), `.nav-item[data-view]`, `.view.active`. `nav()` active class aur title update karta hai. 8th view PHASE 1B mein add hua (D21, O9 resolved); sidebar order me ye `Job Register` ke baad hai.
 
 ## 5. Component patterns
 
@@ -121,3 +121,26 @@ Design tokens ka doc-vs-CSS audit · a11y markup fixes · `prefers-reduced-motio
 | J11 legal research | Source allowlist table + `Legal/authorized` warning (BSI) | Unauthorized source `403` + reason; Tor-only URL `not configured` | O5 allowlist approval · O9 placement |
 
 **Design rules:** koi bhi status sirf rang se na bataya jaye; har badge ka text ho. Token, IMEI ya customer data kabhi plain text toast/log mein na ho. Har naya control keyboard accessible, labeled aur `aria-live` status ke sath. Light theme aur existing tokens barqarar; koi external font / CDN nahi.
+
+## 13. PHASE 1B — Sahulat / Official Route view (implemented)
+
+**Placement:** 8th view, `Job Register` ke baad (D21). O9 is se resolve hua; J8–J11 ke proposed integrations abhi P7 par hain.
+
+| Block | Component | Copy / state |
+|---|---|---|
+| Policy header | `.notice.soft` | Pehli line **"Logon ki sahulat pehle"** + `Sahulat & Safe Service Policy` lead. Canonical note `Service boundary` card me: "purana naam HARD POLICY, qaida waisa ka waisa". |
+| Request check | input + button + `#sahCheckOut` | Empty: `Pehle customer ki request likhein.` · Loading: skeleton · Blocked: amber issue (wajah) + official links + documents + 4 safe steps + refusal line · Safe: blue/green issue + app ke andar wale steps. |
+| Official routes | 6 `<details class="sah-route">` | Pehla open; har card me brand, documents `<ul>`, official steps `<ol>`, verified links, note aur "Is route ko form mein chunein". Keyboard accessible `<summary>`. |
+| Checklist | 8 `.sah-check` labels | 4 required par `zaroori` badge; har item ka hint. Koi upload nahi — sirf tick. |
+| Consent | `<pre class="sah-consent">` + copy button | Printable Roman Urdu text, `textContent` se render. |
+| Form | `.form-grid` 2-col | Customer / Contact / Brand / Model / IMEI (hint: sirf aakhri 4 harkat) / Issue / Notes / Language / Consent checkbox. |
+| Actions | 3 buttons | `Sirf letter preview` · `Case save + letter` (primary) · `Letter copy`. Busy state har button par. Error/validation reason `#sahFormMsg` me Roman Urdu, red. |
+| Letter output | `<pre class="sah-letter">` | Empty hint text · Success: plain-text letter. **Kabhi `innerHTML` nahi** — injection ka raasta band. |
+| Case register | `.job-table` | Empty: `Case register khaali hai…` · Columns: date, case no, customer, device, route, proof badge, status. |
+| Service boundary | `.do-list` / `.do-list.no` | ✓ helps list aur ✕ boundary list — dono text ke sath, sirf rang par depend nahi. |
+
+**States / validation:** missing consent ya required proof → `400` with clear reason, letter box purana text retain kare; garbage `limit` → safe default; API down → per-panel error card, baqi app chalte rahe. Success toast + dashboard `Sahulat cases` stat refresh.
+
+**A11y / security (is view):** har checkbox wrapped `<label>`, buttons keyboard reachable, `rel="noopener noreferrer"` + `safe_url()` har link par, badges ka text label maujood. Light theme tokens barqarar; `.sah-grid` 1050px par single-column. P9 ke a11y gaps (aria-current, aria-live, focus-visible) abhi bhi pending hain — inhe PHASE 1B ne band nahi kiya.
+
+**Language split (C19 / D22):** is view ka *content* (letters, refusal reasons, checklist hints, consent, error messages, notices) Roman Urdu rehta hai — ye user ko samjhaane wali information hai. *Surface* (nav label `Sahulat / Official Route`, column headers, technical tokens, CSS/JS identifiers) English hai. Mojooda Roman Urdu button / toast microcopy ko English chrome par migrate karna **O12** (P3/P11) hai; PHASE 1B ne usay intentionally reframe nahi kiya, aur is par koi jhootha "ho gaya" claim nahi.

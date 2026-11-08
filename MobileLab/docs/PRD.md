@@ -1,8 +1,8 @@
 # PRD — MobileLab
 
-**Version:** 1.1.0 (PHASE 1 final draft) · **Date:** 2026-11-08 · **Root:** `J:\Ai Agent`
-**Status:** PHASE 1 documentation complete; `PHASE REVIEW — PHASE 1` aur final gate `phases.md` mein darj hai.
-**Language:** Roman Urdu prose; code, paths, API routes aur technical terms English (C9).
+**Version:** 1.2.0 (PHASE 1B — Sahulat & Safe Service Toolkit) · **Date:** 2026-11-08 · **Root:** `J:\Ai Agent`
+**Status:** PHASE 1 `READY` + PHASE 1B `READY`. Dono ke `PHASE REVIEW` `phases.md` §9 / §10 mein. **PHASE 2 abhi shuru nahi** — user ki ijazat ka intezar hai.
+**Language (C19 / D22):** information, report, plan aur tamam prose = **Roman Urdu**; headings, table headers, code, identifiers, paths, API routes, commit messages, UI labels aur technical terms = **English** (professional surface). C9 refined, khatam nahi.
 
 > **Research honesty:** is file mein sirf wo sources hain jo 2026-11-08 ko directly fetch ya official search result se verify kiye gaye. Har fact ke saath URL aur `date checked` hai. **Facts** aur **Recommendations** alag sections mein hain. Market-size ya reseller ke ghair-tasdeeq numbers PRD mein shamil nahi kiye gaye. Koi citation banawati nahi.
 
@@ -20,7 +20,7 @@ MobileLab aik **bilkul local** Windows workbench hai jo mobile-software technici
 - Paid suites subscription, account activation aur loader/model database par chalte hain; unki asli value coverage aur update speed hai, na ke local explainability.
 - Har model ki latest maloomat kai sites par bikhri hoti hai; zurori information chhaantna aur uska source yaad rakhna mushkil.
 - Account / activation locks server-side ownership controls hain. Local tools ya paid tools un server records ko badal nahi sakte; sirf official route + proof-of-ownership kaam karta hai.
-- Research agent ko "koi bhi mobile-software task" diya jaye to usay **safe plan/report** dena chahiye, lekin HARD POLICY ke andar: koi device write/erase command aur koi lock bypass steps nahi (C14).
+- Research agent ko "koi bhi mobile-software task" diya jaye to usay **safe plan/report** dena chahiye, lekin Sahulat & Safe Service Policy ke andar: koi device write/erase command aur koi lock bypass steps nahi (C14).
 
 ## 3. Target users / personas
 
@@ -37,7 +37,7 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 
 | # | Journey | Aaj / Proposed |
 |---|---|---|
-| J1 | Dashboard kholte hi counts, health aur tez live news | Aaj (7 views) |
+| J1 | Dashboard kholte hi counts, health aur tez live news | Aaj (8 views) |
 | J2 | Folder path → scan → health report + issues → detail → duplicate check → Explorer | Aaj |
 | J3 | Query + filters + sources → live results → Roman Urdu khulasa → article save | Aaj |
 | J4 | Model card + sirf official routes | Aaj |
@@ -46,10 +46,16 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 | J7 | Sources, optional LLM endpoint/key/model, scan behavior | Aaj |
 | J8 | Research result par URL + `date checked` + fact/recommendation label + local evidence hash | Proposed (P7) |
 | J9 | Telegram bot ko command bhejo → local agent result / alert wapas de | Confirmed (C12), proposed P7 |
-| J10 | Koi bhi mobile-software task likho → Roman Urdu safe plan + report → HARD POLICY gate | Confirmed (C14), proposed P7 |
+| J10 | Koi bhi mobile-software task likho → Roman Urdu safe plan + report → Sahulat & Safe Service Policy gate | Confirmed (C14), proposed P7 |
 | J11 | Legal/authorized deep/dark web source → policy gate → provenance ke sath khulasa | Confirmed (C13), proposed P7 |
+| J12 | Customer request likho → app wajah + official link + agla jaez qadam de (sirf "nahi" nahi) | Aaj (PHASE 1B) |
+| J13 | Brand chuno → required documents + official steps + verified links | Aaj (PHASE 1B) |
+| J14 | Checklist + consent → Roman Urdu / English service-request letter | Aaj (PHASE 1B) |
+| J15 | Case / asset register save → audit trail (sarkari / department devices ke liye bhi) | Aaj (PHASE 1B) |
 
-> **P3 decision pending:** J8–J11 ke liye naya 8th view ya existing views mein panels — ye `design.md` aur Open question O9 mein hai. P1 code nahi badalta.
+> **O9 resolved (PHASE 1B):** 8th view `Sahulat / Official Route` ban gaya (`decisions.md` D21). J8–J11 ke proposed integrations abhi apne P7 gate par hain — in ka code PHASE 1B mein nahi likha gaya.
+
+> **PHASE 1B research honesty:** is sub-phase mein **koi naya web browse nahi** hua. Official links pehle se `knowledge.py` aur P1 source register S1–S16 mein verified hain (`date checked = 2026-11-08`). Koi naya citation ya claim add nahi kiya gaya.
 
 ## 5. Research — CURRENT LANDSCAPE (facts)
 
@@ -115,7 +121,7 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 - A5: LLM/agent se hallucination, prompt injection, SSRF aur secret leakage ka risk rahega; is liye source provenance aur policy gate chahiye.
 
 **Recommendations (Decision, fact nahi):**
-- MobileLab ko **bypass / device-write race** mein nahi jana; HARD POLICY kabhi na todein.
+- MobileLab ko **bypass / device-write race** mein nahi jana; Sahulat & Safe Service Policy kabhi na todein.
 - Differentiation: pre-flash validation, explainable checks, hash/provenance, Roman Urdu, local-only, official-route job records, Telegram alerts, safe task plan/report.
 - Stdlib-only rakhein; Telegram ke liye `urllib.request` + Bot API, koi MTProto/TDLib/Telethon dependency nahi.
 - Har research item mein `source_url`, `date_checked`, `fact_or_recommendation`, `confidence` aur local `sha256` evidence ho.
@@ -124,14 +130,14 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 
 ## 7. Classification
 
-**Confirmed:** C1–C10 `decisions.md` mein · C11 local runtime + internet sirf agent/firmware · C12 Telegram Bot command/alert · C13 legal/authorized deep/dark web only · C14 any mobile task → safe plan/report under HARD POLICY · C15 step-by-step phases, kuch incomplete na chhorhein · C16 har fact ke saath URL + `date checked`, facts vs recommendations alag.
+**Confirmed:** C1–C19 `decisions.md` mein · C11 local runtime + internet sirf agent/firmware · C12 Telegram Bot command/alert · C13 legal/authorized deep/dark web only · C14 any mobile task → safe plan/report under Sahulat & Safe Service Policy · C15 step-by-step phases, kuch incomplete na chhorhein · C16 har fact ke saath URL + `date checked`, facts vs recommendations alag · **C17** `HARD POLICY` ka naam / andaaz badal kar `Sahulat & Safe Service Policy` — **qaida waisa ka waisa**, koi chhoot nahi (D19) · **C18** Sahulat toolkit (8th view, checklist, consent, letters, case register, refusal-with-reason) scope mein; PHASE 1B ne ye deliver kiya · **C19** language split (D22): content Roman Urdu, surface English; C9 refined.
 
-**Assumptions:** P1 A1 docs Roman Urdu + English headings · A2 verbatim block P0 se · A3 tests production DB/live internet na chhuyein · A4 `.gitignore` secrets/DB/logs ignore · A5 neutral local git identity · A6 responsive single-column fallback · A7 migration strategy P6 · A8 Bot API `getUpdates` pehle, webhook baad mein agar user maange · A9 research sources user-editable allowlist se, arbitrary URL nahi.
+**Assumptions:** P1 A1 docs Roman Urdu + English headings · A2 verbatim block P0 se · A3 tests production DB/live internet na chhuyein · A4 `.gitignore` secrets/DB/logs ignore · A5 neutral local git identity · A6 responsive single-column fallback · A7 migration strategy P6 · A8 Bot API `getUpdates` pehle, webhook baad mein agar user maange · A9 research sources user-editable allowlist se, arbitrary URL nahi · A10 task plan pehle rule-based · A11 sarkari mulazim hona koi technical/legal exception paida nahi karta; sirf documentation tooling (D19).
 
 **Open questions (critical implementation se pehle, P1 ko nahi rokte):**
-- O1 skills/MCP shortlist · O2 `llm_key` / bot token at-rest encryption · O3 log retention · O4 Telegram token storage/rotation aur rate-limit policy · O5 legal deep/dark web source allowlist kaun approve kare · O6 task plan rule-based vs optional LLM rewrite · O7 public channel history chahiye to Bot API se bahar ka legal/technical faisla · O8 firmware provenance hash policy · O9 J8–J11 ke liye naya view ya existing panels · O10 optional LLM endpoint aur Telegram endpoint ke liye common SSRF allowlist.
+- O1 skills/MCP shortlist · O2 `llm_key` / bot token at-rest encryption · O3 log retention · O4 Telegram token storage/rotation aur rate-limit policy · O5 legal deep/dark web source allowlist kaun approve kare · O6 task plan rule-based vs optional LLM rewrite · O7 public channel history chahiye to Bot API se bahar ka legal/technical faisla · O8 firmware provenance hash policy · ~~O9 naya view ya existing panels~~ **resolved (D21: 8th view)** · O10 optional LLM endpoint aur Telegram endpoint ke liye common SSRF allowlist · O11 case register retention / export / deletion policy (P11) · O12 in-app Roman Urdu chrome ko English surface par migrate karne ka phase (P3/P11) — content strings Roman Urdu rehte hain (D22).
 
-**Risks:** R1 verbatim drift (mitigated) · R2 banawati citations (P1 source register se mitigated; P2 final) · R3 security fixes workflow tod dein · R4 doc drift · R5 default scan restriction · R6 Telegram token leak / 24h update loss · R7 illegal research source / malware · R8 task planner HARD POLICY se bahar step de de · R9 competitor claims outdated ho jayein · R10 AI hallucination ko fact mana jaye.
+**Risks:** R1 verbatim drift (mitigated) · R2 banawati citations (P1 source register se mitigated; P2 final) · R3 security fixes workflow tod dein · R4 doc drift · R5 default scan restriction · R6 Telegram token leak / 24h update loss · R7 illegal research source / malware · R8 task planner Sahulat & Safe Service Policy se bahar step de de · R9 competitor claims outdated ho jayein · R10 AI hallucination ko fact mana jaye · **R11** policy ke naam badalne ko "boundary hata di" samajhna → D19 canonical note + tests se mitigated · **R12** C19 language split ko C9 ki mansookhi samajhna → D22 ne "content vs surface" clear kiya.
 
 ## 8. Functional requirements
 
@@ -139,7 +145,7 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 |---|---|---|---|
 | FR-01 | MTK `scatter` parse + `preloader` / chipset / storage / DA / partition checks | Aaj | `firmware.py` |
 | FR-02 | Qualcomm Firehose, `rawprogram*.xml`, `patch*.xml`, GPT, LUN, sector overlap, image-size checks | Aaj | `firmware.py` |
-| FR-03 | `SENSITIVE_PARTITIONS` sirf flag, kabhi write/erase nahi | Aaj / HARD POLICY | `firmware.py` |
+| FR-03 | `SENSITIVE_PARTITIONS` sirf flag, kabhi write/erase nahi | Aaj / Sahulat & Safe Service Policy | `firmware.py` |
 | FR-04 | Package health score + issues + checks | Aaj | `firmware.py:validate()` |
 | FR-05 | Package catalog, file fingerprint, duplicate detection, delete | Aaj | `db.py`, `server.py` |
 | FR-06 | Live research: RSS/Atom, Google News, HN Algolia, GitHub Releases + filters | Aaj | `research.py` |
@@ -147,23 +153,29 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 | FR-08 | Saved articles, model cards, job register, settings | Aaj | `db.py`, `server.py` |
 | FR-09 | Static knowledge base: boundaries, official routes, glossary | Aaj | `knowledge.py` |
 | FR-10 | `/api/reveal` se scanned folder Explorer mein kholna | Aaj | `server.py` |
-| FR-11 | 7-view light-theme UI, hash routing, loading/empty/error/success states | Aaj | `web/*` |
+| FR-11 | 8-view light-theme UI, hash routing, loading/empty/error/success states | Aaj | `web/*` |
 | FR-12 | One-click launcher | Aaj | `run.bat` |
 | FR-13 | Internet research with provenance: URL, `date checked`, fact/recommendation label, source diagnostics | Proposed | C16 / S1–S16 / P7 |
 | FR-14 | Telegram Bot API: user-supplied token, command intake, local result/alert, no historical channel scrape | Confirmed / Proposed | C12 / S9 / P7 |
 | FR-15 | Legal/authorized deep/dark web research gate; illegal sources reject; no download execution | Confirmed / Proposed | C13 / S10 / P7 |
-| FR-16 | Any mobile-software task → Roman Urdu safe plan + report; HARD POLICY gate; no device write/erase | Confirmed / Proposed | C14 / P7 |
+| FR-16 | Any mobile-software task → Roman Urdu safe plan + report; Sahulat & Safe Service Policy gate; no device write/erase | Confirmed / Proposed | C14 / P7 |
 | FR-17 | Official-route + proof-of-ownership job workflow | Aaj / Expand | S13, S14 / P6 |
 | FR-18 | Local evidence log: `sha256`, timestamp, source type, saved article link | Proposed | C16 / P7 |
 | FR-19 | Offline-first core: app local; internet sirf research/firmware/Telegram; graceful degradation | Confirmed | C11 / P7 |
 | FR-20 | Security/QA gates: 13 QA findings, stdlib `unittest`, 12 phase reviews | Aaj docs / Pending code | `phases.md` |
+| FR-21 | `sahulat.py`: 6 brand-wise official routes + required documents + verified links | Aaj (PHASE 1B) | `sahulat.py` |
+| FR-22 | Proof-of-ownership checklist (8 items, 4 required) + customer consent text | Aaj (PHASE 1B) | `sahulat.py`, `web/*` |
+| FR-23 | Service-request letter generator — Roman Urdu + English, consent + required-proof gate | Aaj (PHASE 1B) | `sahulat.py`, `POST /api/sahulat/letter` |
+| FR-24 | Case / asset register (`cases` table) with case_no, consent, proof flags, status audit trail | Aaj (PHASE 1B) | `db.py`, `POST /api/sahulat/case`, `GET /api/sahulat/cases` |
+| FR-25 | Request check → **wajah + official link + safe next step** (sirf "nahi" nahi); koi bypass step output nahi | Aaj (PHASE 1B) | `sahulat.check_request()`, `GET /api/sahulat/check` |
+| FR-26 | `safe_url()` http/https allowlist for all rendered links (QA #4 partial fix) | Aaj (PHASE 1B) | `web/app.js` |
 
 ## 9. Non-functional requirements
 
 - **Local-only runtime:** `127.0.0.1:8765`, `ThreadingHTTPServer`, koi cloud deploy / telemetry / remote nahi (C11).
 - **Internet boundary:** sirf research agent, firmware/provenance information aur Telegram Bot API; arbitrary outbound URL default `OFF`.
 - **Zero dependency:** sirf Python standard library; koi `pip install` nahi. Telegram ke liye bhi stdlib `urllib.request`.
-- **Storage:** SQLite WAL, `foreign_keys=ON`, 6 tables aaj; evidence/provenance tables P7 ADR.
+- **Storage:** SQLite WAL, `foreign_keys=ON`, 7 tables aaj (`cases` PHASE 1B mein additive); evidence/provenance tables P7 ADR.
 - **Zaban:** Roman Urdu prose; code / paths / API terms English (C9).
 - **Jagah:** har project file `J:\Ai Agent` mein (C10).
 - **Limits:** `MAX_FILES=4000`, `MAX_DEPTH=6`, feed `TIMEOUT=10`, pool 8–16, `limit` 5–200; Telegram `getUpdates.limit` 1–100.
@@ -174,11 +186,13 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 
 ## 10. Must-have / Nice-to-have / Out-of-scope
 
-**Must-have:** FR-01…FR-20, HARD POLICY, official-route KB, C11–C16, 12 phase gates, source register, full acceptance criteria.
+**Must-have:** FR-01…FR-26, Sahulat & Safe Service Policy, official-route KB, C11–C18, 12 phase gates, source register, full acceptance criteria, Sahulat toolkit.
 
 **Nice-to-have (P7+):** optional LLM rewrite, Telegram webhook, export/report share, offline cache tuning, model-coverage matrix UI, research confidence score.
 
-**Out-of-scope — HARD POLICY:**
+**Out-of-scope — Sahulat & Safe Service Policy:**
+> **Canonical note (D19 / C17):** purana internal naam `HARD POLICY` tha. PHASE 1B mein **sirf naam aur andaaz** badla gaya hai — pehli line ab "hum kya madad karte hain" hai. Neeche wali **har qaida bilkul barqarar** hai; koi chhoot, role-based exception ya "research / test / hypothetical" exception nahi. User ne khud ye option manzoor kiya (`bypass wali line waisi hi rehti hai`).
+
 - Huawei ID, Google FRP, Samsung Account / Knox Guard, MDM, carrier lock, iCloud Activation Lock ka **koi bypass automation ya step-by-step tareeqa**.
 - Koi script / command jo `frp`, `persistent`, `config`, `devinfo`, `modemst1/2`, `nvram`, `nvdata`, `nvcfg`, `seccfg`, `proinfo`, `metadata` jaise identity / ownership / anti-theft partitions ko erase ya write kare.
 - Device flashing, bootloader unlock/relock, IMEI repair, screen-lock removal, firmware patching ya low-level read/write automation.
@@ -197,6 +211,9 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 - **US-08** — Technician ke tor par main koi bhi mobile-software task likh kar safe Roman Urdu plan/report lena chahta hoon.
 - **US-09** — Reviewer ke tor par main dekhna chahta hoon ke koi bhi dark/deep web source legal aur authorized allowlist se bahar na jaye.
 - **US-10** — QA ke tor par main chahta hoon ke har feature ka acceptance criteria aur passing regression test ho.
+- **US-11** — Technician ke tor par main customer ki request check karna chahta hoon taake bypass wale case mein **wajah + official link + agla jaez qadam** mil jaye, sirf "nahi" nahi.
+- **US-12** — Technician ke tor par main proof-of-ownership checklist aur consent ke baad Roman Urdu / English service-request letter tayyar karna chahta hoon.
+- **US-13** — Sarkari / department device ke liye main asset register aur authorization documentation ka local audit trail rakhna chahta hoon.
 
 ## 12. Acceptance criteria
 
@@ -261,16 +278,16 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 - Loading: form busy + list skeleton.
 - Success: toast + refresh.
 - A11y: labels, error text associated, keyboard forms.
-- Security: `POST /api/settings` kabhi plaintext `llm_key` return na kare; no secret in logs; HARD POLICY KB read-only.
+- Security: `POST /api/settings` kabhi plaintext `llm_key` return na kare; no secret in logs; Sahulat & Safe Service Policy KB read-only.
 - Performance: indexes on `articles.fetched_at`, `package_files.fingerprint`.
 - Tests: `test_settings_no_secret_leak`, `test_article_action_allowlist`, `test_model_upsert`, `test_job_validation_failure`, `test_list_packages_empty_db`.
 - DoD: regression green + docs match.
 
-### AC-05 — 7-view UI + launcher (F-05: FR-11, FR-12)
+### AC-05 — 8-view UI + launcher (F-05: FR-11, FR-12)
 - Feature: `web/*`, `run.bat`.
-- User story: US-01…US-05.
+- User story: US-01…US-05, US-11…US-13.
 - Preconditions: Python 3.10+ on PATH; `run.bat` from `J:\Ai Agent\MobileLab`.
-- Expected: 7 views, hash routing, responsive single-column fallback, app `127.0.0.1:8765`.
+- Expected: 8 views (8th = `Sahulat / Official Route`, PHASE 1B), hash routing, responsive single-column fallback, app `127.0.0.1:8765`.
 - Validation: Python version guard P4; static allowlist; `node --check web/app.js`.
 - Error cases: missing Python → clear message; missing asset `404`; API down → error state.
 - Empty / Loading / Success: har view par documented states.
@@ -278,7 +295,7 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 - Security: CSP, `X-Frame-Options`, `Referrer-Policy`, `nosniff`, `no-store`, body cap `413`.
 - Performance: no CDN/external font; light theme; `prefers-reduced-motion`.
 - Tests: `test_a11y_markup`, `test_security_headers_present`, `test_body_size_cap_413`, `test_unknown_api_returns_404`.
-- DoD: `run.bat` smoke + 7-view screenshot/manual check.
+- DoD: `run.bat` smoke + 8-view screenshot/manual check.
 
 ### AC-06 — Research provenance / evidence log (F-06: FR-13, FR-18)
 - Feature: source register in PRD + proposed local evidence records in P7.
@@ -329,15 +346,15 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 - DoD: policy tests green + BSI boundary doc review.
 
 ### AC-09 — Any mobile-software task → safe plan/report (F-09: FR-16)
-- Feature: task intake, HARD POLICY classifier, Roman Urdu plan/report renderer.
+- Feature: task intake, Sahulat & Safe Service Policy classifier, Roman Urdu plan/report renderer.
 - User story: US-08.
 - Preconditions: user ne task text diya; optional model/firmware context.
 - Expected: task summary, known facts with sources, assumptions, open questions, risks, safe next steps, official-route pointer; **koi device write/erase ya bypass step nahi**.
-- Validation: input length cap; HARD POLICY keyword + semantic gate; every fact sourced; recommendations labeled; Roman Urdu output.
+- Validation: input length cap; Sahulat & Safe Service Policy keyword + semantic gate; every fact sourced; recommendations labeled; Roman Urdu output.
 - Error cases: prohibited request → refusal + official route; missing context → open questions; LLM failure → rule-based plan; source unavailable → `unverified`.
 - Empty: `Task likhein; abhi koi plan nahi.`
 - Loading: `Plan bana rahe hain...`.
-- Success: copyable plan + evidence list + `HARD POLICY: safe` badge.
+- Success: copyable plan + evidence list + `Sahulat & Safe Service Policy: safe` badge.
 - A11y: headings, copy button keyboard, status text.
 - Security: no command execution from plan; no credential request; no SSRF; no private data in logs.
 - Performance: rule-based plan under bounded time; optional LLM timeout.
@@ -350,7 +367,7 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 - Preconditions: model/IMEI/customer fields; proof-of-ownership checkbox.
 - Expected: job record, official route note, no bypass instruction; Apple / Samsung / carrier / manufacturer route pointer.
 - Validation: proof flag required for lock-related job; `route` enum official only; no free-text bypass steps stored.
-- Error cases: missing proof → validation; unknown model → open question; banned route → `403` + HARD POLICY.
+- Error cases: missing proof → validation; unknown model → open question; banned route → `403` + Sahulat & Safe Service Policy.
 - Empty: `Koi job nahi; naya record banayein.`
 - Loading: form busy + table skeleton.
 - Success: toast + record + official route summary.
@@ -376,22 +393,120 @@ Har phase ka gate, acceptance criteria, regression test aur source register dekh
 - Tests: poora `tests\*` suite + `py_compile` + `node --check` + `run.bat` smoke.
 - DoD: P11 final audit clean, no incomplete phase item.
 
+### AC-12 — Sahulat overview / official routes (F-12: FR-21)
+- Feature: `GET /api/sahulat/overview` → policy, 6 routes, 8 checklist items, consent text, letter languages; 8th view renders them.
+- User story: US-11, US-13.
+- Preconditions: `sahulat.py` importable; no network needed.
+- Expected: har route ke saath brand, issue, `documents[]`, official `steps[]`, `links[]` aur note; pehli line policy ki "hum kya madad karte hain" ho.
+- Validation: har link `https://` ho; `steps` mein koi bypass / exploit / erase keyword na ho; route id unique.
+- Error cases: overview fetch fail → Roman Urdu error card, baqi app chalte rahe.
+- Empty: routes na hon to `Koi route maujood nahi` — aaj 6 hain.
+- Loading: `#sahRoutes` skeleton.
+- Success: 6 `<details>` cards, pehla open, "Form mein chunein" button route select kare.
+- A11y: `<summary>` keyboard accessible; links `rel="noopener noreferrer"`.
+- Security: `safe_url()` se har href `http/https` allowlist se guzare; `esc()` text encoding.
+- Performance: static data, koi network call, max-height scroll.
+- Tests: `test_routes_have_https_links`, `test_routes_no_bypass_steps`, `test_overview_shape`.
+- DoD: 6/6 routes render + canonical note visible.
+
+### AC-13 — Request check → wajah + official link (F-12: FR-25)
+- Feature: `GET /api/sahulat/check` / `POST /api/sahulat/check` + `sahulat.check_request()`.
+- User story: US-11.
+- Preconditions: UI query field 500 chars; server classification window `MAX_QUERY_CHARS = 4000` (hard-bounded) taake padding ke baad likha banned phrase cut off ho kar classification se bach na jaye.
+- Expected: banned pattern par `blocked=true`, `reason`, `official_route`, `official_links[]`, `documents[]`, `safe_next_steps[]`, `refusal_line`; safe query par `blocked=false` + app ke andar wale steps.
+- Validation: koi bhi returned field mein bypass step, partition write/erase command ya exploit instruction na ho.
+- Error cases: khali query → UI hint; server error → Roman Urdu error card.
+- Empty: `Pehle customer ki request likhein.`
+- Loading: skeleton.
+- Success: wajah + official links + 4 safe steps + policy id.
+- A11y: error/notice text readable, contrast maintained.
+- Security: regex-only classification, koi outbound call nahi; output `esc()`.
+- Performance: O(patterns) per request, no I/O.
+- Tests: `test_check_blocks_frp`, `test_check_blocks_huawei_id`, `test_check_blocks_icloud`, `test_check_allows_firmware`, `test_check_output_has_no_bypass_steps`, `test_check_all_blocked_have_official_links`, `test_check_generic_no_fake_brand`, `test_check_query_cap`.
+- DoD: banned requests par `0` bypass steps + `100%` official link present.
+
+### AC-14 — Checklist + consent (F-12: FR-22)
+- Feature: 8-item checklist (4 required) aur copy-able Roman Urdu consent form.
+- User story: US-12.
+- Preconditions: overview load ho chuka ho.
+- Expected: required items `zaroori` badge ke sath; consent text printable; copy button.
+- Validation: unknown proof ids server par drop; required set `invoice, owner_id, consent, device_id`.
+- Error cases: consent unchecked → letter/case `400` with clear Roman Urdu reason.
+- Empty: checklist load fail → error state.
+- Loading: skeleton via overview.
+- Success: selected ids form payload mein jayein.
+- A11y: `<label>` wrapped checkbox, keyboard reachable.
+- Security: koi document upload nahi — sirf tick + local text.
+- Performance: 8 DOM nodes.
+- Tests: `test_validate_case_unknown_proof_dropped`, `test_validate_case_requires_consent`.
+- DoD: 4/4 required items enforced.
+
+### AC-15 — Service-request letter (F-12: FR-23)
+- Feature: `POST /api/sahulat/letter` → Roman Urdu ya English letter text.
+- User story: US-12.
+- Preconditions: customer, model/brand, consent, tamam required proof items.
+- Expected: date, case no (draft), technician/shop, brand, model, device id, issue, required documents list, **explicit official-route-only wording**, customer/contact/notes, signature block.
+- Validation: `lang ∈ {roman, english}`; field caps; letter mein koi bypass step na ho.
+- Error cases: missing consent / missing proof / bad lang → `400` JSON with specific reason (kabhi `500` nahi).
+- Empty: letter box mein Roman Urdu hint text.
+- Loading: button busy state.
+- Success: `<pre>` mein letter + copy button.
+- A11y: `<pre>` readable, button label clear.
+- Security: plain text only (`textContent`), `esc()` nahi chahiye kyunke innerHTML nahi; koi HTML injection.
+- Performance: string build < 2 ms.
+- Tests: `test_letter_roman_shape`, `test_letter_english_shape`, `test_letter_rejects_bad_lang`, `test_letter_no_bypass_wording`, `test_letter_requires_proof`, `test_letter_requires_consent`.
+- DoD: dono languages + 4 validation errors green.
+
+### AC-16 — Case / asset register (F-12: FR-24)
+- Feature: `cases` table + `POST /api/sahulat/case` + `GET /api/sahulat/cases` + 8th view table.
+- User story: US-13.
+- Preconditions: `db.init()` ne additive table bana di ho (purani DB bhi kaam kare).
+- Expected: unique `case_no`, customer/model/brand/route/proof flags/consent/status (`ready` ya `draft`), timestamp, aur same data se letter.
+- Validation: `customer` + (`model`|`brand`) + `consent` zaroori; `limit` 1–500 clamp; garbage `limit` → `200` (koi `500` nahi).
+- Error cases: missing fields → `400`; proof incomplete → case `draft` + `letter_error` with reason.
+- Empty: `Case register khaali hai…`
+- Loading: table skeleton / reload button.
+- Success: toast + `Sahulat cases` stat increment + table row.
+- A11y: table headers, keyboard reload.
+- Security: parameterized SQL, local DB only, `.gitignore` data ignore, koi credential / full IMEI zaroori nahi.
+- Performance: `idx_cases_created`, `LIMIT` clamp.
+- Tests: `test_add_case_temp_db`, `test_list_cases_bad_limit`, `test_case_no_unique_constraint`, `test_existing_db_autocreates_cases`, `test_letter_endpoint_ok_and_400`, `test_case_endpoint_draft_with_letter_error`, `test_case_endpoint_ready_and_list`.
+- DoD: purani DB par bhi table auto-create + 1 case round-trip.
+
+### AC-17 — Policy reframe, boundary barqarar (F-12: C17 / D19)
+- Feature: docs + app + `knowledge.py` mein `Sahulat & Safe Service Policy` naam/andaaz; canonical note.
+- User story: US-10, US-11.
+- Preconditions: `agent.md` verbatim block untouched.
+- Expected: 9 docs + `agent.md` addendum consistent; pehli line helps-first; out-of-scope list **unchanged**.
+- Validation: `agent.md` verbatim prefix SHA-256 `1de535…0840` MATCH; `HARD POLICY` in verbatim `False`; boundary keywords har doc mein maujood.
+- Error cases: koi bhi doc mein "policy hata di" wala jhootha claim → review `NOT READY`.
+- Empty: N/A.
+- Loading: N/A (static docs).
+- Success: `PHASE REVIEW — PHASE 1B — READY`.
+- A11y: notice text contrast ok.
+- Security: koi naya attack surface; naye endpoints read-only ya local validated writes.
+- Performance: static text.
+- Tests: `test_policy_boundary_unchanged`, `test_verbatim_hash`, `test_docs_count_9`.
+- DoD: canonical note + boundary list + hash evidence `phases.md` §10 mein darj.
+
 ## 13. Edge cases
 
-Khali folder · 4000+ files · depth > 6 · symlink / junction / UNC / remote path · mixed UFS+eMMC loaders · single-LUN UFS · missing image · sector overlap · image > partition · ghalat/tukda XML · feed 404 / timeout · ghalat query param · duplicate GUID · `llm_key="***"` round-trip · LLM failure · `os.startfile` non-Windows · Telegram token missing/invalid · webhook already set · 24h update expiry · `channel_post` ko history samajhna · unknown bot command · offline queue · illegal deep/dark URL · Tor-only URL without approved adapter · malicious download · task plan me prohibited request · source URL missing · recommendation ko fact likhna · hash mismatch · competitor page language/region change · PRD source outdated.
+Khali folder · 4000+ files · depth > 6 · symlink / junction / UNC / remote path · mixed UFS+eMMC loaders · single-LUN UFS · missing image · sector overlap · image > partition · ghalat/tukda XML · feed 404 / timeout · ghalat query param · duplicate GUID · `llm_key="***"` round-trip · LLM failure · `os.startfile` non-Windows · Telegram token missing/invalid · webhook already set · 24h update expiry · `channel_post` ko history samajhna · unknown bot command · offline queue · illegal deep/dark URL · Tor-only URL without approved adapter · malicious download · task plan me prohibited request · source URL missing · recommendation ko fact likhna · hash mismatch · competitor page language/region change · PRD source outdated · Sahulat request mein mixed Roman Urdu + English keywords · khali / 500+ chars UI request / `MAX_QUERY_CHARS = 4000` se lambi request (bounded classification window, tail truncation se evasion na ho) · `javascript:` / `data:` link in any rendered URL · unknown `lang` / `route_id` / `proof` id · garbage `limit` param · consent unchecked · required proof adhoora · duplicate `case_no` · purani DB mein `cases` table na ho · policy ke naye naam ko boundary hataana samajhna (R11).
 
 ## 14. Success metrics
 
 - S1–S16 ke 100% facts ka URL + `date checked = 2026-11-08` maujood; facts aur recommendations 100% alag.
-- HARD POLICY violations: `0` — koi bypass step, write/erase command ya illegal source PRD/docs/code mein nahi.
+- Sahulat & Safe Service Policy violations: `0` — koi bypass step, write/erase command ya illegal source PRD/docs/code mein nahi.
 - 12/12 `PHASE REVIEW` gates `READY`; koi phase incomplete nahi (C15).
 - 13/13 QA findings band, har aik ka named passing regression test.
 - `python -m unittest discover -s tests -v` bina internet / production DB green.
-- 7 views + proposed J8–J11 flows load hon; `run.bat` se app chal jaye.
+- 8 views + proposed J8–J11 flows load hon; `run.bat` se app chal jaye.
+- PHASE 1B: 6 official routes, 8 checklist items, 2 letter languages, `cases` table aur 6 naye AC blocks `READY`.
+- Policy reframe ke baad bhi boundary violations `0`; canonical note har jagah maujood (R11).
 - Telegram token kabhi plaintext API response, log ya doc mein na ho.
 - Core scan/catalog/KB/settings offline bhi kaam karein; research/Telegram offline par safe degrade.
 - Docs ↔ code audit clean (P11); sab project files `J:\Ai Agent` mein (C10).
 
 ## 15. Open items / next gate
 
-O1–O10 upar `decisions.md` mein. **PHASE 2** ka kaam: in sources ko technology-selection table se jorna, adapter boundaries finalize karna, aur `architecture.md` ko verified citations ke sath final karna. P1 ka code koi change nahi karta.
+O1–O8, O10, O11, O12 upar `decisions.md` mein; **O9 resolved** (D21). **C19 / D22** ab language ka pakka qaida hai: information / report / plan aur user communication Roman Urdu, professional surface English. **PHASE 2** ka kaam: S1–S16 ko technology-selection table se jorna, adapter boundaries finalize karna, aur `architecture.md` ko verified citations ke sath final karna. P1 ne koi code nahi badla; **PHASE 1B** ne `sahulat.py`, `db.py`, `server.py`, `web/*` aur docs badle (sirf sahulat features, koi bypass capability nahi). PHASE 2 abhi tak **user ki ijazat ka intezar** kar raha hai.
