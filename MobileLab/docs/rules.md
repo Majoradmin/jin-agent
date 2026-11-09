@@ -171,3 +171,21 @@
 - **No scope creep:** P2 documentation-only. Security fixes P9, integrations P7, full suite P8, `run.bat` guard P4 — P2 unhe fix hone ka jhootha dawa na kare.
 - **Loopback boundary:** `http.server` production ke liye recommended nahi; app sirf `127.0.0.1` par. LAN / Internet exposure ke liye naya ADR + auth + TLS + framework + user ijazat lazmi (D26 / R13).
 - **Adapter contracts:** replacement `architecture.md` §21 ke documented contracts se; P2 khud rewrite nahi karta (D24).
+
+## 18. Security regression rules (P9 / D32)
+
+- **Boundary immutable:** code aur tests dono mein koi bypass capability nahi — na Huawei ID / Google FRP / Samsung Account / Knox Guard / MDM / carrier / iCloud Activation Lock bypass automation ya step-by-step tareeqa, na device write / erase / flash / IMEI operation. App sirf read / validate / plan / record karta hai (Sahulat & Safe Service Policy, D10 / D19 / C17).
+- **Har security fix ka named regression test lazmi:** 13/13 QA findings `phases.md` §6 me closed, har aik ka passing test (`decisions.md` D32). Bina test ke koi "fix ho gaya" claim nahi.
+- **Verified baseline:** four security headers (`Content-Security-Policy`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`) + `Cache-Control: no-store` · `MAX_BODY` 1 MiB → `413` · `_authorize_path` (`realpath` / `commonpath`) · `validate_llm_endpoint` + `research.validate_url` (feed host allowlist) · `firmware._xml_precheck` · `_mask_settings` (`llm_key` `***`) · `app.js` `safe_url()` http/https allowlist · article action allowlist · `server._log` local-only.
+- **Threat + mitigation + regression test + baqi risk:** har naye security change par ye char likhein. At-rest encryption (O2), log retention (O3) aur case retention / export / deletion (O11) abhi **deferred** hain — inhe "resolved" likhna mana hai (D34).
+- Koi stack trace / internal error client ko na jaye; secret kabhi API response, log, toast ya doc mein plaintext na ho. Koi role-based / "research" / "test" / "hypothetical" exception nahi.
+
+## 19. Testing rules (P8 / D33)
+
+- **Sirf stdlib `unittest`**; `pytest` ya browser E2E runner nahi. `tests/` = **8 files / 101 tests** (`_harness.py` + 7 `test_*.py`); `phases.md` §6 ke **32/32** named regression / characterization tests maujood.
+- **Kabhi live internet na touch karein:** har outbound request `unittest.mock` se mocked; network down par offline graceful degradation ka test ho.
+- **Kabhi production DB na touch karein:** fixed throwaway `data/_p8_test.db` (gitignored) istemal; reset **sirf SQL `DELETE FROM`** se — koi file delete / `shutil.rmtree` / `os.remove` nahi (sandbox `SAFE_DELETE_FAIL_CLOSED`). In-process loopback server `_harness.py` se.
+- **Runner:** `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → `Ran 101 tests in 77.621s — OK`, **zero `ResourceWarning`** (`db._session()` har connection close karta hai). Koi task sirf "compile ho gaya" par complete nahi.
+- **Suite ke andar gates:** `agent.md` verbatim prefix SHA-256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH aur **exactly 9 docs** ka count gate (`test_docs_count_exactly_9`).
+- **Central extras:** `python -m py_compile db.py server.py firmware.py research.py sahulat.py knowledge.py tests/*.py` → `PY_COMPILE_OK`; `node --check web/app.js` → `NODE_CHECK_OK`.
+- **Tests aur code dono mein koi bypass capability nahi** — Sahulat & Safe Service Policy kabhi na todein, chahe "test", "research" ya "hypothetical" label ho.

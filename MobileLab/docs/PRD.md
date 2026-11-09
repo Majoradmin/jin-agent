@@ -1,7 +1,7 @@
 # PRD — MobileLab
 
-**Version:** 1.3.0 (PHASE 2 — Architecture / Tech Stack linkage) · **Date:** 2026-11-08 · **Root:** `J:\Ai Agent`
-**Status:** PHASE 1 `READY` + PHASE 1B `READY` + **PHASE 2 `READY`**. Reviews `phases.md` §9 / §10 / §11 mein. **PHASE 3 abhi shuru nahi** — user ki ijazat ka intezar hai.
+**Version:** 1.4.0 (PHASE 3–P11 delivered state) · **Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Root:** `J:\Ai Agent`
+**Status:** PHASE 0 / 1 / 1B / 2 `READY` + **PHASE 3–P11 `READY`** — **project complete** (C23 / D29 auto-continue run). Reviews `phases.md` §8–§20 mein; P5 / P10 N/A gates `D30` / `D31` se justified. N7: naye kaam par phase-by-phase approval wapas lagu hogi. Delivered state §17 mein.
 **Language (C19 / D22):** information, report, plan aur tamam prose = **Roman Urdu**; headings, table headers, code, identifiers, paths, API routes, commit messages, UI labels aur technical terms = **English** (professional surface). C9 refined, khatam nahi.
 
 > **Research honesty:** is file mein sirf wo sources hain jo 2026-11-08 ko directly fetch ya official search result se verify kiye gaye. Har fact ke saath URL aur `date checked` hai. **Facts** aur **Recommendations** alag sections mein hain. P2 ke 12 official technology / security sources `architecture.md` §19 me darj hain; is PRD me unka §16 linkage hai. Market-size ya reseller ke ghair-tasdeeq numbers PRD mein shamil nahi kiye gaye. Koi citation banawati nahi.
@@ -510,11 +510,11 @@ Khali folder · 4000+ files · depth > 6 · symlink / junction / UNC / remote pa
 
 ## 15. Open items / next gate
 
-O1–O8, O10, O11, O12, O13 upar `decisions.md` mein; **O9 resolved** (D21). **C19 / D22** ab language ka pakka qaida hai: information / report / plan aur user communication Roman Urdu, professional surface English. **PHASE 2** mukammal: S1–S16 ko technology-selection table se jora, 12 naye P2 official sources verify kiye, adapter boundaries finalize kiye aur `architecture.md` ko verified citations ke sath final kiya (`READY`, `phases.md` §11). P1 ne koi code nahi badla; **PHASE 1B** ne `sahulat.py`, `db.py`, `server.py`, `web/*` aur docs badle (sirf sahulat features, koi bypass capability nahi). **PHASE 2** bhi documentation-only tha — koi app code, dependency, DB migration ya deployment change nahi. **PHASE 3** ab **user ki ijazat ka intezar** kar raha hai.
+O1–O8, O10, O11, O12, O13 upar `decisions.md` mein; **O9 resolved** (D21). **C19 / D22** ab language ka pakka qaida hai: information / report / plan aur user communication Roman Urdu, professional surface English. **PHASE 2** mukammal: S1–S16 ko technology-selection table se jora, 12 naye P2 official sources verify kiye, adapter boundaries finalize kiye aur `architecture.md` ko verified citations ke sath final kiya (`READY`, `phases.md` §11). P1 ne koi code nahi badla; **PHASE 1B** ne `sahulat.py`, `db.py`, `server.py`, `web/*` aur docs badle (sirf sahulat features, koi bypass capability nahi). **PHASE 2** bhi documentation-only tha — koi app code, dependency, DB migration ya deployment change nahi. **PHASE 3–P11 ab mukammal hain** (`C23 / D29` auto-continue run); project `READY` / complete hai — delivered state §17 mein.
 
 ## 16. PHASE 2 — Architecture linkage (documentation-only)
 
-**Source of truth:** `MobileLab\docs\architecture.md` 2.0.0. Is PRD ka product scope waisa ka waisa hai; P2 ne naya feature ya code nahi add kiya.
+**Source of truth:** `MobileLab\docs\architecture.md` 2.1.0 (P2 ka 2.0.0 tha; P11 final sync se 2.1.0). Is PRD ka product scope waisa ka waisa hai; P2 ne naya feature ya code nahi add kiya.
 
 | PRD area | P2 architecture linkage |
 |---|---|
@@ -528,3 +528,30 @@ O1–O8, O10, O11, O12, O13 upar `decisions.md` mein; **O9 resolved** (D21). **C
 | Acceptance criteria | `architecture.md` §22 AC-P2-01…AC-P2-11; gate evidence `phases.md` §11 |
 
 **P2 confirmed decisions:** C20 verified stdlib stack · C21 adapter boundaries · C22 research provenance. ADRs D23–D28. Naye assumptions A12–A15, open question O13, risks R12–R16. `agent.md` addendum §M me P2 boundary; verbatim prefix untouched. Full project test suite P8 aur 12 baqi QA findings P6/P9 par apne gates ke mutabiq pending hain — P2 ne unhe fix hone ka jhootha dawa nahi kiya.
+**P11 final note:** P8 / P9 ab deliver ho chuke hain — `tests/` 8 files / 101 tests aur 13/13 QA findings closed (`D32` / `D33`); P5 / P10 N/A `D30` / `D31` se justified. Tafseel §17 mein.
+
+---
+
+## 17. PHASE 3–P11 delivered state (2026-11-09)
+
+> **Document-only sync.** Is section mein sirf wo items hain jo central verification ne 2026-11-09 ko asli code / commands se verify kiye. Koi naya citation, URL ya unverified claim add nahi kiya gaya. Product scope, out-of-scope list aur Sahulat & Safe Service Policy **bilkul unchanged** (§10). App `VERSION` `1.1.0` barqarar; koi breaking change / destructive DB migration / deployment change / naya dependency / remote nahi.
+
+| Area | Actually delivered | AC / ADR reference |
+|---|---|---|
+| P3 Design / UX | design tokens audit, responsive breakpoints, states, a11y plan; English UI chrome + `lang="en"`, 8 `role="tabpanel"`, `aria-live`, `:focus-visible`, `prefers-reduced-motion`, zero inline `<script>` | `AC-P3-01…AC-P3-08`, `AC-05`, O12 resolved (`D34`) |
+| P4 Project setup | `run.bat` Python `>=3.10` guard; zero installs | `AC-05`, `AC-11` |
+| P5 Auth / Authorization | `N/A + wajah` — loopback-only, single local user, koi session model | `D30`, `phases.md` §14 |
+| P6 Core features / CRUD | `_parse_num`, `_authorize_path` (`realpath` / `commonpath`), pagination, article action allowlist, `db._session()` connection lifecycle, `_mask_settings` | `AC-02`, `AC-04`, `D32` |
+| P7 Integrations | `research.validate_url` + feed host allowlist, offline graceful degradation, LLM error logging; in-app KB (`glossary 18`, `help 14`, `official_routes 5`, `security_note`, `tool_arch 5`, 5 naye glossary + 4 naye help entries, extended `SECURITY_NOTE`) | `AC-03`, `AC-06`, `AC-11`, `D27` |
+| P8 Testing / QA | stdlib `unittest` — 8 files / 101 tests / 32 named regression-characterization tests; `-W error::ResourceWarning` → zero `ResourceWarning` | `AC-11`, `D33` |
+| P9 Security / Perf / A11y | 13/13 QA findings closed; four security headers + CSP, `MAX_BODY` 1 MiB, `validate_llm_endpoint`, `_xml_precheck`, `safe_url()` http/https allowlist | `AC-11`, `D32` |
+| P10 Deploy / CI-CD | `N/A + wajah` — `run.bat` local-only, empty `git remote` (C7) | `D31`, `phases.md` §19 |
+| P11 Docs / Monitoring | 9 docs final sync, `server._log` local-only logging, 9 `PHASE REVIEW` sections, final `READY` | `AC-17`, `D34` |
+
+**Verified commands / numbers (central, 2026-11-09):**
+- `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → `Ran 101 tests in 77.621s — OK`, zero `ResourceWarning`.
+- `python -m py_compile db.py server.py firmware.py research.py sahulat.py knowledge.py tests/*.py` → `PY_COMPILE_OK`; `node --check web/app.js` → `NODE_CHECK_OK`.
+- `agent.md` verbatim prefix SHA-256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH · size `37314` · `CRLF False`; docs `9/9`; `git diff --check` clean; `git remote -v` empty; `core.autocrlf=false`.
+- Loopback smoke: `/api/status` 200 (`version 1.1.0`, `policy_id SAHULAT-SAFE-SERVICE-v1`, `llm_key` masked `***`), `/api/knowledge` 200, `/index.html` / `/style.css` / `/app.js` 200 with `Content-Security-Policy`.
+
+**Deferred (koi jhootha resolution nahi):** O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 — tafseel `decisions.md` D34. N7 ke mutabiq naye kaam par phase-by-phase approval wapas lagu hogi.

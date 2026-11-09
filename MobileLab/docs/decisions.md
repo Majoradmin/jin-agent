@@ -196,6 +196,77 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **Reason:** `R2` banawati citations aur `R10` hallucination ko fact banana; purane generic `/3/` docs `3.15.2` dikhate the, unhe local runtime behavior ka saboot banana ghalat tha.
 - **Consequences:** `architecture.md` §19.3 / §22, `rules.md` §17, `agent.md` addendum §M me yahi honesty rule; P7/P11 me sources dobara check honge. Koi low-authority price / market-size claim P2 facts me nahi.
 
+### D29 — Blanket auto-continue approval for P3–P11 with subagent delegation (C23)
+- **Date:** 2026-11-08 · **Context:** user ne kaha *"phase 3 kro or agy jtny phases hain unky leeay agent lga do taky km poora ho"*. `phases.md` §3 ka rule hai: `READY` par user ki manzoori maango **"jab tak 'automatically continue' na kaha ho"**.
+- **Options:** har gate par ruk kar naya sawal poochna · sirf P3 kar ke rukna · P3–P11 ko aik hi approved run me subagents se poora karna.
+- **Decision:** **teesra raasta**. P3–P11 sab pre-approved hain; per-phase rukne wali manzoori is run ke liye muattal hai. Har phase ka `TASK / IMPLEMENTATION / VERIFICATION / RESULT` aur `PHASE REVIEW` **phir bhi zaroori** hai. Kaam non-overlapping file ownership ke sath subagents ko delegate hoga; verification, doc sync, `PHASE REVIEW` aur commits centrally honge.
+- **Reason:** user ne khud "agy jtny phases ... km poora ho" kaha; C15 (kuch incomplete na chhorhein) aur `phases.md` §3 ka documented exception dono isi taraf ishara karte hain. Agents se parallel kaam tez hota hai, par central verification se R4 doc drift aur R3 workflow-tootna control mein rehte hain.
+- **Consequences:** `agent.md` addendum §N · `phases.md` §12–§20 reviews · koi phase skip nahi · P5/P10 N/A + wajah likhi jayegi · Sahulat & Safe Service Policy bilkul unchanged · subagents ko koi bypass / device-write / dependency-install ijazat nahi · aakhri `PHASE REVIEW` ke baad hi final `READY` darj hoga. Ye ijazat **is run tak seemit** hai; agle naye kaam par phir se poocha jayega.
+
+### D30 — P5 Auth / Authorization = N/A (justified, not skipped)
+- **Date:** 2026-11-09 · **Context:** P5 gate par multi-user auth, sessions, password / token aur tenant isolation ka faisla karna tha; P2 (D26 / R13 / O13) ne loopback boundary pakki ki thi.
+- **Options:** (a) `http.server` par auth / session layer add karna · (b) `N/A + wajah` likh kar gate pass karna · (c) phase skip kar dena.
+- **Decision:** **(b)** — `N/A + wajah`, **skip nahi**. App sirf `127.0.0.1` par, aik hi local user, koi remote access, koi doosra tenant, koi session model, koi account / password / token nahi. `ThreadingHTTPServer` + custom handler par auth lagana be-matlab attack surface aur naya dependency / framework laata.
+- **Reason:** `http.server` official docs production / LAN ke liye recommended nahi (D26, R13); is liye P5 ka N/A **sirf loopback shart par** qabool hai. Single-user offline model me authenticate karne wala koi doosra principal hi nahi.
+- **Consequences:** koi auth code, cookie, session store ya CSRF-token flow nahi. Agar **kabhi** app ko `127.0.0.1` se bahar LAN / Internet par expose karna ho to **naya ADR + auth + TLS + framework review lazmi** (O13, R13); tab P5 aur P10 dono N/A dobara khulenge. `llm_key` masking (`_mask_settings`) authentication nahi, P9 ka secret-handling fix hai. Sahulat & Safe Service Policy unchanged.
+
+### D31 — P10 Deploy / CI-CD = N/A (justified, not skipped)
+- **Date:** 2026-11-09 · **Context:** P10 gate par cloud deploy, hosted CI/CD, containers aur remote git ka faisla karna tha.
+- **Options:** (a) hosted pipeline / container / remote add karna · (b) `N/A + wajah` likh kar gate pass karna · (c) phase skip kar dena.
+- **Decision:** **(b)** — `N/A + wajah`, **skip nahi**. Distribution sirf `run.bat` + `python server.py` aik Windows PC par; zero installs, zero cloud, zero CI secrets, aur C7 ke mutabiq `git remote -v` empty hai.
+- **Reason:** local-only target (C7 / C11); reproducibility stdlib-only stack + `run.bat` Python `>=3.10` guard + local git history se milti hai, koi build server ya registry zaroori nahi.
+- **Consequences:** koi pipeline YAML, koi container image, koi deploy key, koi off-site artifact. `git diff --check` clean aur `core.autocrlf=false` local hygiene gate hain. Agar **kabhi** online distribution / hosted CI chahiye to **pehle naya ADR** (framework / TLS / auth / secret store / supply-chain), us ke baad hi code. Sahulat & Safe Service Policy unchanged.
+
+### D32 — P9 security / perf / a11y baseline closure
+- **Date:** 2026-11-09 · **Context:** P9 par `phases.md` §6 ke 13 QA findings band karne the; P2 ne unhe "P9 pending" likha tha (R15).
+- **Options:** sirf doc claim · fixes + regression tests · fixes baghair tests.
+- **Decision:** **fixes + passing regression tests**. Neeche har finding ka asli code symbol aur test naam darj hai; sirf verified symbols likhe gaye hain.
+- **Reason:** R3 / R15 ka khatra tha ke hardening workflow tod de ya jhootha "sab fix" claim likha jaye; is liye har fix ka named test gate hai.
+- **Consequences:** 13/13 closed; `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → `Ran 101 tests in 77.621s — OK`. **Koi bypass capability add nahi hui** — app sirf read / validate / plan / record karta hai; Sahulat & Safe Service Policy bilkul unchanged.
+
+| QA # | Finding | Actual code fix | Regression test |
+|---|---|---|---|
+| 1 | `llm_key` plaintext leak | `server.py` `_mask_settings` | `test_settings_no_secret_leak` |
+| 2 | invalid query params → `500` | `server.py` `_parse_num` | `test_invalid_query_params_return_400`, `test_no_stacktrace_on_bad_input` |
+| 3 | `/api/reveal` prefix bypass + C6 | `server.py` `_authorize_path` (`realpath` / `commonpath`), `firmware.py` `MAX_FILES=4000` / `MAX_DEPTH=6` | `test_reveal_rejects_sibling_prefix`, `test_scan_outside_denied_by_default`, `test_scan_outside_allowed_with_flag`, `test_scan_rejects_symlink_escape`, `test_scan_rejects_unc_path` |
+| 4 | unsafe feed URL | `web/app.js` `safe_url()` http/https allowlist + `research.py` `validate_url` | `test_javascript_url_rejected` |
+| 5 | XML DTD / entity | `firmware.py` `_xml_precheck` | `test_dtd_entity_rejected` |
+| 6 | `llm_endpoint` SSRF | `server.py` `validate_llm_endpoint` + `research.py` `validate_url` (feed host allowlist) | `test_llm_endpoint_rejects_internal` |
+| 7 | headers / body cap / path leak | `server.py` four security headers (`Content-Security-Policy`, `X-Frame-Options`, `Referrer-Policy`, `X-Content-Type-Options`) + `MAX_BODY` 1 MiB + `_mask_settings` | `test_security_headers_present`, `test_body_size_cap_413`, `test_status_no_abs_db_path` |
+| 8 | f-string SQL identifier | `server.py` article action allowlist | `test_article_action_allowlist` |
+| 9 | a11y markup | static UI: 8 `role="tabpanel"`, `aria-live`, `:focus-visible`, `prefers-reduced-motion`, `lang="en"`, zero inline `<script>` | `test_a11y_markup` |
+| 10 | perf | `db._session()` (har connection close), `server.py` pagination + `_prune_research_cache` | `test_save_package_single_txn`, `test_cache_bounded`, `test_packages_paginated` |
+| 11 | minor bugs / version guard | `run.bat` Python `>=3.10` guard | characterization tests (suite ke andar) |
+| 12 | swallowed LLM errors | `research.py` LLM error logging + `server.py` `_log` (rule-based fallback) | `test_llm_failure_logged_not_swallowed` |
+| 13 | zero automated tests | `tests/` 8 files / 101 tests | poora suite (`Ran 101 tests … OK`) |
+
+### D33 — P8 test strategy
+- **Date:** 2026-11-09 · **Context:** P8 par poora project `unittest` suite chahiye tha; PHASE 1B me sirf 47 targeted tests the.
+- **Options:** `pytest` / browser E2E runner · stdlib `unittest` + in-process harness · sirf manual smoke.
+- **Decision:** **stdlib `unittest`** — `tests/` me **8 files** (`_harness.py`, `test_sahulat.py`, `test_security.py`, `test_firmware.py`, `test_db.py`, `test_research.py`, `test_server_api.py`, `test_static_governance.py`), **101 test methods**, aur `phases.md` §6 ke **32/32** named regression / characterization tests sab maujood.
+- **Reason:** `pytest` PATH par nahi aur stdlib-only policy hai; `_harness.py` fixed throwaway `data/_p8_test.db` + in-process loopback server deta hai, reset sirf SQL `DELETE FROM` se (koi file delete / `shutil.rmtree` nahi). **Sab outbound network mocked**, production DB aur live internet kabhi touch nahi.
+- **Consequences:** runner `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → `Ran 101 tests in 77.621s — OK`, **zero `ResourceWarning`** (`db._session()` leak fix). Verbatim-hash gate aur 9-doc count gate suite ke andar hain. `PY_COMPILE_OK` + `NODE_CHECK_OK` alag central checks hain.
+
+### D34 — P11 monitoring / local logging / retention
+- **Date:** 2026-11-09 · **Context:** P11 par monitoring, log retention aur O3 / O10 / O11 / O12 ka faisla karna tha.
+- **Options:** cloud monitoring / metrics service · local-only logging + explicit deferrals · kuch na likhna.
+- **Decision:** **local-only logging + honest deferrals**. `server.py` `_log` sirf local, loopback ke andar events likhta hai — koi telemetry, koi off-site export, koi cloud sink.
+- **Reason:** C7 / C11 local-only; is liye monitoring bhi local rehti hai. Jo policy abhi configure nahi hui usay "ho gaya" kehna jhooth hota.
+- **Consequences / open-question status:**
+  - **~~O10~~ RESOLVED (D34 / D32):** common SSRF allowlist `research.validate_url` + `server.validate_llm_endpoint` + `app.js` `safe_url()` http/https allowlist se; QA #6 regression green.
+  - **~~O12~~ RESOLVED (D34):** English UI chrome migration done (static UI `lang="en"`, 8 nav items, 8 `role="tabpanel"`, `aria-live`, `:focus-visible`, `prefers-reduced-motion`, 27 `sah*` IDs, zero inline `<script>`); **Roman Urdu content retained** (letters, refusal reasons, checklist hints, consent, research `khulasa`, help text) — C19 / D22 barqarar.
+  - **O3 (log retention) — DEFERRED:** `_log` local likhta hai, lekin kitne din / kitna MB retain karna hai koi policy configure nahi; naye kaam par user ki manzoori chahiye (N7).
+  - **O11 (case retention / export / deletion) — DEFERRED:** `cases` table additive aur local hai; export / deletion / retention policy abhi implement nahi, naye ADR + manzoori ke liye deferred.
+  - **O2 (`llm_key` / bot token at-rest) — DEFERRED:** `_mask_settings` API response / log masking karta hai, lekin at-rest encryption (DPAPI / Credential Manager) ka faisla baqi hai.
+  - **O4 (Telegram token storage / rotation / rate-limit) — DEFERRED:** Bot API adapter planned boundary hai; token lifecycle policy abhi code me nahi.
+  - **O5 (legal deep/dark allowlist approval) — DEFERRED:** koi approved allowlist / approver record nahi; illegal sources reject policy barqarar.
+  - **O6 (task plan rule-based vs LLM) — DEFERRED:** aaj rule-based planner hai; optional LLM model / endpoint / cost ka faisla baqi.
+  - **O7 (public channel history) — DEFERRED:** Bot API se bahar ka legal/technical faisla baqi; koi history scrape claim nahi.
+  - **O8 (firmware provenance hash policy) — DEFERRED:** kaunse files / kab / retention ka policy baqi.
+  - **O1 (skills / MCP) — DEFERRED:** shortlist + cost / credentials + manzoori alag task (D7, C8).
+  - **O13 (loopback se bahar exposure) — DEFERRED:** agar kabhi LAN / Internet par jana ho to naya ADR + auth + TLS + framework review lazmi (D30 / D31 / R13).
+  - Sahulat & Safe Service Policy bilkul unchanged; **inmein se koi resolution invent nahi kiya gaya**.
+
 ---
 
 ## Classification Register
@@ -225,6 +296,9 @@ Har ADR: date · context · options · final decision · reason · consequences.
 | C20 | P2 verified stack: Python 3.13 stdlib, loopback `ThreadingHTTPServer`, SQLite WAL, vanilla JS/CSS, `unittest`, `run.bat`; koi dependency / framework / code migration nahi (D23) |
 | C21 | Modular replacement via documented adapter contracts; P2 rewrite nahi karta (D24) |
 | C22 | P2 research provenance: 12 P2 + 16 P1 sources, `URL + date checked`, facts/assumptions/recommendations alag, version nuance aur Telegram partial re-check explicitly darj (D28) |
+| C23 | P3–P11 aik hi approved run me, subagent delegation ke sath; per-phase approval pause is run ke liye muattal, har `PHASE REVIEW` aur central verification barqarar (D29) |
+| C24 | 13 QA findings `phases.md` §6 sab closed, har aik ka passing regression test (D32 / D33); koi bypass capability add nahi |
+| C25 | P5 / P10 `N/A` justified, gates **passed not skipped** (D30 / D31); C23/D29 auto-continue is run me consume hua, N7 se naye kaam par phase-by-phase approval wapas |
 
 ### Assumptions (A — implementation se pehle / usi phase mein confirm)
 - **A1** docs Roman Urdu prose + English headings/codes.
@@ -253,16 +327,16 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **O7** public channel history chahiye to Bot API se bahar ka legal/technical faisla (P7).
 - **O8** firmware provenance hash policy: kaunse files, kab, aur retention (P7/P11).
 - **O9** ~~naya 8th view ya existing panels (P3)~~ **RESOLVED (D21): 8th view `Sahulat / Official Route`**.
-- **O10** `llm_endpoint`, research sources aur Telegram endpoint ke liye common SSRF allowlist (P9).
-- **O11** case register retention / export / deletion policy (P11).
-- **O12** C19/D22 ke mutabiq existing in-app Roman Urdu *chrome* (nav labels, buttons, toasts) ko English surface par kab / kis phase mein migrate karna hai; content strings (letters, reasons, hints) Roman Urdu rehte hain (P3/P11).
+- **~~O10~~** **RESOLVED (D34 / D32): common SSRF allowlist** — `research.validate_url` + `server.validate_llm_endpoint` + `app.js` `safe_url()` http/https allowlist; QA #6 `test_llm_endpoint_rejects_internal` green.
+- **O11** case register retention / export / deletion policy (P11) — deferred (D34).
+- **~~O12~~** **RESOLVED (D34): English UI chrome migration done, Roman Urdu content retained** — static UI `lang="en"`, 8 nav items, 8 `role="tabpanel"`, `aria-live` / `:focus-visible`; letters / reasons / hints / consent Roman Urdu rehte hain (C19 / D22).
 - **O13** agar kabhi app ko `127.0.0.1` se bahar LAN / Internet par expose karna ho to kaunsa framework, auth, TLS aur deployment model chahiye; tab P5/P10 N/A dobara khulenge (P2 se naya, `R13`).
 
 ### Risks (R)
 - **R1** verbatim drift → byte-compare + 22-section count (mitigated).
 - **R2** banawati citations → P1 S1–S16 + P2 P2-01…P2-12 source registers se **mitigated**; `date checked = 2026-11-08`, koi generic `/3/` version claim local behavior ke tor par nahi.
-- **R3** strict security fixes legitimate feeds / scan workflow tod dein → mocked regression + `run.bat` smoke.
-- **R4** doc drift → P2 ne 7 tables / 4 indexes, `cases`, `/api/sahulat/*`, `tests\test_sahulat.py` sync kiya; final audit P11.
+- **R3** strict security fixes legitimate feeds / scan workflow tod dein → **mitigated with regression tests** (mocked offline suite, 101 tests) + `run.bat` smoke; koi workflow regression nahi.
+- **R4** doc drift → P2 ne 7 tables / 4 indexes, `cases`, `/api/sahulat/*`, `tests\test_sahulat.py` sync kiya; **final doc-vs-code audit completed P11** (D32 / D33 / D34; `tests/` 8 files, 101 tests, 9 docs).
 - **R5** default restriction rozana ke bahar wale scan ko roke → C6 opt-in.
 - **R6** Telegram token leak / 24h update loss / webhook conflict → O2/O4 + AC-07 tests.
 - **R7** illegal deep/dark source ya malware → C13 + AC-08 policy gate.
@@ -273,5 +347,5 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **R12** C19/D22 language split ko C9 ki mansookhi samajhna → D22 + `rules.md` §16 + `agent.md` §L; C9 zinda hai (clarified).
 - **R13** `http.server` ko production / LAN par expose karna → P2 loopback boundary + P5/P10 N/A sirf isi shart par; exposure ke liye naya ADR / auth / TLS / framework (D26).
 - **R14** official docs `3.13.18` vs local runtime `3.13.14` patch drift → `A12` / `D28`; runtime-specific behavior local verify, docs se patch equality ka dawa nahi.
-- **R15** outbound XML / SSRF / CSP / path-authz / secret handling abhi P9 pending → `P2-03`, `P2-05`, `P2-09`, `P2-12`, QA #1–#8 regression map.
+- **R15** outbound XML / SSRF / CSP / path-authz / secret handling P9 pending tha → **mitigated with regression tests** (P9 delivered: `_xml_precheck`, `validate_url` / `validate_llm_endpoint`, four security headers + CSP, `_authorize_path`, `_mask_settings`; QA #1–#13 closed, D32) · `P2-03`, `P2-05`, `P2-09`, `P2-12`, QA #1–#8 regression map ab green.
 - **R16** Telegram P2 anchor re-check juzwi raha aur kuch fetches transient fail hue → P1 `S9` retained, P7 implementation se pehle dobara full re-check; koi naya unverified claim nahi.

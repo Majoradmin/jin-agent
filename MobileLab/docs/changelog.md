@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-11-09
+
+### `feat:` — PHASE 3–P11 completion / project `READY`
+**User-visible app behavior:** koi naya feature ya bypass capability nahi; app sirf read / validate / plan / record karta hai (Sahulat & Safe Service Policy barqarar). P3–P11 delivered: design tokens / a11y plan (`design.md` P3 final `READY`, **O12 resolved** — English UI chrome, Roman Urdu content retained), `run.bat` Python `>=3.10` guard, 13 QA hardening fixes, offline graceful degradation + LLM error logging, poora 101-test suite, P5 / P10 `N/A` justified gates (D30 / D31 — **passed not skipped**), aur in-app knowledge base (`/api/knowledge`: `glossary 18`, `help 14`, `official_routes 5`, `tool_arch 5`, `security_note`). `phases.md` §12–§20 mein 9 final `PHASE REVIEW`s `READY` darj.
+
+### `security:` — 13 QA findings closed
+13/13 QA findings `phases.md` §6 mein `CLOSED` — har aik ka asli code-fix + named passing regression test (`decisions.md` D32). Delivered baseline: four security headers (`X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`) + `Content-Security-Policy` + `Cache-Control: no-store`, `MAX_BODY` 1 MiB, `_authorize_path` (realpath/commonpath), `validate_llm_endpoint` SSRF allowlist, `app.js safe_url()` http/https allowlist, `_xml_precheck` + `MAX_FILES=4000` / `MAX_DEPTH=6`, `_mask_settings` (`llm_key` masked `***`), article action allowlist, `_prune_research_cache` + pagination, `_log` local-only logging. **Koi bypass capability add nahi hui.**
+
+### `test:` — full project `unittest` suite
+`python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → **`Ran 101 tests in 77.621s — OK`**, **zero `ResourceWarning`**. `tests/` exactly **8 files** (`_harness.py`, `test_sahulat.py`, `test_security.py`, `test_firmware.py`, `test_db.py`, `test_research.py`, `test_server_api.py`, `test_static_governance.py`), **101** methods, **32/32** named regression / characterization tests. Sab outbound network mocked, production DB never touched, fixed throwaway `data/_p8_test.db` sirf SQL `DELETE FROM` se reset. `PY_COMPILE_OK` · `NODE_CHECK_OK`.
+
+### `docs:` — P3–P11 final documentation + governance sync
+`decisions.md` ADRs **D30–D34** + Classification Register **C24 / C25**, `~~O10~~` / `~~O12~~` resolved, R3 / R15 mitigated with regression tests, R4 final doc-vs-code audit completed P11 · `PRD.md` `1.3.0` → **`1.4.0`** + `§17 PHASE 3–P11 delivered state` · `architecture.md` `2.0.0` → **`2.1.0`** (15 governing headings intact) + `§23 P3–P11 final doc-vs-code sync` · `design.md` P3 final `READY` + `§12` · `rules.md` `§18 Security regression rules` + `§19 Testing rules` · `phases.md` §1 matrix, §2 N/A justifications, §6 QA closure, §7 checked DoD, **9 `PHASE REVIEW`s §12–§20** · `progress.md` / `changelog.md` / `memory.md` sync. `agent.md` addendum me **§O P3–P11 completion record** append hua (sirf verbatim prefix ke baad; prefix khud untouched) · verbatim prefix SHA-256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH (`37314 bytes`, `CRLF False`), docs `9/9`, `git diff --check` clean, `git remote -v` empty, `core.autocrlf=false`. **Is assistant ne koi git commit nahi kiya** — `Final review commit: pending central commit`.
+
+### `fix:` — `db._session()` connection leak
+`db._session()` ab har connection close karta hai → zero `ResourceWarning` under `-W error::ResourceWarning` (P8 / D33). Koi destructive DB migration nahi.
+
+### `fix:` — stale `7-view` / pending wording
+`phases.md` P9 gate ka purana `7-view smoke` → `8-view smoke`; `progress.md` / `memory.md` / `changelog.md` se `P2 pending`, `Waiting on: user ki PHASE 3 ijazat`, `Ab rukna hai`, aur purana `## Upcoming` (P4/P6/P8/P9/P11 pending) hata kar delivered state darj. `design.md` O12 resolved note.
+
+**Koi breaking change / destructive DB migration / deployment change / naya dependency / remote nahi.** P5 / P10 `N/A` justified hain (D30 / D31), koi phase skip nahi hua. C23 / D29 auto-continue is run me consume hua; N7 ke mutabiq naye kaam par phase-by-phase approval wapas.
+
+---
+
 ## 2026-11-08
 
 ### `docs:` — PHASE 2 Architecture / Tech Stack final (documentation-only)
@@ -87,12 +111,8 @@
 
 ---
 
-## Upcoming (gates ke mutabiq, abhi nahi hua)
+## Upcoming (updated 2026-11-09)
 
-- **P4** `run.bat` Python ≥3.10 guard.
-- **P6** bad query params → `400`, minor bugs, stack trace hatana.
-- **P8** stdlib `unittest` suite.
-- **P9** 13 security / perf / a11y fixes + regression tests; scan ka explicit opt-in checkbox.
-- **P11** local logging + final docs audit.
+P4 / P6 / P8 / P9 / P11 ab **delivered** hain (upar `## 2026-11-09` dekho); koi pending gate nahi. Project complete hai. Sirf **honestly deferred open questions** baqi hain — O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 (`decisions.md` D34) — inka koi invented resolution nahi; naye kaam par N7 ke mutabiq phase-by-phase approval ke sath khulenge.
 
-**Koi breaking change / DB migration / deployment change abhi nahi hua.**
+**Koi breaking change / DB migration / deployment change / naya dependency / remote abhi nahi hua.**

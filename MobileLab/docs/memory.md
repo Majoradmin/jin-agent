@@ -1,6 +1,6 @@
 # memory.md — Project Context
 
-**Date:** 2026-11-08 · **Root:** `J:\Ai Agent` · **App:** `MobileLab`
+**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Root:** `J:\Ai Agent` · **App:** `MobileLab`
 Ye file project ki **lasting context** rakhti hai. Rozana ka detail `progress.md`, faisle `decisions.md`, user-visible badlao `changelog.md` mein.
 
 ---
@@ -26,13 +26,15 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 | P9 | Skills / MCP installs abhi **defer** (O1). |
 | P10 | Scan default workspace-restricted, zarurat par **explicit opt-in** (C6). |
 
-## 3. Confirmed decisions (C1–C22)
+> **Approval note (C23 / D29 / N7):** is run ke liye P3–P11 blanket auto-continue active tha — **consume ho gaya**. N7 ke mutabiq naye kaam par P6 wala asli phase-by-phase rule wapas lagu hoga. P5 / P10 `N/A` justified gates hain (D30 / D31), skip nahi.
 
-`decisions.md` → "Classification Register" aur ADRs D1–D28. Khulasa: existing MobileLab (C1) · `agent.md` root + 9 docs `MobileLab\docs\` (C2) · adapted saare 12 gates (C3) · static QA + stdlib unittest (C4) · verbatim prompt + alag addendum (C5) · scan opt-in (C6) · local git (C7) · skills/MCP defer (C8) · Roman Urdu (C9) · J: root (C10) · scoped internet (C11) · Telegram Bot command/alert (C12) · legal/authorized deep/dark web (C13) · safe task plan/report (C14) · phase completeness (C15) · provenance/URL/date (C16) · policy reframe boundary unchanged (C17) · Sahulat toolkit scope (C18) · language split content/surface (C19) · **P2 verified stdlib stack (C20)** · **modular adapter contracts (C21)** · **P2 research provenance / version honesty (C22)**.
+## 3. Confirmed decisions (C1–C25)
+
+`decisions.md` → "Classification Register" aur ADRs D1–D34. Khulasa: existing MobileLab (C1) · `agent.md` root + 9 docs `MobileLab\docs\` (C2) · adapted saare 12 gates (C3) · static QA + stdlib unittest (C4) · verbatim prompt + alag addendum (C5) · scan opt-in (C6) · local git (C7) · skills/MCP defer (C8) · Roman Urdu (C9) · J: root (C10) · scoped internet (C11) · Telegram Bot command/alert (C12) · legal/authorized deep/dark web (C13) · safe task plan/report (C14) · phase completeness (C15) · provenance/URL/date (C16) · policy reframe boundary unchanged (C17) · Sahulat toolkit scope (C18) · language split content/surface (C19) · **P2 verified stdlib stack (C20)** · **modular adapter contracts (C21)** · **P2 research provenance / version honesty (C22)** · **P3–P11 blanket auto-continue, is run me consume (C23)** · **13 QA findings closed with passing regression tests (C24)** · **P5 / P10 `N/A` justified, gates passed not skipped (C25)**.
 
 ## 4. Current progress
 
-**PHASE 0 — Bootstrap** ✅ **READY** · **PHASE 1 — Requirements / PRD** ✅ **READY** · **PHASE 1B — Sahulat Toolkit** ✅ **READY** · **PHASE 2 — Architecture / Tech Stack** ✅ **READY**.
+**PHASE 0** · **1** · **1B** · **2** ✅ **READY** · **PHASE 3–P11** ✅ **READY** — **project complete** (P5 / P10 `N/A` justified, gates passed not skipped).
 - P0-1 `agent.md` ✅ — verbatim byte-identical (**17,844 bytes** prefix, 22 sections, sha256 `1de53535…0840`) + alag addendum.
 - P0-2 9 docs ✅ — `PRD, architecture, design, rules, phases, memory, progress, decisions, changelog`.
 - P0-3 `.gitignore` + local git ✅ — commit `c25c3c6`, 38 files, koi remote nahi, clean status, `core.autocrlf=false`.
@@ -43,6 +45,9 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 - P1-7 / P1-8 ✅ — `progress.md`, `changelog.md`, `phases.md` P1 review, workspace memory, verification aur do conventional `docs:` commits; `git status` clean, koi remote nahi.
 - **P1B-1…P1B-8** ✅ — `sahulat.py` (6 official routes, 8-item checklist, consent, Roman Urdu + English letters, refusal-with-reason), additive `cases` table, 6 `/api/sahulat/*` endpoints, 8th view, `safe_url()` / `linkHtml()`, policy reframe (boundary unchanged), 2 QA fixes, `tests/test_sahulat.py` **47/47 green**, 9 docs + addendum sync, `PHASE REVIEW — PHASE 1B` §10 `READY`.
 - **P2-1…P2-7** ✅ — `architecture.md` **2.0.0** (15 governing headings, 10 technology rows × 5 fields, 11/11 selection criteria, `P2-01…P2-12` official sources + `S1–S16`, facts/assumptions/recommendations alag, adapter contracts §21, `AC-P2-01…AC-P2-11`) · `decisions.md` D23–D28 / C20–C22 / A12–A15 / O13 / R12–R16 · `agent.md` addendum §M · `PRD.md` 1.3.0 §16 · `rules.md` §17 · `phases.md` §11 `PHASE REVIEW — PHASE 2` `READY`. **Documentation-only gate — koi app code badla nahi.**
+- **P3–P11 (2026-11-09, C23 / D29 auto-continue):** `design.md` 2.0.0 P3 final `READY` (O12 resolved: English UI chrome, Roman Urdu content retained) · `run.bat` Python `>=3.10` guard (P4) · `decisions.md` **D30–D34** + **C24 / C25**, `~~O10~~` / `~~O12~~` resolved, R3 / R15 mitigated with regression tests, R4 final audit P11 · `PRD.md` **1.4.0** §17 · `architecture.md` **2.1.0** §23 (15 headings intact) · `rules.md` §18–§19 · `phases.md` §1 / §2 / §6 (13/13 CLOSED) / §7 DoD / **9 `PHASE REVIEW`s §12–§20** · `progress.md` / `changelog.md` / `memory.md` sync. **Koi bypass capability add nahi hui.**
+- **P8 / P9 delivered:** `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → **`Ran 101 tests in 77.621s — OK`**, zero `ResourceWarning`; `tests/` **8 files / 101 methods / 32 named tests**; `PY_COMPILE_OK` · `NODE_CHECK_OK`; 13/13 QA findings closed with passing regression tests; four security headers + CSP + `Cache-Control: no-store`, `MAX_BODY` 1 MiB, `_authorize_path`, `validate_llm_endpoint`, `_xml_precheck`, `_mask_settings`, `db._session()` leak fix, `server._log` local-only logging.
+- **Verification (central):** `agent.md` verbatim SHA-256 `1de53535…0840` MATCH (`37314 bytes`, `CRLF False`), docs `9/9`, `git diff --check` clean, `git remote -v` empty, `core.autocrlf=false`; loopback smoke `/api/status` / `/api/knowledge` / `/index.html` / `/style.css` / `/app.js` sab 200 with `Content-Security-Policy`. **Is assistant ne koi git commit nahi kiya** — `Final review commit: pending central commit`.
 - **User ki nai hidayat (C19 / D22):** "information report plan sbb roman urdu, baki sab professional English". C9 refined, khatam nahi.
 
 ## 5. Known constraints / environment
@@ -56,12 +61,14 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 - WorkBuddy ka session transcript / plan cache `C:\Users\...\.workbuddy-ai\` mein app-managed hai; project source of truth ab `J:\Ai Agent\agent.md` + `docs\` hain.
 - Browser headless screenshot ke waqt Chrome ka `docs.google.com ... failed to install` error harmless noise tha.
 
-## 6. Pending questions (P1/P2 ko nahi rokte; implementation se pehle band)
+## 6. Pending questions (project complete; honestly deferred)
 
-- **O1** — kaunsi skills / MCP, kyun, kis cost / credentials ke saath? Alag task mein shortlist + manzoori.
-- **O2** — `llm_key` / Telegram token plaintext-at-rest qabool hai ya Windows DPAPI / Credential Manager? P9 ADR.
-- **O3** — monitoring log retention (kitne din / kitna MB)? P11.
-- **O4** — Telegram token storage, rotation, rate-limit/backoff. **O5** — legal deep/dark allowlist approval. **O6** — task plan rule-based vs LLM. **O7** — public channel history. **O8** — firmware provenance hash policy. ~~**O9**~~ — **RESOLVED** (D21): 8th view `Sahulat / Official Route`. **O10** — common SSRF allowlist. **O11** — case register retention / export / deletion (P11). **O12** — in-app Roman Urdu chrome ko English surface par migrate karne ka phase (P3/P11). **O13** — agar app ko `127.0.0.1` se bahar LAN / Internet par expose karna ho to framework / auth / TLS / deployment model; tab P5/P10 N/A dobara khulenge (P2 naya, R13).
+- **O1** — kaunsi skills / MCP, kyun, kis cost / credentials ke saath? Alag task mein shortlist + manzoori (**deferred**).
+- **O2** — `llm_key` / Telegram token plaintext-at-rest qabool hai ya Windows DPAPI / Credential Manager? (**deferred**).
+- **O3** — monitoring log retention (kitne din / kitna MB)? (**deferred**; `server._log` local-only hai, D34).
+- **O4** — Telegram token storage, rotation, rate-limit/backoff (**deferred**). **O5** — legal deep/dark allowlist approval (**deferred**). **O6** — task plan rule-based vs LLM (**deferred**). **O7** — public channel history (**deferred**). **O8** — firmware provenance hash policy (**deferred**). ~~**O9**~~ — **RESOLVED** (D21): 8th view `Sahulat / Official Route`. ~~**O10**~~ — **RESOLVED** (D34 / D32): common SSRF allowlist via `research.validate_url` + `server.validate_llm_endpoint` + `app.js safe_url()`. **O11** — case register retention / export / deletion (**deferred**). ~~**O12**~~ — **RESOLVED** (D34): English UI chrome migration done, Roman Urdu content retained. **O13** — agar app ko `127.0.0.1` se bahar LAN / Internet par expose karna ho to framework / auth / TLS / deployment model; tab P5/P10 N/A dobara khulenge (**deferred**, D30 / R13).
+
+**Deferred summary (koi jhootha resolution nahi):** O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 — tafseel `decisions.md` D34.
 
 ## 7. Lessons learned
 
@@ -81,4 +88,4 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 
 ## 8. Next recommended action
 
-PHASE 0, 1, 1B aur **PHASE 2** sab `READY` hain. `architecture.md` 2.0.0 final, `phases.md` §11 review darj, do local `docs:` commits ho chuke hain. **Ab ruk kar user se PHASE 3 (Design / UX) ki ijazat maango** — design tokens audit, a11y plan aur O12 (UI chrome language migration) ka faisla. Khud aage na barho. `status` bole to `progress.md` aur `phases.md` §11 parho; `review` bole to §11 ka PHASE REVIEW dikhao. Har reply / report / plan Roman Urdu me (C19).
+PHASE 0, 1, 1B, 2 aur **PHASE 3–P11** sab `READY` — **project complete**. `phases.md` §12–§20 mein 9 final `PHASE REVIEW`s, `decisions.md` D30–D34 / C24–C25, `architecture.md` 2.1.0 §23, `PRD.md` 1.4.0 §17 darj. Koi agla internal action nahi. **N7:** naye kaam par phase-by-phase approval wapas lagu hogi (C23 / D29 auto-continue is run tak seemit tha); P5 / P10 `N/A` justified hain, skip nahi. `status` bole to `progress.md` aur `phases.md` §1 parho; `review` bole to §12–§20 ka PHASE REVIEW dikhao. Central coordinator final commit karega; is assistant ne koi commit nahi kiya. Har reply / report / plan Roman Urdu me (C19).

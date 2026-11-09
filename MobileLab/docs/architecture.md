@@ -1,6 +1,6 @@
 # architecture.md — MobileLab System Architecture
 
-**Date:** 2026-11-08 · **Status:** PHASE 2 final — `READY` (`PHASE REVIEW` `phases.md` §11) · **Document version:** 2.0.0
+**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Status:** PHASE 2 `READY` + P3–P11 final doc-vs-code sync — project `READY` · **Document version:** 2.1.0
 **Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.1.0` (P2 ne code nahi badla)
 **Language (C19 / D22):** information / report / plan / prose = **Roman Urdu**; headings, labels, code, identifiers, paths, API routes, commits aur technical terms = **English**.
 
@@ -16,7 +16,7 @@ Browser (localhost)
    |  JSON  : /api/*
    v
 server.py  — BaseHTTPRequestHandler + ThreadingHTTPServer, 127.0.0.1:8765
-   |-- static allowlist + minimal security headers
+   |-- static allowlist + four security headers + CSP + MAX_BODY 1 MiB
    |-- handlers: GET / POST / DELETE
    |
    +--> firmware.py   (scan_folder, parse_scatter, parse_program_xml, validate)
@@ -28,10 +28,10 @@ server.py  — BaseHTTPRequestHandler + ThreadingHTTPServer, 127.0.0.1:8765
                           v
                     data\mobilelab.db   (local only, gitignored)
 
-tests\test_sahulat.py — in-process loopback regression harness (47 tests)
+tests\ — 8 files / 101 unittest methods (P8); _harness.py in-process loopback, fixed throwaway data\_p8_test.db
 ```
 
-**Boundaries:** frontend / backend / DB / business logic / integrations alag files mein. Koi cloud service nahi. Koi auth layer nahi (single-user loopback, P5 N/A). P2 sirf architecture documentation aur ADR gate hai; is phase mein koi Python, JS, CSS ya DB code nahi badla.
+**Boundaries:** frontend / backend / DB / business logic / integrations alag files mein. Koi cloud service nahi. Koi auth layer nahi (single-user loopback, P5 N/A — `D30`). P2 sirf architecture documentation aur ADR gate tha; us phase mein koi Python, JS, CSS ya DB code nahi badla. **P3–P11 final sync:** P9 ne security baseline, P8 ne suite aur P11 ne doc-vs-code audit deliver kiya — tafseel `§23` aur `decisions.md` D32 / D33 / D34. 15 governing numbered headings (`§1`–`§15`) barqarar hain.
 
 ## 2. Technology stack (selection record)
 
@@ -46,8 +46,8 @@ tests\test_sahulat.py — in-process loopback regression harness (47 tests)
 | Feed / XML parsing | `xml.etree.ElementTree` + `json` + `html` | `feedparser`, `defusedxml`, `lxml` | Stdlib; `parse_feed()` / `parse_github()` / `parse_hn()` pehle se alag hain | Untrusted XML par official warning; Expat `< 2.7.2` billion laughs / quadratic blowup / large tokens ka risk; `xmlrpc` decompression bomb; local Expat `expat_2.8.1` hai phir bhi input size / DTD / entity hardening chahiye | Parser adapter me pre-validation + bounded size; `defusedxml` sirf tab jab dependency policy user approve kare | `P2-04`, `P2-05`, `P2-09`; local `pyexpat.EXPAT_VERSION` |
 | Concurrency | `concurrent.futures.ThreadPoolExecutor`, explicit `8–16` workers | `asyncio`, `multiprocessing`, sequential fetch | I/O-bound feed fetch ko overlap karna docs me recommended pattern hai; code default worker formula par depend nahi karta | GIL; thread count cap; default `max_workers` 3.5 / 3.8 / 3.13 me badla; cleanup aur timeout discipline chahiye | `_build_jobs()` / `_run_job()` ke around executor adapter; strategy badalne par route handlers na badlein | `P2-06`; `research.py` `max_workers=max(8, min(16, len(jobs)))` |
 | Frontend | Vanilla JS + CSS, no build step | React, Vue, Tailwind, CDN component kit | Zero npm / bundler / external font / CDN; offline local UI; light theme; 8 views pehle se chal rahe hain | Manual state management; framework-level a11y tooling nahi; `innerHTML` aur external URL par escaping / allowlist lazmi | `app.js` ko modules me baant kar upar framework layer; CSP aur `esc()` / `safe_url()` pehle enforce karein | `P2-12`; `web\index.html`, `web\app.js`, `web\style.css` |
-| Tests | stdlib `unittest` | `pytest`, Playwright, browser E2E runner | Stdlib; `pytest` PATH par nahi; `tests\test_sahulat.py` 47/47 targeted tests green hain | Fixtures kam, verbose; full project suite abhi P8 ka deliverable hai; browser E2E nahi | Test names aur assertions portable rakhein; P8 me suite barhayein, runner badalna aasan rahe | `P2-07`; local `Ran 47 tests … OK` |
-| Packaging | `run.bat` + `python server.py` | PyInstaller, MSI installer, Windows service | Zero install, local-only Git, user PC par Python maujood; C7 ke mutabiq koi remote / cloud nahi | Python version dependency; `run.bat` me abhi `>=3.10` guard nahi (P4); service / daemon nahi | P4 me version guard; optional installer sirf user ki nai manzoori aur naye ADR ke sath | Local `run.bat`, `server.py` lines 351–353; `D4`, `C7` |
+| Tests | stdlib `unittest` | `pytest`, Playwright, browser E2E runner | Stdlib; `pytest` PATH par nahi; `tests\` **8 files / 101 tests** green, 32/32 named regression tests maujood (`D33`) | Fixtures kam, verbose; browser E2E nahi; `-W error::ResourceWarning` par zero warning | Test names aur assertions portable rakhein; runner badalna aasan rahe | `P2-07`; `Ran 101 tests in 77.621s — OK` |
+| Packaging | `run.bat` + `python server.py` | PyInstaller, MSI installer, Windows service | Zero install, local-only Git, user PC par Python maujood; C7 ke mutabiq koi remote / cloud nahi | Python version dependency; `run.bat` me Python `>=3.10` guard P4 me add ho chuka; service / daemon nahi | Optional installer sirf user ki nai manzoori aur naye ADR ke sath (`D31`) | Local `run.bat`, `server.py` lines 351–353; `D4`, `C7` |
 | External integration transport (P7 planned) | Optional OpenAI-compatible LLM + official Telegram Bot API, dono `urllib.request` se | MTProto / TDLib / Telethon, vendor SDKs | Stdlib; official HTTPS template `https://api.telegram.org/bot<token>/METHOD_NAME`; core features ke liye koi token lazmi nahi | Token storage `O2/O4`; updates max 24h; webhook aur `getUpdates` mutually exclusive; arbitrary endpoint SSRF risk; LLM hallucination / prompt injection | `telegram.py` aur `llm_client.py` adapters; common allowlist `O10`; offline graceful degradation; koi historical public-channel scrape claim nahi | `P2-09`, `P2-10`, `S9`; `D14`, `D27` |
 
 ### 2.2 Selection criteria matrix (11 governing criteria)
@@ -58,12 +58,12 @@ tests\test_sahulat.py — in-process loopback regression harness (47 tests)
 | Team skill level | Single technician / current maintainer; plain Python + vanilla JS samajhna aur debug karna aasan. | Koi build toolchain, framework training ya package manager nahi; `run.bat` direct launcher. |
 | Long-term maintenance | Chhote modules, official stdlib APIs, 9 docs, local commits, `date checked` provenance. | P11 doc-vs-code audit; Python `3.13.18` docs vs local `3.13.14` patch drift `A12` / `R14` me tracked. |
 | Ecosystem maturity | Python stdlib, SQLite WAL, Flask, MDN CSP, OWASP sab documented ecosystems hain. | Migration ke raaste maujood, lekin P2 me dependency add nahi ki; Flask `3.1.x` sirf alternative evidence ke liye (`P2-11`). |
-| Security | Loopback-only; `http.server` production warning; SQL placeholders; untrusted XML warning; SSRF allowlist; CSP baseline. | P9 fixes pending: headers, body cap, `realpath`, XML hardening, SSRF connection-time IP validation, secret masking (`P2-01`, `P2-02`, `P2-05`, `P2-09`, `P2-12`). |
+| Security | Loopback-only; `http.server` production warning; SQL placeholders; untrusted XML warning; SSRF allowlist; CSP baseline. | **P9 fixes delivered (`D32`):** four security headers + CSP, `MAX_BODY` 1 MiB, `_authorize_path` (`realpath`/`commonpath`), `_xml_precheck`, `validate_url` / `validate_llm_endpoint`, `_mask_settings`, article action allowlist, `_log` (`P2-01`, `P2-02`, `P2-05`, `P2-09`, `P2-12`). |
 | Documentation quality | Official Python 3.13 docs, SQLite WAL, OWASP, Flask, MDN CSP, Telegram Bot API directly checked. | Har major row ka source `§19` me `URL + date checked = 2026-11-08` ke sath; koi banawati citation nahi. |
 | Community support | Stdlib aur upar wale official projects ke docs / extensions maujood; community frameworks migration option hain. | **Recommendation / project judgment, fact nahi:** abhi zero-dependency surface chhota rakhna behtar hai; community support ka fayda sirf zarurat par migration me lena. |
 | Performance | `MAX_FILES=4000`, `MAX_DEPTH=6`, `TIMEOUT=10`, pool `8–16`; WAL readers/writer concurrency; ThreadPoolExecutor I/O overlap. | Single-user local scale; koi horizontal scaling / load balancer nahi (`P2-06`, `P2-08`, `§13`). |
 | Hosting cost | `127.0.0.1` par aik Windows PC; koi cloud deploy, hosted CI/CD, container ya paid runtime nahi. | `PHASE 10` N/A + wajah; core features offline; optional LLM / Telegram user-configured (`C7`, `C11`). |
-| Ease of testing | `unittest discover`, in-process loopback server, throwaway gitignored DB, SQL reset, mocked/offline design. | 47/47 targeted green; full suite P8; production DB aur live internet tests kabhi touch nahi karte (`P2-07`, `A3`). |
+| Ease of testing | `unittest discover`, in-process loopback server, throwaway gitignored DB, SQL reset, mocked/offline design. | **101 tests / 8 files green (P8 delivered, `D33`);** production DB aur live internet tests kabhi touch nahi karte (`P2-07`, `A3`). |
 | Ease of migration | Adapter boundaries: `server.py` routes, `db.py` repository, `research.fetch` HTTP client, `parse_*` parsers, `sahulat.py` policy data, `app.js` UI modules. | Har row ki replacement strategy upar table me; P2 koi rewrite nahi karta (`D24`, `§21`). |
 
 **P2 status:** pehle wala pending research note ab band hai. Har major technology ke 5 required fields aur 11 selection criteria upar darj hain.
@@ -84,10 +84,10 @@ J:\Ai Agent\
     data\       mobilelab.db (+ WAL/SHM), _p1b_test.db  <- gitignored
     docs\       PRD.md architecture.md design.md rules.md phases.md
                 memory.md progress.md decisions.md changelog.md
-    tests\      test_sahulat.py  (47 targeted tests; full suite P8)
+    tests\      _harness.py + 7 test_*.py  (8 files total, 101 tests; P8)
 ```
 
-P2 ne koi naya source file nahi banaya. `tests\test_sahulat.py` PHASE 1B me ban chuka tha; purana `tests\ (P8 mein banega)` note ab ghalat tha, is liye theek kiya gaya.
+P2 ne koi naya source file nahi banaya. `tests\test_sahulat.py` PHASE 1B me ban chuka tha; purana `tests\ (P8 mein banega)` note ab ghalat tha, is liye theek kiya gaya. **P8 final:** `tests\` ab **8 files** (`_harness.py`, `test_sahulat.py`, `test_security.py`, `test_firmware.py`, `test_db.py`, `test_research.py`, `test_server_api.py`, `test_static_governance.py`) / **101 tests** — fixed throwaway `data\_p8_test.db` SQL-only reset, sab network mocked (`D33`).
 
 ## 4. Frontend architecture
 
@@ -95,15 +95,15 @@ P2 ne koi naya source file nahi banaya. `tests\test_sahulat.py` PHASE 1B me ban 
 - `state` object + `api()` / `post()` wrappers; `esc()` output encoding; `safe_url()` / `linkHtml()` external links ko `http/https` tak seemit rakhte hain.
 - `TITLES` map, `refreshCounts()`, view-specific loaders (`loadPackages`, `fetchResearch`, `loadDashNews`, `loadSahulat`, …).
 - Static allowlist server par; koi bundler / CDN / external font nahi.
-- **Security baseline:** MDN ke mutabiq CSP response header resource loading control karta hai aur XSS se bachane me madad karta hai; Baseline widely available since August 2016 (`P2-12`). Aaj `_send()` me CSP nahi hai — P9 me `default-src`, `script-src`, `style-src`, `connect-src`, `img-src`, `font-src`, `object-src`, `base-uri`, `form-action`, `frame-ancestors` ka policy add hoga.
-- **Language:** content strings Roman Urdu; professional surface English. Existing in-app chrome migration `O12` (P3/P11) hai — P2 ne UI strings nahi badle.
+- **Security baseline:** MDN ke mutabiq CSP response header resource loading control karta hai aur XSS se bachane me madad karta hai; Baseline widely available since August 2016 (`P2-12`). **P9 me CSP add ho chuka** — `_send()` ka `CSP` constant: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`. Sath mein four security headers (`Content-Security-Policy`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`) aur `MAX_BODY` 1 MiB → `413` (`D32`). Static assets zero inline `<script>` ke sath.
+- **Language:** content strings Roman Urdu; professional surface English. **`O12` resolved (`D34`)** — English UI chrome migration done, `lang="en"`, 8 nav items / 8 `role="tabpanel"`, `aria-live`, `:focus-visible`, `prefers-reduced-motion`; Roman Urdu content (letters, reasons, hints, consent, `khulasa`, help) barqarar. P2 ne UI strings nahi badle the (historical snapshot).
 
 ## 5. Backend architecture
 
 - `ThreadingHTTPServer`, loopback bind `127.0.0.1`, custom `BaseHTTPRequestHandler` (`do_GET` / `do_POST` / `do_DELETE`). Custom handler `SimpleHTTPRequestHandler` nahi hai, is liye us class ka symlink-follow warning directly apply nahi hota; phir bhi static allowlist `realpath` / `commonpath` hardening P9 me chahiye (`P2-01`).
-- `_send()` headers: `Content-Type`, `Content-Length`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. `_json()` / `_err()` JSON return karte hain. CSP, body cap aur identifier allowlist abhi pending hain.
+- `_send()` headers: `Content-Type`, `Content-Length`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Content-Security-Policy` (four security headers + CSP). `_json()` / `_err()` JSON return karte hain. **P9 delivered:** `MAX_BODY` 1 MiB body cap → `413`, article action allowlist, `_parse_num`, `_authorize_path`, `validate_llm_endpoint`, `_mask_settings`, `_prune_research_cache`, pagination aur `_log` (`D32`).
 - `_body()` `Content-Length` par `json.loads` karta hai; `_query()` `parse_qs` se first value leti hai.
-- `do_GET` / `do_POST` ke top-level `except` me `traceback.print_exc()` aur `Server error: {e}` `500` response hai — ye QA #7 / #11 ka pending leak hai; P6/P9 me stack trace / internal message client ko nahi jana chahiye.
+- P2 snapshot me `do_GET` / `do_POST` ke top-level `except` me `traceback.print_exc()` aur `Server error: {e}` `500` response tha (QA #7 / #11). **P6/P9 me fix ho gaya:** `_log(context, exc)` local-only failure logging, safe JSON error, koi stack trace / internal message client ko nahi; ghalat input par `400`, LLM failure par rule-based fallback (`D32`).
 - Static assets exact allowlist: `/`, `/index.html`, `/app.js`, `/style.css`, `/favicon.svg`.
 - `os.startfile()` sirf `/api/reveal` (Windows Explorer) — Windows guard aur path authz P9.
 - Official `http.server` docs production ke liye recommend nahi karte; is liye architecture boundary **sirf loopback** hai. LAN / Internet exposure ke liye naya framework, auth, TLS aur deployment ADR zaroori hoga (`P2-01`, `R13`).
@@ -125,10 +125,10 @@ P2 ne koi naya source file nahi banaya. `tests\test_sahulat.py` PHASE 1B me ban 
 **Indexes (exact, 4):** `idx_pf_package ON package_files(package_id)` · `idx_pf_hash ON package_files(fingerprint)` · `idx_articles_fetched ON articles(fetched_at)` · `idx_cases_created ON cases(created_at)`.
 
 **Fingerprint:** size + first/last 512 KiB chunks (`FINGERPRINT_CHUNK`), duplicate detection ke liye.
-**SQL safety:** official `sqlite3` docs string-formatted SQL ko SQL-injection vulnerable kehti hain aur `?` placeholders lazmi kehti hain (`P2-02`). `server.py` `/api/article` me abhi f-string SQL identifier `col` hai — QA #8 allowlist fix P9 pending.
+**SQL safety:** official `sqlite3` docs string-formatted SQL ko SQL-injection vulnerable kehti hain aur `?` placeholders lazmi kehti hain (`P2-02`). P2 snapshot me `/api/article` me f-string SQL identifier `col` tha — **P9 me `server.py` article action allowlist se fix ho gaya** (`test_article_action_allowlist`, `D32`).
 **WAL facts:** readers writer ko block nahi karte aur writer readers ko block nahi karta; `-wal` / `-shm` files DB state ka hissa hain; WAL network filesystem par kaam nahi karta; default auto-checkpoint ~1000 pages; lambi read transaction checkpoint progress rok sakti hai (`P2-08`). Is liye DB aur WAL files aik hi local folder me rehne chahiye.
 **Migration status:** aaj `CREATE TABLE IF NOT EXISTS` hai; `cases` additive auto-create hoti hai (`D20`). Proper versioned migration strategy P6 ADR (`A7`).
-**Pending (QA #10):** connection reuse, `save_package` single transaction, `/api/packages` pagination.
+**P9 delivered (QA #10 / `D32`):** `db._session()` context manager har connection ko close karta hai — isi se `-W error::ResourceWarning` par zero warning aaya; `save_package` single transaction, `/api/packages` pagination aur `_prune_research_cache` bounded cache bhi code me hain. Production DB tests kabhi touch nahi karte (`D33`).
 
 ## 7. API design
 
@@ -138,19 +138,19 @@ P2 ne koi naya source file nahi banaya. `tests\test_sahulat.py` PHASE 1B me ban 
 
 Response: `{"ok":true,...}` / `{"error":"..."}`. Static: `/`, `/index.html`, `/app.js`, `/style.css`, `/favicon.svg`.
 `/api/status` ab `policy`, `policy_id` aur `counts.cases` bhi return karta hai. Sahulat routes ki validation chain §18.3 me hai; 6 naye endpoints PHASE 1B ka code hain aur P2 ne unhe main API list me sync kiya.
-**Pending:** bad query params → `400` (QA #2), client ko stack trace / internal error na bhejna, `413` body cap, security headers, identifier allowlist (QA #8), `/api/status` path leak (QA #7).
+**P6/P9 delivered (`D32`):** bad query params → `400` via `_parse_num` (QA #2), koi stack trace / internal error client ko nahi, `413` `MAX_BODY` cap, four security headers, article action allowlist (QA #8), `/api/status` path leak band — `db` basename-only + `_mask_settings` se `llm_key` `***` masked (QA #1 / QA #7). Loopback smoke: `/api/status` 200 (`version 1.1.0`, `policy_id SAHULAT-SAFE-SERVICE-v1`), `/api/knowledge` 200.
 
 ## 8. Authentication architecture — N/A (PHASE 5 gate)
 
-`127.0.0.1` single-user offline app; koi account, session, password, token ya multi-user role nahi. Is liye auth layer **N/A + wajah** ke saath P5 gate pass hoga, skip nahi. `llm_key` ka secret handling P9 ka security task hai, authentication nahi. Agar kabhi app loopback se bahar expose ho to `http.server` production warning ki wajah se auth + framework + deployment ka naya ADR lazmi hoga (`P2-01`, `R13`).
+`127.0.0.1` single-user offline app; koi account, session, password, token ya multi-user role nahi. Is liye auth layer **N/A + wajah** ke saath P5 gate pass hua, **skip nahi** (`D30`, `C25`). `llm_key` ka secret handling P9 ka security task hai (`_mask_settings`), authentication nahi. Agar kabhi app loopback se bahar expose ho to `http.server` production warning ki wajah se naya ADR + auth + TLS + framework review lazmi hoga (`D30`, `P2-01`, `R13`, `O13`).
 
 ## 9. Authorization model
 
 - Har API design-level sirf loopback se accessible.
 - Static authorization: exact path allowlist, custom `_static()`.
-- `/api/reveal` aaj `os.path.abspath(target).lower().startswith(BASE.lower())` ya scanned-package DB path allow karta hai. Ye prefix-based check sibling-path se bypass ho sakta hai — QA #3.
-- `/api/scan` aaj path directly `firmware.scan_folder(raw)` ko deta hai; C6 ka default workspace restriction + explicit `allow_outside` opt-in abhi P9 implement hone wala hai. P2 is target ko architecture boundary ke tor par pakka karta hai, code fix ka dawa nahi karta.
-- **Hardening due (P9):** `realpath` + `commonpath`, authz pehle / `exists()` baad, symlink/junction/UNC reject, Windows guard, endpoint-wise authorization matrix.
+- P2 snapshot me `/api/reveal` `os.path.abspath(target).lower().startswith(BASE.lower())` prefix check karta tha (QA #3). **P9 me `server.py` `_authorize_path` (`realpath` + `commonpath`) se fix** — sibling-prefix bypass, symlink/junction/UNC escape reject, authz `exists()` se pehle, Windows guard (`os.startfile`).
+- P2 snapshot me `/api/scan` path directly `firmware.scan_folder(raw)` ko deta tha; **P9 me C6 default workspace restriction + explicit `allow_outside` opt-in implement ho gaya**, `firmware.py` `MAX_FILES=4000` / `MAX_DEPTH=6` caps ke sath. P2 ne code fix ka dawa nahi kiya tha — wo ab P9 ka verified deliverable hai.
+- **P9 hardening delivered:** upar wala `_authorize_path`, `firmware._xml_precheck` (DTD / entity reject), four security headers, `MAX_BODY`, `validate_llm_endpoint`, `_mask_settings`, article action allowlist, pagination (`D32`).
 - **Outbound authorization:** OWASP allowlist, scheme/host/IP validation, resolved-IP connection binding, redirects off, parser-disagreement reject, private/loopback/link-local/metadata ranges block (`P2-09`, `O10`). `urllib.request` ke `file://`, `data://`, FTP handlers aur proxy autodetection is ko aur zaruri banate hain (`P2-03`).
 
 ## 10. External services
@@ -169,15 +169,15 @@ Core features ke liye koi API key lazmi nahi. Offline par graceful degradation. 
 
 ## 12. Error handling
 
-`_err()` JSON errors; feed failures per-source diagnostics. Aaj `do_GET` / `do_POST` unexpected exception par `traceback.print_exc()` kar ke `Server error: {e}` `500` bhejte hain; `/api/reveal` bhi exception message return karta hai. `llm_rewrite()` failure aaj chup kar deta hai (QA #12). P6/P9 goal: koi silent swallow nahi, koi stack trace / internal message client ko nahi, ghalat input par `400` na ke `500`, bad numeric params safe parse, LLM failure par rule-based fallback + local log.
+`_err()` JSON errors; feed failures per-source diagnostics. P2 snapshot me `traceback.print_exc()` + `Server error: {e}` `500` aur `llm_rewrite()` ka silent swallow tha (QA #7 / #11 / #12). **P6/P9 delivered:** `server._log(context, exc)` local-only failure logging, koi silent swallow nahi, koi stack trace / internal message client ko nahi, ghalat input par `400`, `_parse_num` se safe numeric parse, LLM failure par rule-based fallback + local log, `research.py` offline graceful degradation (`D32`).
 
 ## 13. Scalability plan
 
-Single-user local tool — scale ka matlab **bade firmware folders aur zyada feeds** hai: `MAX_FILES=4000`, `MAX_DEPTH=6`, `TIMEOUT=10`, pool `8–16`, `limit` 5–200, bounded cache + pagination (P9). `ThreadPoolExecutor` I/O overlap ke liye munasib hai; explicit `max_workers` code ko Python 3.5/3.8/3.13 default-formula drift se bachata hai (`P2-06`). WAL concurrency achhi hai, lekin lambi readers checkpoint rok sakti hain aur network filesystem supported nahi (`P2-08`). Koi horizontal scaling / load balancer nahi; P2 N/A justification `phases.md` §2 me hai.
+Single-user local tool — scale ka matlab **bade firmware folders aur zyada feeds** hai: `MAX_FILES=4000`, `MAX_DEPTH=6`, `TIMEOUT=10`, pool `8–16`, `limit` 5–200, bounded cache (`_prune_research_cache`) + pagination (P9 delivered, `D32`). `ThreadPoolExecutor` I/O overlap ke liye munasib hai; explicit `max_workers` code ko Python 3.5/3.8/3.13 default-formula drift se bachata hai (`P2-06`). WAL concurrency achhi hai, lekin lambi readers checkpoint rok sakti hain aur network filesystem supported nahi (`P2-08`). Koi horizontal scaling / load balancer nahi; P2 N/A justification `phases.md` §2 me hai.
 
 ## 14. Deployment architecture — N/A (PHASE 10 gate)
 
-Distribution = `run.bat` aik Windows PC par. Koi cloud deploy, hosted CI/CD, container ya remote nahi (C7). PortableGit sirf local commits ke liye. Official `http.server` docs production ke liye recommend nahi karte, is liye ye N/A sirf tab qabool hai jab app `127.0.0.1` par hi rahe (`P2-01`). P10 gate "N/A + wajah" ke saath pass hoga.
+Distribution = `run.bat` aik Windows PC par (Python `>=3.10` guard P4 se). Koi cloud deploy, hosted CI/CD, container ya remote nahi (C7); `git remote -v` empty. PortableGit sirf local commits ke liye. Official `http.server` docs production ke liye recommend nahi karte, is liye ye N/A sirf tab qabool hai jab app `127.0.0.1` par hi rahe (`P2-01`). P10 gate "N/A + wajah" ke saath pass hua, **skip nahi** (`D31`, `C25`). Online distribution kabhi chahiye to pehle naya ADR.
 
 ## 15. Architecture boundaries
 
@@ -191,7 +191,7 @@ Distribution = `run.bat` aik Windows PC par. Koi cloud deploy, hosted CI/CD, con
 
 ## 16. 12-gate mapping
 
-P0 Bootstrap `READY` → P1 PRD `READY` → **P2 Architecture + research `READY`** → P3 Design → P4 Setup → P5 Auth (N/A+why) → P6 Core fixes → P7 Integrations → P8 Tests → P9 Security/Perf/A11y → P10 Deploy (N/A+why) → P11 Docs/Monitoring. Tafseel `phases.md`. Agla gate P3 hai aur user ki ijazat ke baghair shuru nahi hoga.
+P0 Bootstrap `READY` → P1 PRD `READY` → **P2 Architecture + research `READY`** → P3 Design `READY` → P4 Setup `READY` → P5 Auth `READY — N/A justified` (`D30`) → P6 Core fixes `READY` → P7 Integrations `READY` → P8 Tests `READY` → P9 Security/Perf/A11y `READY` → P10 Deploy `READY — N/A justified` (`D31`) → P11 Docs/Monitoring `READY`. Tafseel `phases.md` §8–§20. **Project complete**; naye kaam par phase-by-phase approval wapas (N7).
 
 ---
 
@@ -209,7 +209,7 @@ P0 Bootstrap `READY` → P1 PRD `READY` → **P2 Architecture + research `READY`
 | Regulatory | EU 2024/1799 applies from 31 July 2026 (S15). | Future demand assumption; local record/provenance features ko justify karta hai, koi cloud compliance claim nahi. |
 | Security | OWASP SSRF allowlist, scheme/host validation, private/loopback/link-local/metadata block, redirects off (S16). | `llm_endpoint`, research URL aur Telegram endpoint ke liye common allowlist P9; connection-time validation. |
 
-**P2 closure:** technology table §2, adapter contracts §21 aur source register §19 is snapshot ko verified citations se jor chuke hain. `O9` resolved hai (`D21`). `O4/O5/O10` apne P7/P9 gates par khulne wale hain — inhe P2 ne band hone ka jhootha dawa nahi diya.
+**P2 closure:** technology table §2, adapter contracts §21 aur source register §19 is snapshot ko verified citations se jor chuke hain. `O9` resolved hai (`D21`). P2 ke mutabiq `O4/O5/O10` apne P7/P9 gates par khulne wale the — P2 ne band hone ka jhootha dawa nahi diya. **P11 final:** `O10` resolved (`D34`: `research.validate_url` + `server.validate_llm_endpoint` + `app.js safe_url()`), `O12` resolved (`D34`: English chrome / Roman Urdu content); `O4/O5` deferred (`D34`).
 
 ## 18. PHASE 1B — Sahulat toolkit (code change, 2026-11-08)
 
@@ -241,7 +241,7 @@ P0 Bootstrap `READY` → P1 PRD `READY` → **P2 Architecture + research `READY`
 `make_letter()` `validate_letter()` (na ke `validate_case()`) call karta hai: letter sirf 4/4 required proof + consent par banta hai; `/api/sahulat/case` incomplete proof par case `draft` save kar ke `letter_error` wapas karta hai (AC-15 / AC-16). `check_request()` ka `MAX_QUERY_CHARS = 4000` hard-bounded classification window hai — UI 500-char field se pehle truncate karne par aakhir wala banned phrase cut off ho jata tha; ab nahi. Har blocked response mein kam-az-kam aik official `https://` link `GENERIC_LINKS` fallback se guaranteed hai; generic wording par `route_id = ""` (koi jhootha brand diagnosis nahi).
 
 ### 18.3b Tests (targeted, PHASE 1B)
-`tests/test_sahulat.py` — stdlib `unittest`, 47 tests: routes/policy, request classifier, validation + letters, `cases` round-trip + additive migration (pre-1B schema simulation), live loopback HTTP endpoints, static assets / 8-view wiring, `agent.md` verbatim hash aur 9-doc consistency. Throwaway DB `MobileLab/data/_p1b_test.db` (gitignored), SQL `DELETE FROM cases` se deterministic; production DB aur live internet kabhi touch nahi. **Full project suite P8 ka deliverable hai.**
+`tests/test_sahulat.py` — stdlib `unittest`, 47 tests: routes/policy, request classifier, validation + letters, `cases` round-trip + additive migration (pre-1B schema simulation), live loopback HTTP endpoints, static assets / 8-view wiring, `agent.md` verbatim hash aur 9-doc consistency. Throwaway DB `MobileLab/data/_p1b_test.db` (gitignored), SQL `DELETE FROM cases` se deterministic; production DB aur live internet kabhi touch nahi. **P1B snapshot me full project suite P8 ka deliverable tha; P8 me wo deliver ho chuka** — `tests/` 8 files / 101 tests, fixed `data/_p8_test.db`, SQL-only reset (`D33`).
 
 ### 18.4 Data flow
 `web/app.js` → `GET /api/sahulat/overview` → 8th view render → user checklist + form → `POST /api/sahulat/letter` (preview) ya `POST /api/sahulat/case` (save + letter) → `db.cases` → `GET /api/sahulat/cases` table. Letter `<pre>` me `textContent` se render (koi `innerHTML`). Har `<a>` `safe_url()` se guzarta hai (`http/https` only, QA #4 partial fix).
@@ -383,4 +383,29 @@ P0 Bootstrap `READY` → P1 PRD `READY` → **P2 Architecture + research `READY`
 | AC-P2-10 | Gate hygiene | 9 docs, clean Git, no remote, `core.autocrlf=false`, `py_compile`, `node --check`, 47 targeted tests green |
 | AC-P2-11 | No scope creep | P2 docs-only; koi app code, dependency, DB migration ya deployment change nahi |
 
-**P2 result:** upar wale criteria `phases.md` §11 ke `PHASE REVIEW` me verify ho kar `READY` darj honge. P3 user ki ijazat ke baghair shuru nahi hoga.
+**P2 result:** upar wale criteria `phases.md` §11 ke `PHASE REVIEW` me verify ho kar `READY` darj hue. **P11 final:** P3–P11 bhi `READY` (`phases.md` §12–§20, `D30`–`D34`); project complete, `2.1.0` doc-vs-code sync §23 mein. N7 ke mutabiq naye kaam par phase-by-phase approval wapas lagu hogi.
+
+---
+
+## 23. P3–P11 final doc-vs-code sync (2026-11-09)
+
+> **Document-only.** Koi naya source URL / citation add nahi kiya gaya. Ye 15 governing numbered headings (`§1`–`§15`) ke baad ka final audit hai; un headings ko chheda nahi gaya. App `VERSION` `1.1.0` barqarar; koi breaking change / destructive DB migration / deployment change / naya dependency / remote nahi. Sahulat & Safe Service Policy bilkul unchanged.
+
+| Area | Verified code fact (2026-11-09) | Doc / test linkage |
+|---|---|---|
+| Loopback-only | `ThreadingHTTPServer` bind `127.0.0.1:8765`; P5 / P10 `N/A + wajah`, gates **passed not skipped** | `D30`, `D31`, `C25`, `R13`, `O13` |
+| Four security headers | `_send()`: `Content-Security-Policy`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` (+ `Cache-Control: no-store`) | `test_security_headers_present`, `D32` QA #7 |
+| `MAX_BODY` | `1024 * 1024` (1 MiB) request cap → `413` | `test_body_size_cap_413`, `D32` |
+| `_authorize_path` | `realpath` + `commonpath`, authz `exists()` se pehle, symlink / junction / UNC reject, Windows guard | `test_reveal_rejects_sibling_prefix`, `test_scan_outside_*`, `D32` QA #3 |
+| `validate_llm_endpoint` | `server.py` SSRF gate; `research.py` `validate_url` + feed host allowlist = common allowlist (`O10` resolved) | `test_llm_endpoint_rejects_internal`, `D34` |
+| `_xml_precheck` | `firmware.py` DTD / `<!ENTITY` reject; `MAX_FILES=4000`, `MAX_DEPTH=6` | `test_dtd_entity_rejected`, `test_file_count_boundary_4000`, `D32` |
+| Masked settings | `_mask_settings` → `POST /api/settings` kabhi plaintext `llm_key` na return kare; `/api/status` `db` basename-only, `llm_key` `***` | `test_settings_no_secret_leak`, `test_status_no_abs_db_path` |
+| `db._session()` | context manager har connection close karta hai → `-W error::ResourceWarning` par zero `ResourceWarning` | `D33`, QA #10 fix |
+| Offline degradation | `research.py` feed timeout / 404 par graceful degrade, LLM error logging, rule-based fallback; `server._log` local-only logging (koi telemetry / off-site export) | `test_research_source_timeout_degrades_gracefully`, `test_llm_failure_logged_not_swallowed`, `D34` |
+| `tests/` folder | **8 files / 101 tests / 32 named regression-characterization tests**; `_harness.py` fixed throwaway `data/_p8_test.db`, SQL `DELETE FROM` reset, sab outbound network mocked | `D33`, `phases.md` §6 |
+| In-app KB | `knowledge.py` 5 naye glossary + 4 naye help entries + extended `SECURITY_NOTE`; `/api/knowledge` 200 (`glossary 18`, `help 14`, `official_routes 5`, `security_note`, `tool_arch 5`) | `AC-06`, `D34` |
+| UI chrome / O12 | `lang="en"`, 8 views / 8 nav items / 8 `role="tabpanel"` / 27 `sah*` IDs, zero inline `<script>`, `aria-live`, `:focus-visible`, `prefers-reduced-motion`; Roman Urdu content retained | `test_a11y_markup`, `D34` |
+
+**Central verification (2026-11-09):** `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → `Ran 101 tests in 77.621s — OK` (zero `ResourceWarning`) · `python -m py_compile db.py server.py firmware.py research.py sahulat.py knowledge.py tests/*.py` → `PY_COMPILE_OK` · `node --check web/app.js` → `NODE_CHECK_OK` · `agent.md` verbatim prefix SHA-256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH (`size 37314`, `CRLF False`) · docs `9/9` · `git diff --check` clean · `git remote -v` empty · `core.autocrlf=false`.
+
+**13 QA findings:** sab closed with passing regression tests (`D32`, `phases.md` §6). **Koi bypass capability add nahi hui** — app sirf read / validate / plan / record karta hai. **Deferred open questions:** O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 (`D34`) — inmein se koi resolution invent nahi kiya gaya.
