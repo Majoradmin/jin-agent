@@ -146,6 +146,11 @@ GLOSSARY = [
     ("Activation Lock", "Apple ka server-side anti-theft. Device par nahi, Apple activation database par rehta hai."),
     ("eFuse / Knox 0x1", "Samsung bootloader unlock par physical fuse trip — irreversible, sirf motherboard replacement."),
     ("EMUI 16", "Huawei ka 2026 wala global ROM (July 2026 launch, Android 16 AOSP base). China models HarmonyOS par hain; GMS officially nahi."),
+    ("SSRF", "Server-Side Request Forgery: jab app kisi user-diye URL par request bheje. MobileLab sirf fixed feed allowlist aur public-IP validation ke baad bahar jata hai; internal, localhost aur metadata addresses block hote hain."),
+    ("CSP", "Content-Security-Policy HTTP header: browser ko batata hai ke script, style aur connections sirf 'self' se aayein. Is se koi injected script ya bahri resource load nahi ho sakta."),
+    ("XML DTD/entity", "XML ka DOCTYPE / ENTITY declaration, jo external file ya network se data mangwa sakta hai (XXE). MobileLab rawprogram / patch XML ko parse karne se pehle inhen reject kar deta hai."),
+    ("WAL", "Write-Ahead Logging: SQLite ka journal mode jisme tabdeeliyan pehle -wal file mein likhi jati hain, is liye read aur write aik doosre ko nahi rokte aur local DB mehfooz rehti hai."),
+    ("loopback", "127.0.0.1 / localhost yani aap ka apna PC. Server sirf isi address par sunta hai, is liye app LAN ya Internet par expose nahi hoti."),
 ]
 
 HELP = [
@@ -159,6 +164,10 @@ HELP = [
     ("Optional LLM", "Settings mein koi OpenAI-compatible endpoint + key + model bhar dein to top 12 khabaroon ka khulasa model se natural Roman Urdu mein likha jayega. Warna built-in offline rule-based khulasa chalta hai."),
     ("Privacy", "SQLite DB data/mobilelab.db mein hai. Scan aur catalog bilkul offline. Research tab hi internet use karta hai aur woh bhi sirf public RSS/JSON feeds se."),
     ("Band karne ke liye", "run.bat wali black window band kar dein ya Ctrl+C dabayein."),
+    ("Offline mode", "Research Agent jab feeds (Google News, HN, GitHub, RSS) na milein to crash nahi karta: har source apni jagah fail hota hai, 'diagnostics' mein wajah likhi jati hai aur baqi natije — ya khali, saaf saakht — wapas aate hain. Scan, catalog, model card aur case register to bilkul offline hi chalte hain."),
+    ("Python 3.10+ guard", "run.bat pehle python / py dhoondta hai, phir sys.version_info se major.minor parrh kar 3.10 se chhota version reject karta hai, kyunke naye type hints purane Python par import hi nahi hote. Koi install nahi — sirf Python 3.10+ chahiye."),
+    ("Policy & toolkit kahan", "Sahulat & Safe Service Policy aur official-route toolkit 'Sahulat / Official Route' view (left nav, 8th view) mein hai: request-check, 6 brand-wise official links, required documents, proof checklist, consent, Roman Urdu / English letter aur case register aik jagah. Mukammal boundary 'Knowledge / Help' view mein bhi maujood hai."),
+    ("Local test suite", "Tests chalane ke liye MobileLab folder mein ye command likhein: python -m unittest discover -s tests -p \"test_*.py\". Ye temporary DB aur loopback server use karta hai; production DB aur live internet kabhi touch nahi karta."),
 ]
 
-SECURITY_NOTE = "Hassas partitions (frp, persistent, config, devinfo, modemst1/2, nvram, nvdata, seccfg, proinfo, ...) sirf FLAG kiye jate hain taake aap galti se identity / calibration data na mitayein. App in par koi write/erase operation nahi banata."
+SECURITY_NOTE = "Hassas partitions (frp, persistent, config, devinfo, modemst1/2, nvram, nvdata, seccfg, proinfo, ...) sirf FLAG kiye jate hain taake aap galti se identity / calibration data na mitayein. App in par koi write/erase operation nahi banata. Is ke sath security headers, 1 MiB body cap, path authorization, SSRF validation, XML safe-check aur masked settings active hain; hassas partitions sirf FLAG hote hain, un par kabhi write nahi hota."

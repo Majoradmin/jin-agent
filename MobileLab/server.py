@@ -1,13 +1,18 @@
 """MobileLab local HTTP server (Python standard library only)."""
 from __future__ import annotations
 
+import ipaddress
 import json
+import math
 import os
+import re
+import socket
 import sys
 import threading
 import time
 import traceback
 import urllib.parse
+import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -28,6 +33,261 @@ MIME = {".html": "text/html; charset=utf-8", ".js": "application/javascript; cha
         ".css": "text/css; charset=utf-8", ".ico": "image/x-icon", ".svg": "image/svg+xml",
         ".json": "application/json; charset=utf-8"}
 
+# ---------------------------------------------------------------------------
+# Security constants (P9 / QA #7)
+# ---------------------------------------------------------------------------
+MAX_BODY = 1024 * 1024                      # ~1 MiB request cap -> 413
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+       "base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+WORKSPACE = os.path.realpath(BASE)         # default scan / reveal boundary (C6 / QA #3)
+
+# Bounded research-cache housekeeping (QA #10). research.py owns _CACHE; this
+# is a guarded, additive guard so it can never break a request.
+_CACHE_MAX = 256
+_CACHE_TTL = 24 * 3600
+
+# llm_endpoint SSRF blocklist hostnames (QA #6).
+_BLOCKED_HOSTS = {"localhost", "metadata", "metadata.google.internal",
+                  "metadata.goog", "instance-data"}
+
+
+class _BadParam(ValueError):
+    """Invalid query parameter -> 400 with a concise Roman Urdu reason."""
+
+
+class _BodyTooLarge(Exception):
+    """Request body over the cap -> 413."""
+
+
+class _PathDenied(Exception):
+    """Path authorization failure -> 4xx (never a stack trace / abs path)."""
+
+
+# Windows absolute paths / UNC paths must never reach a client in an error.
+_ABS_PATH = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s,;'\"]+|\\\\[^\s,;'\"]+")
+
+
+def _scrub(msg) -> str:
+    """Strip stack traces and absolute internal paths from any error reason (QA #11)."""
+    text = _ABS_PATH.sub("[path]", str(msg))
+    text = " ".join(ln for ln in text.splitlines()
+                    if "Traceback" not in ln and not ln.lstrip().startswith("File "))
+    return (text.strip() or "Ghalat darkhwast")[:400]
+
+
+def _log(context: str, exc: BaseException | None = None) -> None:
+    """Server-side logging only; never part of an API response (QA #11 / QA #12)."""
+    if exc is None:
+        print("[MobileLab] " + context, file=sys.stderr)
+    else:
+        print("[MobileLab] %s: %s: %s" % (context, type(exc).__name__, exc),
+              file=sys.stderr)
+
+
+def _truthy(v) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return v != 0
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes", "on")
+    return False
+
+
+def _parse_num(raw, *, default, cast, lo=None, hi=None, name="parameter"):
+    """Safe numeric parse of a query param (QA #2). Non-numeric -> _BadParam.
+
+    Numeric out-of-range values are clamped (lo/hi); non-numeric / NaN / Inf
+    raise so the handler returns 400 JSON instead of an uncaught 500.
+    """
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return cast(default)
+    try:
+        val = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        raise _BadParam(f"{name} ghalat hai; sahih number likhein")
+    if not math.isfinite(val):
+        raise _BadParam(f"{name} ghalat hai; sahih number likhein")
+    if lo is not None and hi is not None:
+        val = max(lo, min(hi, val))
+    return cast(val)
+
+
+# ---------------------------------------------------------------------------
+# Path authorization (QA #3): realpath + commonpath, authorize before exists().
+# ---------------------------------------------------------------------------
+def _is_unc(p: str) -> bool:
+    return p.replace("/", "\\").startswith("\\\\")
+
+
+def _within(real: str) -> bool:
+    try:
+        common = os.path.commonpath([real, WORKSPACE])
+    except (ValueError, OSError):
+        return False                       # different drives / malformed paths
+    return os.path.normcase(common) == os.path.normcase(WORKSPACE)
+
+
+def _authorize_path(raw: str, allow_outside: bool = False, extra=()) -> str:
+    """Return realpath if authorized, else raise _PathDenied (before any exists())."""
+    if not raw or not isinstance(raw, str):
+        raise _PathDenied("Path likhein")
+    if _is_unc(raw):
+        raise _PathDenied("UNC ya network path ki ijazat nahi hai")
+    # QA #7 fix: /api/status no longer exposes an absolute DB path, so the UI
+    # offers a RELATIVE sample folder instead. Resolve such paths against BASE
+    # (not the process CWD) and strip leading separators to avoid drive-root escapes.
+    drive, tail = os.path.splitdrive(raw)
+    if not drive:
+        raw = os.path.join(BASE, tail.lstrip("\\/"))
+    try:
+        real = os.path.realpath(raw)
+        lex = os.path.abspath(raw)
+    except (OSError, ValueError):
+        raise _PathDenied("Path ghalat hai")
+    # Symlink / junction / '..' escape: lexical inside workspace, resolved outside.
+    if _within(lex) and not _within(real):
+        raise _PathDenied("Symlink se workspace se bahar jane ki ijazat nahi hai")
+    norm_real = os.path.normcase(real)
+    norm_lex = os.path.normcase(lex)
+    # Legitimate scanned-package paths (revealed after an explicit scan).
+    for p in extra:
+        try:
+            np = os.path.normcase(os.path.abspath(p))
+        except (OSError, ValueError):
+            continue
+        if np in (norm_real, norm_lex):
+            return real
+    if _within(real) or allow_outside:
+        return real
+    raise _PathDenied("Workspace se bahar ka folder ijazat nahi hai; "
+                      "allow_outside=true chahiye")
+
+
+# ---------------------------------------------------------------------------
+# llm_endpoint SSRF validator (implemented LOCALLY, QA #6).
+# ---------------------------------------------------------------------------
+def _ip_is_internal(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return (ip.is_private or ip.is_loopback or ip.is_link_local or
+            ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
+def _check_endpoint(url: str):
+    """Return (ok, Roman Urdu reason). http/https only; block internal hosts/IPs.
+
+    The resolved destination IP is validated with ipaddress + socket. Public
+    hostnames are allowed without a live DNS lookup (offline-tolerant), so a
+    valid configured endpoint is never blocked just because DNS is unavailable.
+    """
+    if not url:
+        return True, ""                    # empty endpoint = feature disabled
+    if not isinstance(url, str):
+        return False, "Endpoint ghalat hai"
+    parsed = urllib.parse.urlparse(url.strip())
+    if parsed.scheme not in ("http", "https"):
+        return False, "Sirf http/https endpoint ki ijazat hai"
+    if parsed.username or parsed.password:
+        return False, "Endpoint mein credentials ki ijazat nahi hai"
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        return False, "Endpoint host ghalat hai"
+    if host in _BLOCKED_HOSTS or host.endswith(".localhost") or host.endswith(".internal"):
+        return False, "Internal endpoint ki ijazat nahi hai"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        ip = ipaddress.ip_address(host)
+        is_literal = True
+    except ValueError:
+        is_literal = False
+    if is_literal:
+        # Validate the literal AND its resolved addresses (no DNS needed).
+        try:
+            resolved = [i[4][0] for i in socket.getaddrinfo(host, port)]
+        except (socket.gaierror, OSError, ValueError):
+            resolved = [host]
+        for addr in resolved:
+            if _ip_is_internal(addr):
+                return False, "Internal IP endpoint ki ijazat nahi hai"
+        return True, ""
+    # Non-literal public hostname: no live DNS (offline app); allow it.
+    return True, ""
+
+
+def validate_llm_endpoint(url: str) -> bool:
+    """Public local SSRF validator. True = endpoint allowed."""
+    return _check_endpoint(url)[0]
+
+
+# Neutral aliases so callers can reach the local validator by a generic name.
+validate_endpoint = validate_llm_endpoint
+is_safe_endpoint = validate_llm_endpoint
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None                        # redirects disabled (QA #6)
+
+
+def build_no_redirect_opener():
+    """urllib.request opener with redirects disabled (QA #6)."""
+    return urllib.request.build_opener(_NoRedirect)
+
+
+def _safe_settings(s: dict) -> dict:
+    """Point-of-use guard: never send the optional LLM request to an internal host."""
+    out = dict(s)
+    ep = (out.get("llm_endpoint") or "").strip()
+    if ep:
+        ok, reason = _check_endpoint(ep)
+        if not ok:
+            _log("llm_endpoint SSRF blocked: " + reason)   # QA #12: not swallowed
+            out["llm_endpoint"] = ""       # disable the outbound LLM rewrite
+    return out
+
+
+def _prune_research_cache():
+    """Keep research._CACHE bounded (LRU + TTL). Guarded: research.py owns it."""
+    try:
+        cache = getattr(research, "_CACHE", None)
+        if not isinstance(cache, dict):
+            return
+        now = time.time()
+        for k, v in list(cache.items()):
+            ts = v[0] if isinstance(v, tuple) and v and isinstance(v[0], (int, float)) else None
+            if ts is None or now - ts > _CACHE_TTL:
+                cache.pop(k, None)
+        while len(cache) > _CACHE_MAX:
+            try:
+                oldest = min(cache, key=lambda k: cache[k][0]
+                             if isinstance(cache[k], tuple) and cache[k] else 0)
+            except Exception:
+                break
+            cache.pop(oldest, None)
+    except Exception:
+        pass                              # housekeeping must never break a request
+
+
+def _mask_settings(s: dict) -> dict:
+    """Never echo a plaintext llm_key; keep the '***' indicator (QA #1)."""
+    out = dict(s)
+    if out.get("llm_key"):
+        out["llm_key"] = "***"
+    return out
+
+
+# Strict action -> (parameterized SQL, value) allowlist (QA #8).
+_ARTICLE_UPDATES = {
+    "save":   ("UPDATE articles SET saved=? WHERE guid=?", 1),
+    "unsave": ("UPDATE articles SET saved=? WHERE guid=?", 0),
+    "read":   ("UPDATE articles SET is_read=? WHERE guid=?", 1),
+    "unread": ("UPDATE articles SET is_read=? WHERE guid=?", 0),
+}
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "MobileLab/" + VERSION
@@ -43,6 +303,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", CSP)
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -56,15 +319,31 @@ class Handler(BaseHTTPRequestHandler):
                    "application/json; charset=utf-8")
 
     def _err(self, msg: str, code: int = 400):
-        self._json({"error": msg}, code)
+        self._json({"error": _scrub(msg)}, code)
 
     def _body(self) -> dict:
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            if not n:
-                return {}
+        except (TypeError, ValueError):
+            n = 0
+        if n < 0:
+            n = 0
+        if n > MAX_BODY:
+            # Drain the rejected body so the connection closes cleanly (no RST),
+            # otherwise the client cannot read the 413 JSON error.
+            remaining = n
+            while remaining > 0:
+                chunk = self.rfile.read(min(65536, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+            raise _BodyTooLarge()
+        if not n:
+            return {}
+        try:
             return json.loads(self.rfile.read(n).decode("utf-8"))
-        except Exception:
+        except Exception as e:
+            _log("malformed JSON body", e)  # QA #12: log, don't silently swallow
             return {}
 
     def _query(self) -> dict:
@@ -82,22 +361,34 @@ class Handler(BaseHTTPRequestHandler):
             if not path.startswith("/api/"):
                 return self._err("Not found", 404)
             return self._api_get(path)
-        except Exception as e:
-            traceback.print_exc()
-            return self._err(f"Server error: {e}", 500)
+        except _BadParam as e:
+            return self._err(str(e), 400)
+        except _BodyTooLarge:
+            return self._err("Request body bohat bara hai", 413)
+        except _PathDenied as e:
+            return self._err(str(e), 403)
+        except Exception:
+            traceback.print_exc()         # server-side only (QA #11)
+            return self._err("Server mein masla aaya; dobara koshish karein", 500)
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         try:
             return self._api_post(path, self._body())
-        except Exception as e:
+        except _BodyTooLarge:
+            return self._err("Request body bohat bara hai", 413)
+        except _BadParam as e:
+            return self._err(str(e), 400)
+        except _PathDenied as e:
+            return self._err(str(e), 400)
+        except Exception:
             traceback.print_exc()
-            return self._err(f"Server error: {e}", 500)
+            return self._err("Server mein masla aaya; dobara koshish karein", 500)
 
     def do_DELETE(self):
         path = urllib.parse.urlparse(self.path).path
         try:
-            m = __import__("re").match(r"/api/packages/(\d+)$", path)
+            m = re.match(r"/api/packages/(\d+)$", path)
             if not m:
                 return self._err("Not found", 404)
             pid = int(m.group(1))
@@ -106,8 +397,11 @@ class Handler(BaseHTTPRequestHandler):
             db.execute("DELETE FROM package_files WHERE package_id=?", (pid,))
             db.execute("DELETE FROM packages WHERE id=?", (pid,))
             return self._json({"ok": True, "deleted": pid})
-        except Exception as e:
-            return self._err(str(e), 500)
+        except _BadParam as e:
+            return self._err(str(e), 400)
+        except Exception:
+            traceback.print_exc()
+            return self._err("Server mein masla aaya; dobara koshish karein", 500)
 
     def _static(self, name: str):
         full = os.path.join(WEB, name)
@@ -126,10 +420,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({
                 "app": "MobileLab", "version": VERSION,
                 "python": sys.version.split()[0],
-                "db": db.DB_PATH, "web": "http://127.0.0.1:%d" % PORT,
+                "db": os.path.basename(db.DB_PATH),   # QA #7: no absolute DB path
+                "sample_dir": os.path.join("samples", "MTK_Demo_MT6899_UFS"),  # relative hint only
+                "web": "http://127.0.0.1:%d" % PORT,
                 "counts": db.counts(), "sources": len(research.ALL_SOURCES),
                 "policy": sahulat.POLICY["name"], "policy_id": sahulat.POLICY_ID,
-                "settings": {k: (("***" if k == "llm_key" and s.get(k) else s.get(k, ""))) for k in s},
+                "settings": _mask_settings(s),
                 "security_note": knowledge.SECURITY_NOTE,
             })
 
@@ -151,16 +447,24 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         if path == "/api/research":
+            # QA #2: validate all numeric query params before research parses them.
+            days = _parse_num(q.get("days"), cast=int, default=0,
+                              lo=0, hi=3650, name="days")
+            min_score = _parse_num(q.get("min_score"), cast=float, default=0.0,
+                                   name="min_score")
+            limit = _parse_num(q.get("limit"), cast=int, default=70,
+                               lo=5, hi=200, name="limit")
             params = {
                 "q": q.get("q", ""), "preset": q.get("preset", "all"),
                 "category": q.get("category", "all"), "exclude": q.get("exclude", ""),
-                "days": q.get("days", "0"), "min_score": q.get("min_score", "0"),
-                "limit": q.get("limit", "70"), "refresh": q.get("refresh", "0") in ("1", "true", "yes"),
+                "days": days, "min_score": min_score, "limit": limit,
+                "refresh": q.get("refresh", "0") in ("1", "true", "yes"),
             }
             if q.get("sources"):
                 params["sources"] = [x for x in q["sources"].split(",") if x]
-            settings = db.get_settings()
+            settings = _safe_settings(db.get_settings())
             result = research.research(params, settings)
+            _prune_research_cache()
             if result["items"]:
                 db.upsert_articles(result["items"])
                 guids = [i["guid"] for i in result["items"]]
@@ -183,11 +487,26 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"items": items})
 
         if path == "/api/packages":
-            return self._json({"items": db.rows(
-                "SELECT id,name,path,oem,model,platform,chipset,storage,file_count,total_size,health,tags,created_at "
-                "FROM packages ORDER BY created_at DESC")})
+            cols = ("SELECT id,name,path,oem,model,platform,chipset,storage,file_count,"
+                    "total_size,health,tags,created_at FROM packages")
+            total = db.one("SELECT COUNT(*) n FROM packages")["n"]
+            if q.get("limit") is not None or q.get("offset") is not None:
+                lim = _parse_num(q.get("limit"), cast=int, default=25,
+                                 lo=1, hi=200, name="limit")
+                off = _parse_num(q.get("offset"), cast=int, default=0,
+                                 lo=0, hi=10 ** 9, name="offset")
+                items = db.rows(cols + " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                                (lim, off))
+                page = off // lim + 1
+                pages = max(1, math.ceil(total / lim))
+            else:
+                items = db.rows(cols + " ORDER BY created_at DESC")
+                page, pages = 1, 1
+            # additive fields only -> frontend keeps working unchanged (QA #10)
+            return self._json({"items": items, "total": total,
+                               "page": page, "pages": pages})
 
-        m = __import__("re").match(r"/api/packages/(\d+)$", path)
+        m = re.match(r"/api/packages/(\d+)$", path)
         if m:
             p = db.package_detail(int(m.group(1)))
             if not p:
@@ -216,11 +535,12 @@ class Handler(BaseHTTPRequestHandler):
                     live = research.research({
                         "q": term, "preset": "all", "category": "all", "limit": 12,
                         "sources": ["gnews", "gsmarena", "xda", "sammobile"], "min_score": 0,
-                    }, db.get_settings())
+                    }, _safe_settings(db.get_settings()))
                     live = {"items": live["items"][:10], "fetched_at": live["fetched_at"],
                             "diagnostics": live["diagnostics"]}
                 except Exception as e:
-                    live = {"error": str(e)[:180]}
+                    _log("model-brief live research", e)   # QA #12: log, don't swallow
+                    live = {"error": "Live research dastiyab nahi"}
             return self._json({"term": term, "card": card, "packages": rel, "live": live,
                                "official": knowledge.OFFICIAL_ROUTES})
 
@@ -228,10 +548,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"items": db.rows("SELECT * FROM jobs ORDER BY created_at DESC LIMIT 200")})
 
         if path == "/api/settings":
-            s = db.get_settings()
-            if s.get("llm_key"):
-                s["llm_key"] = "***"
-            return self._json(s)
+            return self._json(_mask_settings(db.get_settings()))
 
         # ---- Sahulat & Safe Service Toolkit (PHASE 1B) ----
         if path == "/api/sahulat/overview":
@@ -251,8 +568,18 @@ class Handler(BaseHTTPRequestHandler):
             raw = (b.get("path") or "").strip().strip('"')
             if not raw:
                 return self._err("Folder path likhein.", 400)
-            scan = firmware.scan_folder(raw)
-            report = firmware.validate(scan)
+            q = self._query()
+            allow_outside = (_truthy(b.get("allow_outside")) or
+                             _truthy(q.get("allow_outside")))
+            try:
+                real = _authorize_path(raw, allow_outside)
+            except _PathDenied as e:
+                return self._err(str(e), 400)
+            try:
+                scan = firmware.scan_folder(real)
+                report = firmware.validate(scan)
+            except ValueError:
+                return self._err("Folder maujood nahi hai; sahi path likhein", 400)
             pid = db.save_package(scan, report, name=b.get("name", ""),
                                   tags=b.get("tags", ""), notes=b.get("notes", ""))
             return self._json({"ok": True, "id": pid, "report": report,
@@ -263,12 +590,10 @@ class Handler(BaseHTTPRequestHandler):
             act = b.get("action", "save")
             if not guid:
                 return self._err("guid chahiye", 400)
-            col, val = ("saved", 1) if act in ("save", "unread") else ("saved", 0)
-            if act in ("read", "unread"):
-                col, val = ("is_read", 1 if act == "read" else 0)
-            if act == "unsave":
-                col, val = ("saved", 0)
-            db.execute(f"UPDATE articles SET {col}=? WHERE guid=?", (val, guid))
+            if act not in _ARTICLE_UPDATES:
+                return self._err("Action ghalat hai", 400)
+            sql, val = _ARTICLE_UPDATES[act]
+            db.execute(sql, (val, guid))
             return self._json({"ok": True, "guid": guid, "action": act})
 
         if path == "/api/models":
@@ -298,8 +623,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/settings":
             data = dict(b)
             if data.get("llm_key") == "***":
-                data.pop("llm_key")
-            return self._json({"ok": True, "settings": db.set_settings(data)})
+                data.pop("llm_key")        # preserve the stored key on round-trip
+            ep = (data.get("llm_endpoint") or "").strip()
+            if ep:
+                ok, reason = _check_endpoint(ep)
+                if not ok:
+                    return self._err(reason, 400)   # QA #6: reject internal endpoint
+            return self._json({"ok": True, "settings": _mask_settings(db.set_settings(data))})
 
         # ---- Sahulat & Safe Service Toolkit (PHASE 1B) ----
         if path == "/api/sahulat/letter":
@@ -333,17 +663,25 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/reveal":
             target = (b.get("path") or "").strip()
-            if not target or not os.path.exists(target):
-                return self._err("Path maujood nahi hai", 400)
-            allowed = os.path.abspath(target).lower().startswith(BASE.lower()) or bool(
-                db.one("SELECT id FROM packages WHERE path=?", (os.path.abspath(target),)))
-            if not allowed:
-                return self._err("Sirf scanned packages ya workspace folder khol sakte hain", 403)
+            if not target:
+                return self._err("Path likhein", 400)
+            q = self._query()
+            allow_outside = (_truthy(b.get("allow_outside")) or
+                             _truthy(q.get("allow_outside")))
             try:
-                os.startfile(os.path.abspath(target))  # Windows Explorer
+                extra = [r["path"] for r in db.rows("SELECT path FROM packages") if r.get("path")]
+                real = _authorize_path(target, allow_outside, extra=extra)
+            except _PathDenied as e:
+                return self._err(str(e), 403)
+            # authorize BEFORE existence checks (QA #3)
+            if not os.path.exists(real):
+                return self._err("Path maujood nahi hai", 400)
+            try:
+                os.startfile(real)          # Windows Explorer
                 return self._json({"ok": True})
             except Exception as e:
-                return self._err(str(e), 500)
+                _log("os.startfile", e)
+                return self._err("Folder kholne mein masla aaya", 500)
 
         return self._err("Unknown API: " + path, 404)
 

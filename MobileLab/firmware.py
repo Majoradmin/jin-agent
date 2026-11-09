@@ -1,10 +1,15 @@
-"""Firmware package scanner + validator.
+"""Firmware package scanner + validator (READ / VALIDATE ONLY).
 
-Handles MediaTek (scatter / preloader / DA) and Qualcomm
-(Sahara-Firehose programmer / rawprogram / patch / GPT) flash packages.
+Handles MediaTek (scatter / preloader / DA) and Qualcomm (Sahara-Firehose
+programmer / rawprogram / patch / GPT) flash packages.
 
-Scope note: this module INSPECTS and VALIDATES packages. It never generates
-erase/write scripts for account, FRP, IMEI or ownership partitions.
+Read-only validation boundary: this module INSPECTS and VALIDATES only. It
+never writes, erases, flashes or boots a device, never touches the bootloader
+or IMEI, and never generates erase/write scripts for account/FRP/ownership
+partitions. ``SENSITIVE_PARTITIONS`` are FLAGGED for technician review, never
+written or erased. Qualcomm rawprogram/patch XML is pre-validated to reject
+DTD/ENTITY and external references before parsing (no external file or
+network access is ever resolved).
 """
 from __future__ import annotations
 
@@ -189,11 +194,77 @@ def parse_scatter(text: str) -> dict:
     return out
 
 
+# Qualcomm XML safe parsing (QA #5). DTD / ENTITY / external references are
+# rejected BEFORE ElementTree (local Expat) ever parses the bytes, so no
+# external file or network reference can be resolved.
+
+def _xml_scan_text(data: bytes) -> str:
+    """Decode raw XML bytes so ASCII DTD/ENTITY keywords stay visible.
+
+    Handles UTF-8/ASCII-compatible encodings, UTF-16/32 BOMs and the XML
+    ``encoding`` declaration.
+    """
+    # UTF-32 BOMs must be checked first (LE UTF-32 starts with the UTF-16 BOM).
+    if data.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+        return data.decode("utf-32", errors="replace")
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return data.decode("utf-16", errors="replace")
+    head = data[:256].decode("ascii", errors="ignore")
+    m = re.search(r"encoding\s*=\s*['\"]([A-Za-z0-9_.:-]+)['\"]", head, re.I)
+    enc = (m.group(1) if m else "utf-8").lower().replace("-", "").replace("_", "")
+    if enc.startswith("utf16"):
+        return data.decode("utf-16", errors="replace")
+    if enc.startswith("utf32"):
+        return data.decode("utf-32", errors="replace")
+    return data.decode("utf-8-sig", errors="replace")
+
+
+# Comments / CDATA are stripped first: they are data, not declarations, so a
+# word like SYSTEM inside a comment must not cause a false positive either.
+_XML_DECL_RE = re.compile(r"<!\s*(?:DOCTYPE|ENTITY|NOTATION)\b", re.I)
+_XML_EXTERNAL_ID_RE = re.compile(r"<!\s*[^>]*\b(?:SYSTEM|PUBLIC)\b", re.I)
+
+
+def _xml_precheck(data: bytes | str) -> str:
+    """Return a safe Roman-Urdu error if DTD/entity/external markup is present.
+
+    An empty string means the content is safe to hand to ElementTree. Covers
+    DOCTYPE, general/parameter/external ENTITY, NOTATION, and SYSTEM/PUBLIC
+    external identifiers. Parsing is skipped entirely on rejection.
+    """
+    text = data if isinstance(data, str) else _xml_scan_text(data)
+    scan = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    scan = re.sub(r"<!\[CDATA\[.*?\]\]>", " ", scan, flags=re.S)
+    if _XML_DECL_RE.search(scan):
+        return ("XML safe-check: DOCTYPE / ENTITY (DTD ya external entity) "
+                "declaration mila — security policy isay reject karti hai, "
+                "file parse nahi ki gayi.")
+    if _XML_EXTERNAL_ID_RE.search(scan):
+        return ("XML safe-check: external (SYSTEM / PUBLIC) reference mila — "
+                "security policy isay reject karti hai, file parse nahi ki gayi.")
+    return ""
+
+
+def _parse_safe_xml(path: str) -> ET.Element:
+    """Read, pre-validate, then parse a Qualcomm XML file with ElementTree.
+
+    Raises ValueError with a clear safe reason when DTD/entity/external
+    references are present, before any Expat parsing occurs.
+    """
+    with open(path, "rb") as f:
+        data = f.read()
+    err = _xml_precheck(data)
+    if err:
+        raise ValueError(err)
+    return ET.fromstring(data)
+
+
 def parse_program_xml(path: str) -> dict:
+    """Parse a Qualcomm rawprogram*.xml (READ-ONLY) into program entries."""
     out: dict = {"entries": [], "sector_size": 0, "luns": set(), "ok": False, "error": ""}
     try:
-        tree = ET.parse(path)
-        for el in tree.iter():
+        root = _parse_safe_xml(path)
+        for el in root.iter():
             if el.tag.lower().split("}")[-1] != "program":
                 continue
             a = {k.lower(): v for k, v in el.attrib.items()}
@@ -211,10 +282,11 @@ def parse_program_xml(path: str) -> dict:
 
 
 def parse_patch_xml(path: str) -> dict:
+    """Parse a Qualcomm patch*.xml (READ-ONLY) and count patch elements."""
     out: dict = {"count": 0, "ok": False, "error": ""}
     try:
-        tree = ET.parse(path)
-        out["count"] = sum(1 for el in tree.iter() if el.tag.lower().split("}")[-1] == "patch")
+        root = _parse_safe_xml(path)
+        out["count"] = sum(1 for el in root.iter() if el.tag.lower().split("}")[-1] == "patch")
         out["ok"] = True
     except Exception as e:
         out["error"] = f"Patch XML parse error: {e}"

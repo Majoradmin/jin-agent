@@ -6,6 +6,7 @@ import os
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE, "data")
@@ -131,8 +132,25 @@ def connect() -> sqlite3.Connection:
     return con
 
 
+@contextmanager
+def _session():
+    """Yield a connection, commit/rollback on exit, then ALWAYS close it.
+
+    ``with sqlite3.connect(...)`` only manages the transaction -- it does not
+    close the handle. Explicit closing removes ResourceWarning leaks under the
+    full P8 regression suite.
+    """
+    with _LOCK:
+        con = connect()
+        try:
+            with con:
+                yield con
+        finally:
+            con.close()
+
+
 def init() -> None:
-    with _LOCK, connect() as con:
+    with _session() as con:
         con.executescript(SCHEMA)
         for k, v in DEFAULT_SETTINGS.items():
             con.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (k, v))
@@ -140,18 +158,18 @@ def init() -> None:
 
 
 def rows(sql: str, args=()) -> list[dict]:
-    with _LOCK, connect() as con:
+    with _session() as con:
         return [dict(r) for r in con.execute(sql, args).fetchall()]
 
 
 def one(sql: str, args=()):
-    with _LOCK, connect() as con:
+    with _session() as con:
         r = con.execute(sql, args).fetchone()
         return dict(r) if r else None
 
 
 def execute(sql: str, args=()) -> int:
-    with _LOCK, connect() as con:
+    with _session() as con:
         cur = con.execute(sql, args)
         con.commit()
         return cur.lastrowid or 0
@@ -170,35 +188,49 @@ def set_settings(data: dict) -> dict:
 
 
 def save_package(scan: dict, report: dict, name: str = "", tags: str = "", notes: str = "") -> int:
+    """Insert the package and all its files in ONE connection / transaction (QA #10)."""
     meta = scan.get("meta", {})
-    pid = execute(
-        """INSERT INTO packages
-           (name,path,oem,model,platform,chipset,storage,file_count,total_size,health,tags,notes,report_json,created_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (
-            name or os.path.basename(scan["root"]),
-            scan["root"],
-            meta.get("oem", ""),
-            meta.get("model", ""),
-            meta.get("platform", ""),
-            meta.get("chipset", ""),
-            meta.get("storage", ""),
-            len(scan.get("files", [])),
-            scan.get("total_size", 0),
-            report.get("health", 0),
-            tags,
-            notes,
-            json.dumps(report, ensure_ascii=False),
-            time.time(),
-        ),
-    )
-    for f in scan.get("files", []):
-        execute(
-            "INSERT INTO package_files(package_id,relpath,size,fingerprint,kind,meta_json) VALUES(?,?,?,?,?,?)",
-            (pid, f["relpath"], f["size"], f.get("fingerprint", ""), f.get("kind", ""),
-             json.dumps(f.get("meta", {}), ensure_ascii=False)),
-        )
-    return pid
+    with _LOCK:
+        con = connect()
+        try:
+            cur = con.execute(
+                """INSERT INTO packages
+                   (name,path,oem,model,platform,chipset,storage,file_count,total_size,health,tags,notes,report_json,created_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    name or os.path.basename(scan["root"]),
+                    scan["root"],
+                    meta.get("oem", ""),
+                    meta.get("model", ""),
+                    meta.get("platform", ""),
+                    meta.get("chipset", ""),
+                    meta.get("storage", ""),
+                    len(scan.get("files", [])),
+                    scan.get("total_size", 0),
+                    report.get("health", 0),
+                    tags,
+                    notes,
+                    json.dumps(report, ensure_ascii=False),
+                    time.time(),
+                ),
+            )
+            pid = cur.lastrowid or 0
+            file_rows = [
+                (pid, f["relpath"], f["size"], f.get("fingerprint", ""),
+                 f.get("kind", ""), json.dumps(f.get("meta", {}), ensure_ascii=False))
+                for f in scan.get("files", [])
+            ]
+            if file_rows:
+                con.executemany(
+                    "INSERT INTO package_files(package_id,relpath,size,fingerprint,kind,meta_json) "
+                    "VALUES(?,?,?,?,?,?)", file_rows)
+            con.commit()
+            return pid
+        except Exception:
+            con.rollback()
+            raise
+        finally:
+            con.close()
 
 
 def package_detail(pid: int) -> dict | None:
@@ -232,7 +264,7 @@ def duplicate_files(fingerprint: str, exclude_pid: int | None = None) -> list[di
 
 
 def upsert_articles(items: list[dict]) -> None:
-    with _LOCK, connect() as con:
+    with _session() as con:
         for a in items:
             con.execute(
                 """INSERT INTO articles

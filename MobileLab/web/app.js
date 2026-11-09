@@ -5,7 +5,8 @@ const $  = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const human = (n) => { n = +n || 0; const u=['B','KB','MB','GB','TB']; let i=0; while(n>=1024&&i<4){n/=1024;i++;} return (i?n.toFixed(1):n.toFixed(0))+' '+u[i]; };
-/* QA #4: only http/https links may become href. javascript:/data: rejected. */
+/* QA #4: EVERY external href is funnelled through safe_url()/linkHtml().
+   http/https only; javascript:, data:, and malformed URLs are rejected. */
 const safe_url = (u) => {
   const s = String(u ?? '').trim();
   if (!/^https?:\/\//i.test(s)) return '';
@@ -20,20 +21,20 @@ const linkHtml = (u, text, cls = '') => {
 };
 
 const TITLES = {
-  dashboard: ['Dashboard', 'Aap ka local mobile-software workspace'],
-  packages:  ['Firmware Packages', 'Scan, validate aur catalog — MTK scatter/preloader/DA aur Qualcomm Firehose'],
-  research:  ['Research Agent', 'Live browsing, filters aur Roman Urdu khulasa'],
-  models:    ['Model Brief', 'Local model card + usi model par live information'],
-  jobs:      ['Job Register', 'IMEI, ownership proof aur official route ka record'],
-  sahulat:   ['Sahulat / Official Route', 'Checklist, consent, service-request letter aur case register — wajah + official link ke saath'],
-  knowledge: ['Knowledge / Help', 'Research findings, official routes, glossary aur setup'],
-  settings:  ['Settings', 'Ikhtiyari LLM aur app preferences'],
+  dashboard: ['Dashboard', 'Your local mobile-software workspace'],
+  packages:  ['Firmware Packages', 'Scan, validate and catalog — MTK scatter/preloader/DA and Qualcomm Firehose'],
+  research:  ['Research Agent', 'Live browsing, filters and Roman Urdu summaries'],
+  models:    ['Model Brief', 'Local model card and live information for this model'],
+  jobs:      ['Job Register', 'IMEI, ownership proof and official route records'],
+  sahulat:   ['Sahulat / Official Route', 'Checklist, consent, service-request letter and case register — with reason + official link'],
+  knowledge: ['Knowledge / Help', 'Research findings, official routes, glossary and setup'],
+  settings:  ['Settings', 'Optional LLM and app preferences'],
 };
 
 const state = {
   status: null, sources: [], presets: [], categories: [], knowledge: null,
   packages: [], selected: null, researchLoaded: false, savedMode: false,
-  preset: 'all', lastItems: [], basePath: '',
+  preset: 'all', lastItems: [], sampleDir: '',
   sahulat: null, sahLoaded: false,
 };
 
@@ -54,14 +55,21 @@ function toast(msg, bad = false) {
 function busy(btn, on, label) {
   if (!btn) return;
   btn.disabled = on;
-  if (on) { btn._l = btn.textContent; btn.textContent = label || 'Chal raha hai…'; }
+  if (on) { btn._l = btn.textContent; btn.textContent = label || 'Working…'; }
   else btn.textContent = btn._l || btn.textContent;
 }
 
 function nav(view, updateHash = true) {
   if (!TITLES[view]) view = 'dashboard';
   if (updateHash && location.hash !== '#' + view) location.hash = view;
-  $$('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $$('.nav-item').forEach(b => {
+    const on = b.dataset.view === view;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+    b.tabIndex = on ? 0 : -1;
+    if (on) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
   $$('.view').forEach(v => v.classList.remove('active'));
   const el = $('#view-' + view); if (el) el.classList.add('active');
   const [t, s] = TITLES[view] || TITLES.dashboard;
@@ -98,7 +106,7 @@ function renderFocus() {
     ['Official routes', 'Account / activation locks ke liye verified official links aur job register.'],
   ];
   $('#focusGrid').innerHTML = f.map(([t, d]) =>
-    `<div class="focus-item"><div class="ft">${esc(t)}</div><div class="fd">${esc(d)}</div></div>`).join('');
+    `<div class="focus-item"><div class="ft">${esc(t)}</div><div class="fd" lang="ur-PK-Latn">${esc(d)}</div></div>`).join('');
 }
 
 async function loadDashNews() {
@@ -108,16 +116,17 @@ async function loadDashNews() {
     const items = r.items.slice(0, 6);
     box.innerHTML = items.length ? items.map(i =>
       `<div class="mn"><div class="mt">${linkHtml(i.url, i.title)}</div>
-       <div class="mk">${esc(i.khulasa)}</div></div>`).join('')
-      : '<p class="muted small">Abhi koi matching khabar nahi mili. Research Agent mein filters khol kar dobara try karain.</p>';
-  } catch (e) { box.innerHTML = `<p class="muted small">Fetch nahi hua: ${esc(e.message)}</p>`; }
+       <div class="mk" lang="ur-PK-Latn">${esc(i.khulasa)}</div></div>`).join('')
+      : '<p class="muted small" lang="ur-PK-Latn">Abhi koi matching khabar nahi mili. Research Agent mein filters khol kar dobara try karain.</p>';
+  } catch (e) { box.innerHTML = `<p class="muted small" lang="ur-PK-Latn">Fetch nahi hua: ${esc(e.message)}</p>`; }
   refreshCounts();
 }
 
 /* ------------------------------------------------------------------ packages */
 function samplePath() {
-  if (!state.basePath) return '';
-  return state.basePath + 'samples\\MTK_Demo_MT6899_UFS';
+  // QA #7: /api/status deliberately hides the absolute install path. The server
+  // supplies a RELATIVE sample_dir instead, resolved against the app folder.
+  return state.sampleDir || 'samples\\MTK_Demo_MT6899_UFS';
 }
 
 async function loadPackages() {
@@ -125,7 +134,7 @@ async function loadPackages() {
   try {
     const r = await api('/api/packages');
     state.packages = r.items;
-    if (!r.items.length) { box.innerHTML = '<div class="empty-state">Abhi koi package nahi. Upar folder scan karain.</div>'; return; }
+    if (!r.items.length) { box.innerHTML = '<div class="empty-state" lang="ur-PK-Latn">Abhi koi package nahi. Upar folder scan karain.</div>'; return; }
     box.innerHTML = r.items.map(p => {
       const h = p.health, cls = h >= 80 ? 'green' : h >= 55 ? 'amber' : 'red';
       const bg = h >= 80 ? 'var(--green-soft)' : h >= 55 ? 'var(--amber-soft)' : 'var(--red-soft)';
@@ -137,7 +146,7 @@ async function loadPackages() {
     }).join('');
     $$('.pkg-item', box).forEach(el => el.onclick = () => loadPackage(+el.dataset.id));
     if (!state.selected && r.items.length) loadPackage(r.items[0].id);
-  } catch (e) { box.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; }
+  } catch (e) { box.innerHTML = `<div class="empty-state" lang="ur-PK-Latn">${esc(e.message)}</div>`; }
 }
 
 function renderReport(rep, meta, pid) {
@@ -147,7 +156,7 @@ function renderReport(rep, meta, pid) {
   const issues = (rep.issues || []).map(i =>
     `<div class="issue ${esc(i.level)}"><div class="it">${esc(i.msg)}</div>
      ${i.detail ? `<div class="id">${esc(i.detail)}</div>` : ''}</div>`).join('') ||
-    '<p class="muted small">Koi issue nahi mila — package saaf lag raha hai.</p>';
+    '<p class="muted small" lang="ur-PK-Latn">Koi issue nahi mila — package saaf lag raha hai.</p>';
   const checks = (rep.checks || []).map(c =>
     `<tr><td>${esc(c.name)}</td><td class="${c.ok ? 'good' : 'bad'}">${esc(c.value)}${c.ok ? '' : ' ⚠'}</td></tr>`).join('');
   return `<div class="report-block">
@@ -183,7 +192,7 @@ async function loadPackage(id) {
       <td>${human(f.size)}</td><td class="small muted">${esc((f.fingerprint || '').slice(0,12))}</td></tr>`).join('');
     box.innerHTML = `
       <div class="card-head"><h2>${esc(p.name)}</h2>
-        <div><button class="btn ghost sm" id="pdReveal">Folder kholen</button>
+        <div><button class="btn ghost sm" id="pdReveal">Open folder</button>
         <button class="btn ghost sm" id="pdDelete" style="color:var(--red)">Delete</button></div></div>
       <div class="kv" style="margin-bottom:14px">
         <div class="k">Path</div><div>${esc(p.path)}</div>
@@ -196,32 +205,32 @@ async function loadPackage(id) {
       <h3 style="margin:18px 0 4px">Files (${(p.files||[]).length})</h3>
       <div style="max-height:360px;overflow:auto"><table class="file-table">
         <thead><tr><th>File</th><th>Kind</th><th>Size</th><th>Fingerprint</th></tr></thead>
-        <tbody>${files || '<tr><td colspan="4">Koi file nahi</td></tr>'}</tbody></table></div>`;
+        <tbody>${files || '<tr><td colspan="4">No files</td></tr>'}</tbody></table></div>`;
     $('#pdReveal').onclick = async () => {
       try { await post('/api/reveal', { path: p.path }); }
       catch (e) { toast(e.message, true); }
     };
     $('#pdDelete').onclick = async () => {
-      if (!confirm('Ye package catalog se hata dein? (Disk par files rahein gi)')) return;
+      if (!confirm('Remove this package from the catalog? (Files stay on disk)')) return;
       await api('/api/packages/' + id, { method: 'DELETE' });
-      state.selected = null; box.innerHTML = '<div class="empty-state">Package hata diya gaya.</div>';
-      loadPackages(); refreshCounts(); toast('Package catalog se hata diya');
+      state.selected = null; box.innerHTML = '<div class="empty-state" lang="ur-PK-Latn">Package hata diya gaya.</div>';
+      loadPackages(); refreshCounts(); toast('Package removed from catalog');
     };
   } catch (e) { box.innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; }
 }
 
 async function runScan(pathEl, outEl, extra = {}) {
   const path = pathEl.value.trim().replace(/^"|"$/g, '');
-  if (!path) { toast('Pehle folder path likhein', true); return; }
+  if (!path) { toast('Enter a folder path first', true); return; }
   outEl.innerHTML = '<div class="skeleton"></div>';
   try {
     const r = await post('/api/scan', { path, ...extra });
-    outEl.innerHTML = `<div class="notice soft"><div class="notice-icon">✓</div><div>
-      <strong>Scan mukammal — ${r.file_count} files, health ${r.report.health}%</strong>
-      <p>${esc(r.meta.platform || 'Unknown')} / ${esc(r.meta.chipset || '?')} / ${esc(r.meta.storage || '?')}.
+    outEl.innerHTML = `<div class="notice soft"><div class="notice-icon" aria-hidden="true">✓</div><div>
+      <strong>Scan complete — ${r.file_count} files, health ${r.report.health}%</strong>
+      <p lang="ur-PK-Latn">${esc(r.meta.platform || 'Unknown')} / ${esc(r.meta.chipset || '?')} / ${esc(r.meta.storage || '?')}.
       Neeche poori report aur right side mein file list hai.</p></div></div>` + renderReport(r.report, r.meta, r.id);
     await loadPackages(); await loadPackage(r.id); refreshCounts();
-    toast('Scan ho gaya — package #' + r.id + ' save ho gaya');
+    toast('Scan complete — package #' + r.id + ' saved');
     if ($('#view-packages').classList.contains('active') === false) nav('packages');
   } catch (e) { outEl.innerHTML = `<div class="issue error"><div class="it">Scan fail</div><div class="id">${esc(e.message)}</div></div>`; toast(e.message, true); }
 }
@@ -238,7 +247,7 @@ function renderPresets() {
   });
 }
 function renderCategories() {
-  $('#resCat').innerHTML = '<option value="all">Sab categories</option>' +
+  $('#resCat').innerHTML = '<option value="all">All categories</option>' +
     state.categories.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
   $('#srcCount').textContent = '(' + state.sources.length + ')';
   $('#srcChecks').innerHTML = state.sources.map(s =>
@@ -249,7 +258,7 @@ function selectedSources() {
 }
 
 async function fetchResearch(force) {
-  const btn = $('#resFetch'); busy(btn, true, 'Fetch ho raha hai…');
+  const btn = $('#resFetch'); busy(btn, true, 'Fetching…');
   const params = new URLSearchParams({
     preset: state.preset, q: $('#resQ').value.trim(), category: $('#resCat').value,
     days: $('#resDays').value, min_score: $('#resScore').value,
@@ -260,7 +269,7 @@ async function fetchResearch(force) {
     const r = await api('/api/research?' + params.toString());
     state.researchLoaded = true; state.savedMode = false;
     state.lastItems = r.items; state.lastResult = r;
-    $('#fetchStamp').textContent = r.cached ? 'cache se · ' + r.fetched_at : 'live · ' + r.fetched_at;
+    $('#fetchStamp').textContent = r.cached ? 'cached · ' + r.fetched_at : 'live · ' + r.fetched_at;
     $('#resDiag').innerHTML = (r.diagnostics || []).map(d =>
       `<span class="${d.ok ? '' : 'bad'}">${esc(d.source)}: ${d.ok ? d.count + ' items' : esc(d.error)}</span>`).join('');
     renderResearch(r);
@@ -277,17 +286,17 @@ function resCard(i) {
     <div class="rc-top">
       <span class="tag ${catColors[i.category] || ''}">${esc(i.category_label)}</span>
       <span class="score">score ${i.score}</span>
-      <span class="small muted">${esc(i.published || 'date nahi')}</span>
+      <span class="small muted">${esc(i.published || 'no date')}</span>
     </div>
     <div class="rc-title">${linkHtml(i.url, i.title)}</div>
-    <div class="rc-khulasa">${esc(i.khulasa)}${i.llm ? ' <span class="tag">LLM</span>' : ''}</div>
+    <div class="rc-khulasa" lang="ur-PK-Latn">${esc(i.khulasa)}${i.llm ? ' <span class="tag">LLM</span>' : ''}</div>
     ${i.excerpt ? `<div class="rc-excerpt">${esc(i.excerpt)}</div>` : ''}
     ${i.matched ? `<div class="small muted" style="margin-bottom:9px">Match: ${esc(i.matched)}</div>` : ''}
     <div class="rc-foot">
-      <span class="src">${esc(i.source)}${i.age_days !== null && i.age_days !== undefined ? ' · ' + i.age_days + ' din pehle' : ''}</span>
+      <span class="src">${esc(i.source)}${i.age_days !== null && i.age_days !== undefined ? ' · ' + i.age_days + ' days ago' : ''}</span>
       <button class="btn ghost sm" data-act="save">${i.saved ? '✓ Saved' : 'Save'}</button>
       <button class="btn ghost sm" data-act="read">${i.is_read ? 'Read ✓' : 'Mark read'}</button>
-      ${href ? `<a class="btn ghost sm" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open ↗</a>` : ''}
+      ${href ? linkHtml(i.url, 'Open ↗', 'btn ghost sm') : ''}
     </div>
   </div>`;
 }
@@ -297,10 +306,10 @@ function renderResearch(r) {
   const head = `<div class="card"><div class="res-toolbar">
       <div><strong>${items.length} results</strong> <span class="muted small">/ ${r.total ?? '—'} raw items · query: "${esc(r.query || '')}"</span></div>
       <span class="muted small">${r.cached ? 'cached' : 'live fetch'} · ${esc(r.fetched_at || '')}</span></div>
-      <div class="muted small">Filters: category=${esc(r.category || 'all')} · relevance score ke hisaab se sorted. Roman Urdu khulasa rule-based hai; asal headline English mein hai (technical accuracy ke liye).</div></div>`;
+      <div class="muted small" lang="ur-PK-Latn">Filters: category=${esc(r.category || 'all')} · relevance score ke hisaab se sorted. Roman Urdu khulasa rule-based hai; asal headline English mein hai (technical accuracy ke liye).</div></div>`;
   const cards = items.length
     ? `<div class="res-results">${items.map(resCard).join('')}</div>`
-    : '<div class="card"><div class="empty-state">Is filter par koi result nahi. Min score kam karain, days barhayein ya query badlein.</div></div>';
+    : '<div class="card"><div class="empty-state" lang="ur-PK-Latn">Is filter par koi result nahi. Min score kam karain, days barhayein ya query badlein.</div></div>';
   $('#resResults').innerHTML = head + cards;
 }
 
@@ -309,13 +318,13 @@ async function showSaved() {
   try {
     const r = await api('/api/articles?mode=saved');
     $('#resResults').innerHTML = `<div class="card"><div class="res-toolbar"><div><strong>${r.items.length} saved items</strong></div>
-      <button class="btn ghost sm" id="backLive">Wapas live results</button></div></div>` +
+      <button class="btn ghost sm" id="backLive">Back to live results</button></div></div>` +
       (r.items.length ? `<div class="res-results">${r.items.map(i => resCard({
         guid:i.guid,title:i.title,url:i.url,source:i.source,published:i.published,
         category:i.category,category_label:(state.categories.find(c=>c.id===i.category)||{}).label || i.category,
         score:i.score,matched:i.matched,excerpt:i.excerpt,khulasa:i.khulasa,saved:1,is_read:i.is_read,
         age_days:null,
-      })).join('')}</div>` : '<div class="card"><div class="empty-state">Abhi kuch save nahi kiya. Research cards par "Save" dabayein.</div></div>');
+      })).join('')}</div>` : '<div class="card"><div class="empty-state" lang="ur-PK-Latn">Abhi kuch save nahi kiya. Research cards par "Save" dabayein.</div></div>');
     $('#backLive').onclick = () => { state.savedMode = false; renderResearch({ ...state.lastResult, items: state.lastItems }); };
   } catch (e) { toast(e.message, true); }
 }
@@ -323,7 +332,7 @@ async function showSaved() {
 /* ------------------------------------------------------------------ models */
 async function searchModel() {
   const q = $('#modelQ').value.trim();
-  if (!q) { toast('Model number likhein', true); return; }
+  if (!q) { toast('Enter a model number', true); return; }
   const out = $('#modelOut'); out.innerHTML = '<div class="card"><div class="skeleton"></div></div>';
   const live = $('#modelLive').checked ? '1' : '0';
   try {
@@ -332,10 +341,10 @@ async function searchModel() {
     const pkgs = r.packages.length ? r.packages.map(p =>
       `<div class="issue info"><div class="it">${esc(p.name)} — health ${p.health}%</div>
        <div class="id">${esc(p.platform||'?')} / ${esc(p.chipset||'?')} / ${esc(p.storage||'?')}</div></div>`).join('')
-      : '<p class="muted small">Is model ka koi scanned package nahi.</p>';
+      : '<p class="muted small" lang="ur-PK-Latn">Is model ka koi scanned package nahi.</p>';
     const news = (r.live && r.live.items || []).map(i =>
       `<div class="mn"><div class="mt">${linkHtml(i.url, i.title)}</div>
-       <div class="mk">${esc(i.khulasa)}</div></div>`).join('') || '<p class="muted small">Koi live khabar nahi mili.</p>';
+       <div class="mk" lang="ur-PK-Latn">${esc(i.khulasa)}</div></div>`).join('') || '<p class="muted small" lang="ur-PK-Latn">Koi live khabar nahi mili.</p>';
     out.innerHTML = `
       <div class="two-col">
         <div class="card"><div class="card-head"><h2>Model card — ${esc(q)}</h2><span class="tag">editable</span></div>
@@ -350,15 +359,15 @@ async function searchModel() {
             <label class="wide">Official firmware / support link <input id="mcUrl" value="${esc(c.official_url||'')}"></label>
             <label class="wide">Notes <textarea id="mcNotes" rows="4" placeholder="scatter version, DA/auth, loader, region, build…">${esc(c.notes||'')}</textarea></label>
           </div>
-          <button class="btn primary" id="mcSave">Model card save karein</button>
-          <span class="muted small" style="margin-left:10px">Ye aap ka apna local knowledge base hai — jitna bharein utna behtar brief banega.</span>
+          <button class="btn primary" id="mcSave">Save model card</button>
+          <span class="muted small" style="margin-left:10px" lang="ur-PK-Latn">Ye aap ka apna local knowledge base hai — jitna bharein utna behtar brief banega.</span>
         </div>
         <div class="card"><div class="card-head"><h2>Live information</h2><span class="tag green">${esc(r.live?.fetched_at || 'offline')}</span></div>
           <div class="mini-news">${news}</div>
           <h3 style="margin:16px 0 8px">Related scanned packages</h3>${pkgs}
         </div>
       </div>
-      <div class="card"><div class="card-head"><h2>Account / activation issues ke official routes</h2></div>
+      <div class="card"><div class="card-head"><h2>Official routes for account / activation issues</h2></div>
         ${officialRoutesHtml(r.official)}</div>`;
     $('#mcSave').onclick = async () => {
       try {
@@ -366,7 +375,7 @@ async function searchModel() {
           platform:$('#mcPlat').value === '(select)' ? '' : $('#mcPlat').value,
           storage:$('#mcStore').value === '(select)' ? '' : $('#mcStore').value,
           official_url:$('#mcUrl').value, notes:$('#mcNotes').value });
-        toast('Model card save ho gaya'); refreshCounts();
+        toast('Model card saved'); refreshCounts();
       } catch (e) { toast(e.message, true); }
     };
   } catch (e) { out.innerHTML = `<div class="card"><div class="issue error"><div class="it">${esc(e.message)}</div></div></div>`; }
@@ -382,7 +391,7 @@ function officialRoutesHtml(routes) {
 /* ------------------------------------------------------------------ jobs */
 function renderJobRoutes() {
   const routes = (state.knowledge && state.knowledge.official_routes) || [];
-  $('#jobRoute').innerHTML = '<option value="">(select karein)</option>' +
+  $('#jobRoute').innerHTML = '<option value="">(select)</option>' +
     routes.map(r => `<option value="${esc(r.issue)}">${esc(r.issue)}</option>`).join('') +
     '<option value="Firmware repair / system restore">Firmware repair / system restore</option>';
   $('#jobRoutes').innerHTML = officialRoutesHtml(routes);
@@ -397,7 +406,7 @@ async function loadJobs() {
         <td>${esc(j.imei||'—')}</td><td>${esc(j.model||'—')}</td><td>${esc(j.customer||'—')}</td>
         <td>${j.proof_ok?'<span class="tag green">verified</span>':'<span class="tag amber">pending</span>'}</td>
         <td>${esc(j.route||'—')}</td><td>${esc(j.notes||'')}</td></tr>`).join('')}</tbody></table>`
-      : '<div class="empty-state">Register khaali hai. Upar pehla job add karain.</div>';
+      : '<div class="empty-state" lang="ur-PK-Latn">Register khaali hai. Upar pehla job add karain.</div>';
   } catch (e) { box.innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`; }
 }
 
@@ -409,7 +418,7 @@ async function loadSahulat() {
       state.sahLoaded = true;
       renderSahulat();
     } catch (e) {
-      $('#sahRoutes').innerHTML = `<div class="issue error"><div class="it">Sahulat data load nahi hua</div><div class="id">${esc(e.message)}</div></div>`;
+      $('#sahRoutes').innerHTML = `<div class="issue error"><div class="it">Sahulat data failed to load</div><div class="id">${esc(e.message)}</div></div>`;
       return;
     }
   }
@@ -426,7 +435,7 @@ function renderSahulat() {
     `<option value="${esc(r.id)}">${esc(r.brand)}</option>`).join('');
   $('#sahChecklist').innerHTML = o.checklist.map(c =>
     `<label class="sah-check"><input type="checkbox" value="${esc(c.id)}">
-      <span><b>${esc(c.label)}</b>${c.required ? ' <span class="tag amber">zaroori</span>' : ''}
+      <span><b>${esc(c.label)}</b>${c.required ? ' <span class="tag amber">required</span>' : ''}
       <em>${esc(c.hint)}</em></span></label>`).join('');
   $('#sahRoutes').innerHTML = o.routes.map((r, idx) =>
     `<details class="sah-route" ${idx === 0 ? 'open' : ''}>
@@ -438,21 +447,21 @@ function renderSahulat() {
           ? r.links.map(([t, u]) => linkHtml(u, t + ' ↗')).join('')
           : '<span class="muted small">Apne department / operator ka official channel istemal karain.</span>'}</div>
         <div class="rn">${esc(r.note)}</div>
-        <button class="btn ghost sm" data-pick="${esc(r.id)}">Is route ko form mein chunein</button>
+        <button class="btn ghost sm" data-pick="${esc(r.id)}">Use this route in the form</button>
       </div>
     </details>`).join('');
   $$('#sahRoutes [data-pick]').forEach(b => b.onclick = () => {
     $('#sahBrand').value = b.dataset.pick;
     const r = o.routes.find(x => x.id === b.dataset.pick);
     if (r && !$('#sahIssue').value.trim()) $('#sahIssue').value = r.issue;
-    toast('Route form mein select ho gaya');
+    toast('Route selected in the form');
   });
   $('#sahBoundary').innerHTML = `
-    <div class="notice" style="margin-bottom:12px"><div class="notice-icon">i</div>
+    <div class="notice" style="margin-bottom:12px"><div class="notice-icon" aria-hidden="true">i</div>
       <div><strong>${esc(o.policy.canonical)}</strong></div></div>
-    <h3 class="sah-h3">✓ Hum kya madad karte hain</h3>
+    <h3 class="sah-h3"><span aria-hidden="true">✓</span> What we help with</h3>
     <ul class="do-list">${o.policy.helps.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-    <h3 class="sah-h3">✕ Service boundary (barqarar)</h3>
+    <h3 class="sah-h3"><span aria-hidden="true">✕</span> Service boundary (in force)</h3>
     <ul class="do-list no">${o.policy.boundary.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
     <p class="small muted" style="margin-top:10px">${esc(o.policy.why)}</p>`;
 }
@@ -477,13 +486,13 @@ function sahMsg(msg, bad = false) {
   el.textContent = msg; el.style.color = bad ? 'var(--red)' : 'var(--muted)';
 }
 function copyText(txt, okMsg) {
-  if (!txt) { toast('Pehle text tayyar karain', true); return; }
+  if (!txt) { toast('Prepare the text first', true); return; }
   const fallback = () => {
     const ta = document.createElement('textarea');
     ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
     try { document.execCommand('copy'); toast(okMsg); }
-    catch { toast('Copy nahi hua — text ko select karain', true); }
+    catch { toast('Copy failed — select the text manually', true); }
     ta.remove();
   };
   if (navigator.clipboard && window.isSecureContext) {
@@ -504,34 +513,38 @@ async function sahCheck() {
       ? `<div class="sr-docs"><b>Required documents:</b><ul>${r.documents.map(d => `<li>${esc(d)}</li>`).join('')}</ul></div>` : '';
     out.innerHTML = `
       <div class="issue ${r.blocked ? 'warn' : 'info'}">
-        <div class="it">${r.blocked ? 'Boundary request — official raasta diya gaya' : 'Ye kaam app ke andar hai'}</div>
+        <div class="it">${r.blocked ? 'Boundary request — official route provided' : 'This task is handled in-app'}</div>
         <div class="id">${esc(r.reason)}</div></div>
       ${r.blocked ? `<div class="small muted"><b>Official route:</b> ${esc(r.official_route)}</div>${links}${docs}` : ''}
       <ol class="sr-steps">${r.safe_next_steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
-      ${r.refusal_line ? `<div class="notice" style="margin-top:10px"><div class="notice-icon">i</div><div><p>${esc(r.refusal_line)}</p></div></div>` : ''}
+      ${r.refusal_line ? `<div class="notice" style="margin-top:10px"><div class="notice-icon" aria-hidden="true">i</div><div><p>${esc(r.refusal_line)}</p></div></div>` : ''}
       <div class="small muted">Policy: ${esc(r.policy)}</div>`;
   } catch (e) { out.innerHTML = `<div class="issue error"><div class="it">Check fail</div><div class="id">${esc(e.message)}</div></div>`; }
 }
 
 async function sahLetter() {
-  const btn = $('#sahLetterBtn'); busy(btn, true, 'Letter ban raha hai…');
+  const btn = $('#sahLetterBtn'); busy(btn, true, 'Generating letter…');
   try {
     const r = await post('/api/sahulat/letter', sahFormData());
     $('#sahLetter').textContent = r.letter;
-    sahMsg('✓ Letter preview tayyar. Abhi case save nahi hua — neeche wala button dabayein.');
+    $('#sahLetter').setAttribute('lang', $('#sahLang').value === 'english' ? 'en' : 'ur-PK-Latn');
+    sahMsg('✓ Letter preview ready. Case not saved yet — use the button below.');
   } catch (e) { sahMsg(e.message, true); toast(e.message, true); }
   finally { busy(btn, false); }
 }
 
 async function sahSaveCase() {
-  const btn = $('#sahCaseBtn'); busy(btn, true, 'Case save ho raha hai…');
+  const btn = $('#sahCaseBtn'); busy(btn, true, 'Saving case…');
   try {
     const r = await post('/api/sahulat/case', sahFormData());
-    if (r.letter) $('#sahLetter').textContent = r.letter;
+    if (r.letter) {
+      $('#sahLetter').textContent = r.letter;
+      $('#sahLetter').setAttribute('lang', $('#sahLang').value === 'english' ? 'en' : 'ur-PK-Latn');
+    }
     sahMsg(r.letter_error
-      ? '✓ Case save (' + r.case.status + '). Letter ke liye: ' + r.letter_error
-      : '✓ Case ' + r.case.case_no + ' save ho gaya aur letter tayyar hai.', false);
-    toast('Case ' + r.case.case_no + ' save ho gaya');
+      ? '✓ Case saved (' + r.case.status + '). For letter: ' + r.letter_error
+      : '✓ Case ' + r.case.case_no + ' saved and letter ready.', false);
+    toast('Case ' + r.case.case_no + ' saved');
     loadSahCases(); refreshCounts();
   } catch (e) { sahMsg(e.message, true); toast(e.message, true); }
   finally { busy(btn, false); }
@@ -548,7 +561,7 @@ async function loadSahCases() {
         <td>${esc(c.model || c.brand || '—')}</td><td>${esc(c.route_id || '—')}</td>
         <td>${c.proof_ok ? '<span class="tag green">complete</span>' : '<span class="tag amber">pending</span>'}</td>
         <td>${esc(c.status)}</td></tr>`).join('')}</tbody></table>`
-      : '<div class="empty-state">Case register khaali hai. Upar form bhar kar pehla case save karain.</div>';
+      : '<div class="empty-state" lang="ur-PK-Latn">Case register khaali hai. Upar form bhar kar pehla case save karain.</div>';
   } catch (e) { box.innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`; }
 }
 
@@ -558,29 +571,29 @@ function renderKnowledge() {
   const b = k.boundary;
   $('#knowledgeOut').innerHTML = `
     <div class="card"><div class="card-head"><h2>${esc(b.title)}</h2><span class="tag green">${esc(b.policy_name || 'Service Policy')}</span></div>
-      <div class="notice soft" style="margin-bottom:14px"><div class="notice-icon">✓</div>
+      <div class="notice soft" style="margin-bottom:14px"><div class="notice-icon" aria-hidden="true">✓</div>
         <div><strong>${esc(b.lead || '')}</strong>
         <p>${esc(b.canonical || '')}</p></div></div>
       ${(b.helps || []).length ? `<div class="focus-grid" style="margin-bottom:14px">${b.helps.map(x => `<div class="focus-item"><div class="fd">${esc(x)}</div></div>`).join('')}</div>` : ''}
       <div class="two-col" style="gap:14px">
-        <div><h3 style="color:var(--green);margin-bottom:6px">✓ Karta hai</h3>
+        <div><h3 style="color:var(--green);margin-bottom:6px"><span aria-hidden="true">✓</span> What it does</h3>
           <ul class="do-list">${b.does.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
-        <div><h3 style="color:var(--red);margin-bottom:6px">✕ Nahi karta</h3>
+        <div><h3 style="color:var(--red);margin-bottom:6px"><span aria-hidden="true">✕</span> What it does not</h3>
           <ul class="do-list no">${b.does_not.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
       </div>
-      <div class="notice" style="margin:16px 0 0"><div class="notice-icon">i</div><div>
-        <strong>Kyun?</strong><p>${esc(b.why)}</p></div></div>
+      <div class="notice" style="margin:16px 0 0"><div class="notice-icon" aria-hidden="true">i</div><div>
+        <strong>Why?</strong><p>${esc(b.why)}</p></div></div>
       <div class="small muted" style="margin-top:10px">${esc(k.security_note)}</div>
     </div>
 
-    <div class="card"><div class="card-head"><h2>Paid tools kaisy kaam karte hain — research summary</h2><span class="tag">deep research</span></div>
+    <div class="card"><div class="card-head"><h2>How paid tools work — research summary</h2><span class="tag">deep research</span></div>
       ${k.tool_arch.map(a=>`<details class="acc"><summary>${esc(a.h)}</summary><div class="ab">${esc(a.b)}</div></details>`).join('')}
     </div>
 
     <div class="two-col">
       <div class="card"><div class="card-head"><h2>Glossary</h2></div>
         <table class="gloss">${k.glossary.map(g=>`<tr><td>${esc(g.term)}</td><td>${esc(g.def)}</td></tr>`).join('')}</table></div>
-      <div class="card"><div class="card-head"><h2>Setup / Madad</h2></div>
+      <div class="card"><div class="card-head"><h2>Setup / Help</h2></div>
         ${k.help.map(h=>`<details class="acc"><summary>${esc(h.title)}</summary><div class="ab">${esc(h.body)}</div></details>`).join('')}
       </div>
     </div>
@@ -612,6 +625,20 @@ async function refreshCounts() {
 function bind() {
   $('#nav').addEventListener('click', e => {
     const b = e.target.closest('.nav-item'); if (b) nav(b.dataset.view);
+  });
+  $('#nav').addEventListener('keydown', e => {
+    const tabs = $$('.nav-item');
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    let n = -1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') n = 0;
+    else if (e.key === 'End') n = tabs.length - 1;
+    else return;
+    e.preventDefault();
+    tabs[n].focus();
+    nav(tabs[n].dataset.view);
   });
   window.addEventListener('hashchange', () => {
     const v = (location.hash || '').replace('#', '');
@@ -662,7 +689,7 @@ function bind() {
         route:$('#jobRoute').value, notes:$('#jobNotes').value });
       ['#jobImei','#jobModel','#jobCustomer','#jobNotes'].forEach(s => $(s).value = '');
       $('#jobProof').checked = false;
-      loadJobs(); refreshCounts(); toast('Job register ho gaya');
+      loadJobs(); refreshCounts(); toast('Job registered');
     } catch (e) { toast(e.message, true); }
   };
   $('#jobReload').onclick = loadJobs;
@@ -672,17 +699,17 @@ function bind() {
   $('#sahLetterBtn').onclick = sahLetter;
   $('#sahCaseBtn').onclick = sahSaveCase;
   $('#sahReload').onclick = loadSahCases;
-  $('#sahLetterCopy').onclick = () => copyText($('#sahLetter').textContent, 'Letter copy ho gaya');
-  $('#sahConsentCopy').onclick = () => copyText($('#sahConsent').textContent, 'Consent form copy ho gaya');
+  $('#sahLetterCopy').onclick = () => copyText($('#sahLetter').textContent, 'Letter copied');
+  $('#sahConsentCopy').onclick = () => copyText($('#sahConsent').textContent, 'Consent form copied');
 
   $('#setSave').onclick = async () => {
     try {
       await post('/api/settings', { technician:$('#setTech').value, shop:$('#setShop').value,
         llm_endpoint:$('#setEndpoint').value, llm_key:$('#setKey').value,
         llm_model:$('#setModel').value, cache_minutes:$('#setCache').value });
-      $('#setMsg').textContent = '✓ Save ho gaya'; $('#setKey').value = '';
+      $('#setMsg').textContent = '✓ Saved'; $('#setKey').value = '';
       setTimeout(() => $('#setMsg').textContent = '', 3000);
-      toast('Settings save ho gaye');
+      toast('Settings saved');
     } catch (e) { toast(e.message, true); }
   };
 }
@@ -699,8 +726,7 @@ async function init() {
     state.presets = sources.presets; state.categories = sources.categories;
     state.knowledge = knowledge;
     state.sahulat = sahulat; state.sahLoaded = true;
-    const dbp = (status.db || '').replace(/[\\/]data[\\/]mobilelab\.db$/i, '');
-    state.basePath = dbp ? (dbp.endsWith('\\') || dbp.endsWith('/') ? dbp : dbp + '\\') : '';
+    state.sampleDir = status.sample_dir || 'samples\\MTK_Demo_MT6899_UFS';
     renderStats(); renderPresets(); renderCategories(); renderJobRoutes(); renderKnowledge(); renderSahulat();
   } catch (e) { toast('Init fail: ' + e.message, true); }
   nav((location.hash || '').replace('#', '') || 'dashboard', false);

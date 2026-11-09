@@ -1,19 +1,30 @@
-"""Real-time mobile-software research agent.
+"""Real-time mobile-software research agent (Python 3.13 stdlib only).
 
-Fetches live RSS / Atom / JSON sources (no API key required), scores and
-filters them, and writes a Roman-Urdu "khulasa" for every item.
+Fetches a FIXED allowlist of public RSS / Atom / JSON feed sources (GSMArena,
+XDA, Android Authority, Android Police, 9to5Google, SamMobile, Apple Newsroom,
+Google News RSS, HN Algolia and GitHub Releases) with an 8-16 worker
+ThreadPoolExecutor and a 10s timeout. Items are filtered by query terms,
+exclude words, category, age (days) and a minimum score, then ranked by the
+recency/term/category score in :func:`score_item`. Every result gets a
+deterministic Roman-Urdu "khulasa" from :func:`make_khulasa`; an optional
+OpenAI-compatible LLM may rewrite the top notes (:func:`llm_rewrite`).
 
-Optional: if the user configures an OpenAI-compatible endpoint in Settings,
-the khulasa is rewritten by that model. Otherwise a deterministic, offline
-rule-based Roman Urdu summary is produced.
+Outbound URLs are SSRF-validated before any urlopen (see :func:`validate_url`).
+The run degrades gracefully OFFLINE: each source is isolated, so timeouts,
+non-2xx responses, unreachable hosts and malformed content are reported in the
+``diagnostics`` list instead of crashing. With ZERO network the app still
+returns a well-formed (possibly empty) structured result.
 """
 from __future__ import annotations
 
 import gzip
 import html
+import ipaddress
 import json
+import logging
 import os
 import re
+import socket
 import ssl
 import time
 import urllib.parse
@@ -22,6 +33,8 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+
+log = logging.getLogger(__name__)
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MobileLab/1.0 (local research agent)"
 TIMEOUT = 10
@@ -105,17 +118,119 @@ PHRASES = [
 
 
 # ---------------------------------------------------------------------------
-# HTTP helpers
+# HTTP helpers (SSRF-safe)
 # ---------------------------------------------------------------------------
 
+def _feed_host_allowlist() -> frozenset:
+    """Return the FIXED feed-host allowlist, derived from the source config.
+
+    No new hosts are introduced here. The three query-source hosts mirror the
+    URLs built in :func:`_build_jobs` (Google News RSS, HN Algolia, GitHub
+    Releases); the rest come from :data:`RSS_SOURCES`.
+    """
+    hosts = set()
+    for s in RSS_SOURCES:
+        h = urllib.parse.urlsplit(s["url"]).hostname
+        if h:
+            hosts.add(h.lower())
+    hosts.update(("news.google.com", "hn.algolia.com", "api.github.com"))
+    return frozenset(hosts)
+
+
+FEED_HOSTS = _feed_host_allowlist()
+
+_BLOCKED_HOST_NAMES = frozenset({
+    "localhost", "metadata", "metadata.google.internal", "metadata.goog",
+})
+_BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal")
+
+
+def _is_public_ip(ip) -> bool:
+    """True only for globally-routable unicast IPs (blocks all SSRF ranges)."""
+    return not (ip.is_private or ip.is_loopback or ip.is_link_local or
+                ip.is_multicast or ip.is_reserved or ip.is_unspecified) and ip.is_global
+
+
+def validate_url(url: str, *, allowlist: frozenset | None = None) -> str:
+    """Validate an outbound URL before any urlopen (QA #6 SSRF policy).
+
+    Enforces http/https only, rejects IP-literal hosts and private / loopback /
+    link-local / metadata hostnames, optionally requires an allowlisted host,
+    and validates every RESOLVED destination IP via :mod:`socket` +
+    :mod:`ipaddress`. Returns the URL on success; raises ValueError with a
+    clear Roman-Urdu reason otherwise. When DNS resolution itself fails (e.g.
+    offline) the URL is left to urlopen so the failure degrades gracefully.
+    """
+    text = url if isinstance(url, str) else str(url or "")
+    parts = urllib.parse.urlsplit(text.strip())
+    scheme = parts.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError("URL sirf http ya https ho sakta hai; doosri scheme mana hai.")
+    try:
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except ValueError as e:
+        raise ValueError("URL ka host/port theek nahi: %s" % e)
+    host = host.rstrip(".")
+    if not host:
+        raise ValueError("URL mein host maujood nahi hai.")
+    # IP-literal hosts (v4/v6) are never allowed; feeds use hostnames only.
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("Host IP literal nahi ho sakta (SSRF policy): %s" % host)
+    if (host in _BLOCKED_HOST_NAMES or host.endswith(_BLOCKED_HOST_SUFFIXES)
+            or "metadata" in host):
+        raise ValueError("Local / metadata host mana hai (SSRF policy): %s" % host)
+    if allowlist is not None and host not in allowlist:
+        raise ValueError("Yeh host feed allowlist mein nahi hai: %s" % host)
+    # Validate the RESOLVED destination IP(s). Fail open only when DNS itself
+    # fails, so offline runs still reach urlopen and are reported gracefully.
+    try:
+        infos = socket.getaddrinfo(host, port or (443 if scheme == "https" else 80),
+                                   type=socket.SOCK_STREAM)
+    except OSError:
+        return text
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not _is_public_ip(ip):
+            raise ValueError("Resolved IP %s private/loopback/link-local/metadata range mein hai." % ip)
+    return text
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-validate every redirect target; ban internal / non-http(s) redirects."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        validate_url(newurl)  # raises ValueError on an unsafe redirect target
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# One process-wide opener so the module-level urllib.request.urlopen (which
+# tests mock) still uses our redirect handler. HTTPS keeps default certificate
+# verification via an explicit create_default_context().
+_SSL_CONTEXT = ssl.create_default_context()
+_SAFE_OPENER = urllib.request.build_opener(
+    urllib.request.HTTPSHandler(context=_SSL_CONTEXT), _SafeRedirectHandler())
+urllib.request.install_opener(_SAFE_OPENER)
+
+
 def fetch(url: str, timeout: int = TIMEOUT) -> str:
+    """Fetch one allowlisted feed URL over http/https after SSRF validation.
+
+    Calls :func:`validate_url` with the fixed :data:`FEED_HOSTS` allowlist
+    before any urlopen. Rejections and network errors propagate so
+    :func:`_run_job` can report them in diagnostics instead of crashing.
+    """
+    validate_url(url, allowlist=FEED_HOSTS)
     req = urllib.request.Request(url, headers={
         "User-Agent": UA,
         "Accept": "application/rss+xml, application/atom+xml, application/xml, application/json, text/xml, */*",
         "Accept-Language": "en-US,en;q=0.9",
     })
-    ctx = ssl.create_default_context()
-    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read(4_000_000)
         if r.headers.get("Content-Encoding", "").lower() == "gzip":
             raw = gzip.decompress(raw)
@@ -153,6 +268,7 @@ def _iso(raw: str) -> str:
 
 
 def parse_feed(text: str, source: str, source_cat: str = "") -> list[dict]:
+    """Parse an RSS/Atom feed string into normalized item dicts (never raises)."""
     items: list[dict] = []
     try:
         root = ET.fromstring(text.strip())
@@ -194,6 +310,7 @@ def parse_feed(text: str, source: str, source_cat: str = "") -> list[dict]:
 
 
 def parse_github(text: str, label: str) -> list[dict]:
+    """Parse a GitHub Releases JSON array into normalized item dicts."""
     out = []
     try:
         data = json.loads(text)
@@ -212,6 +329,7 @@ def parse_github(text: str, label: str) -> list[dict]:
 
 
 def parse_hn(text: str) -> list[dict]:
+    """Parse an HN Algolia JSON response into normalized item dicts."""
     out = []
     try:
         for hit in json.loads(text).get("hits", [])[:25]:
@@ -238,6 +356,7 @@ STOPWORDS = {"or", "and", "the", "a", "an", "of", "in", "for", "to", "on", "with
 
 
 def query_terms(q: str) -> list[str]:
+    """Split a query into lowercased, de-stopworded search terms."""
     q = re.sub(r'"([^"]+)"', r" \1 ", q or "")
     parts = re.split(r"\s+OR\s+|\s+or\s+|[,;|]+|\s+", q, flags=re.I)
     out = []
@@ -249,6 +368,7 @@ def query_terms(q: str) -> list[str]:
 
 
 def category_of(text: str) -> str:
+    """Classify text into one of the fixed category ids (or ``general``)."""
     t = (text or "").lower()
     for cat, words in CATEGORY_RULES:
         if any(w in t for w in words):
@@ -271,6 +391,7 @@ def _has(term: str, text: str) -> bool:
 
 
 def score_item(rec: dict, terms: list[str], want_cat: str = "all") -> tuple[float, list[str]]:
+    """Score an item by matched terms, category and recency; return (score, matched)."""
     title = (rec.get("title") or "").lower()
     body = title + " " + (rec.get("excerpt") or "").lower()
     score, matched = 0.0, []
@@ -295,6 +416,7 @@ def score_item(rec: dict, terms: list[str], want_cat: str = "all") -> tuple[floa
 
 
 def make_khulasa(rec: dict, cat: str, matched: list[str], score: float) -> str:
+    """Build the deterministic Roman-Urdu one-paragraph khulasa for an item."""
     src = rec.get("source", "Source")
     when = rec.get("published") or "haal hi mein"
     terms = ", ".join(matched[:5]) if matched else CATEGORY_LABELS.get(cat, "mobile software")
@@ -306,7 +428,11 @@ def make_khulasa(rec: dict, cat: str, matched: list[str], score: float) -> str:
 
 
 def llm_rewrite(text: str, settings: dict) -> str | None:
-    """Optional OpenAI-compatible rewrite into natural Roman Urdu."""
+    """Optional OpenAI-compatible rewrite of a Roman-Urdu khulasa.
+
+    Returns None when LLM settings are absent or the call fails. Any runtime
+    failure is logged (QA #12) instead of being silently swallowed.
+    """
     ep = (settings.get("llm_endpoint") or "").strip().rstrip("/")
     key = (settings.get("llm_key") or "").strip()
     model = (settings.get("llm_model") or "").strip()
@@ -329,7 +455,8 @@ def llm_rewrite(text: str, settings: dict) -> str | None:
         with urllib.request.urlopen(req, timeout=25) as r:
             data = json.loads(r.read().decode("utf-8", "replace"))
         return data["choices"][0]["message"]["content"].strip()
-    except Exception:
+    except Exception as e:
+        log.warning("LLM rewrite failed (%s): %s", type(e).__name__, e)
         return None
 
 
@@ -362,6 +489,11 @@ def _build_jobs(query: str, selected: list[str]) -> list[dict]:
 
 
 def _run_job(job: dict) -> tuple[list[dict], dict]:
+    """Fetch + parse one source; always return (items, diagnostic), never raise.
+
+    Timeouts, non-2xx responses, unreachable hosts, rejected URLs and malformed
+    content all produce a structured diagnostic so the run degrades gracefully.
+    """
     diag = {"source": job["name"], "ok": False, "count": 0, "error": ""}
     try:
         text = fetch(job["url"])
@@ -373,6 +505,9 @@ def _run_job(job: dict) -> tuple[list[dict], dict]:
             items = parse_hn(text)
         else:
             items = parse_feed(text, job["name"])
+        if not text or not text.strip() or not items:
+            diag["error"] = "malformed ya khali content (0 items)"
+            return [], diag
         diag.update(ok=True, count=len(items))
         return items, diag
     except Exception as e:
@@ -384,6 +519,12 @@ _CACHE: dict[str, tuple[float, dict]] = {}
 
 
 def research(params: dict, settings: dict | None = None) -> dict:
+    """Run the full research pipeline and return a structured result.
+
+    Filters, scores and summarizes feed items, optionally rewrites the top
+    khulasa via an LLM, and always reports per-source success/failure in
+    ``diagnostics``. Never raises on network failure; works with ZERO network.
+    """
     settings = settings or {}
     preset = next((p for p in PRESETS if p["id"] == params.get("preset", "all")), PRESETS[0])
     user_q = (params.get("q") or "").strip()
@@ -409,7 +550,11 @@ def research(params: dict, settings: dict | None = None) -> dict:
     with ThreadPoolExecutor(max_workers=max(8, min(16, len(jobs)))) as pool:
         futures = [pool.submit(_run_job, j) for j in jobs]
         for fu in as_completed(futures):
-            items, diag = fu.result()
+            try:
+                items, diag = fu.result()
+            except Exception as e:  # last-resort guard: a run must never crash
+                items, diag = [], {"source": "unknown", "ok": False, "count": 0,
+                                   "error": f"{type(e).__name__}: {str(e)[:110]}"}
             raw.extend(items)
             diagnostics.append(diag)
 
@@ -463,10 +608,13 @@ def research(params: dict, settings: dict | None = None) -> dict:
                 r["khulasa"] = better
                 r["llm"] = True
 
+    sources_ok = sum(1 for d in diagnostics if d["ok"])
     out = {
         "query": query, "preset": preset["id"], "category": want_cat,
         "items": results, "total": len(unique), "returned": len(results),
         "terms": terms, "diagnostics": sorted(diagnostics, key=lambda d: d["source"]),
+        "sources_total": len(diagnostics), "sources_ok": sources_ok,
+        "sources_failed": len(diagnostics) - sources_ok,
         "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "cached": False,
     }

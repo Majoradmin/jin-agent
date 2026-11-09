@@ -15,6 +15,17 @@ body{margin:0;background:var(--bg);color:var(--text);
   font-family:"Segoe UI",Tahoma,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.55}
 a{color:var(--primary);text-decoration:none}
 a:hover{text-decoration:underline}
+/* QA #9: clear, visible keyboard-focus indicator on every interactive element. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible{
+  outline:3px solid var(--primary);
+  outline-offset:2px;
+}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 button{cursor:pointer}
 h1,h2,h3,h4{margin:0;font-weight:650}
@@ -256,3 +267,9 @@ label{display:flex;flex-direction:column;gap:5px;font-size:11.8px;font-weight:60
   pointer-events:none;transition:all .22s;z-index:50;max-width:390px}
 .toast.show{opacity:1;transform:none}
 .toast.bad{background:var(--red)}
+
+/* rules.md §11 — respects the OS "reduce motion" preference (P9 / QA #9). */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;scroll-behavior:auto !important}
+}

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ur-PK-Latn">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -27,21 +27,21 @@
       </div>
     </div>
 
-    <nav class="nav" id="nav">
-      <button class="nav-item active" data-view="dashboard"><span class="ni">◈</span> Dashboard</button>
-      <button class="nav-item" data-view="packages"><span class="ni">▤</span> Firmware Packages</button>
-      <button class="nav-item" data-view="research"><span class="ni">◎</span> Research Agent <span class="nav-dot"></span></button>
-      <button class="nav-item" data-view="models"><span class="ni">⌗</span> Model Brief</button>
-      <button class="nav-item" data-view="jobs"><span class="ni">✓</span> Job Register</button>
-      <button class="nav-item" data-view="sahulat"><span class="ni">✦</span> Sahulat / Official Route</button>
-      <button class="nav-item" data-view="knowledge"><span class="ni">◇</span> Knowledge / Help</button>
-      <button class="nav-item" data-view="settings"><span class="ni">⚙</span> Settings</button>
+    <nav class="nav" id="nav" role="tablist" aria-label="Primary navigation" aria-orientation="vertical">
+      <button class="nav-item active" id="tab-dashboard" data-view="dashboard" role="tab" aria-selected="true" aria-controls="view-dashboard" aria-current="page" tabindex="0"><span class="ni" aria-hidden="true">◈</span> Dashboard</button>
+      <button class="nav-item" id="tab-packages" data-view="packages" role="tab" aria-selected="false" aria-controls="view-packages" tabindex="-1"><span class="ni" aria-hidden="true">▤</span> Firmware Packages</button>
+      <button class="nav-item" id="tab-research" data-view="research" role="tab" aria-selected="false" aria-controls="view-research" tabindex="-1"><span class="ni" aria-hidden="true">◎</span> Research Agent <span class="nav-dot" aria-hidden="true"></span></button>
+      <button class="nav-item" id="tab-models" data-view="models" role="tab" aria-selected="false" aria-controls="view-models" tabindex="-1"><span class="ni" aria-hidden="true">⌗</span> Model Brief</button>
+      <button class="nav-item" id="tab-jobs" data-view="jobs" role="tab" aria-selected="false" aria-controls="view-jobs" tabindex="-1"><span class="ni" aria-hidden="true">✓</span> Job Register</button>
+      <button class="nav-item" id="tab-sahulat" data-view="sahulat" role="tab" aria-selected="false" aria-controls="view-sahulat" tabindex="-1"><span class="ni" aria-hidden="true">✦</span> Sahulat / Official Route</button>
+      <button class="nav-item" id="tab-knowledge" data-view="knowledge" role="tab" aria-selected="false" aria-controls="view-knowledge" tabindex="-1"><span class="ni" aria-hidden="true">◇</span> Knowledge / Help</button>
+      <button class="nav-item" id="tab-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1"><span class="ni" aria-hidden="true">⚙</span> Settings</button>
     </nav>
 
     <div class="side-foot">
-      <div class="side-status"><span class="dot-live"></span> Local server active</div>
-      <div class="side-small" id="sideMeta">loading…</div>
-      <div class="side-note">Sirf aap ke PC par chalta hai.<br>Research tab hi internet use karta hai.</div>
+      <div class="side-status"><span class="dot-live" aria-hidden="true"></span> Local server active</div>
+      <div class="side-small" id="sideMeta" aria-live="polite">Loading…</div>
+      <div class="side-note" lang="ur-PK-Latn">Sirf aap ke PC par chalta hai.<br>Research tab hi internet use karta hai.</div>
     </div>
   </aside>
 
@@ -49,10 +49,10 @@
     <header class="topbar">
       <div>
         <h1 id="viewTitle">Dashboard</h1>
-        <p id="viewSub">Aap ka local mobile-software workspace</p>
+        <p id="viewSub">Your local mobile-software workspace</p>
       </div>
       <div class="top-right">
-        <div class="pill" id="connPill"><span class="dot-live"></span> Offline-ready</div>
+        <div class="pill" id="connPill"><span class="dot-live" aria-hidden="true"></span> Offline-ready</div>
         <div class="clock" id="clock">--:--</div>
       </div>
     </header>
@@ -60,12 +60,12 @@
     <div class="content" id="content">
 
       <!-- ================= DASHBOARD ================= -->
-      <section class="view active" id="view-dashboard">
+      <section class="view active" id="view-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" tabindex="0">
         <div class="notice">
-          <div class="notice-icon">i</div>
-          <div>
+          <div class="notice-icon" aria-hidden="true">i</div>
+          <div lang="ur-PK-Latn">
             <strong>Logon ki sahulat pehle — Sahulat &amp; Safe Service Policy</strong>
-            <p>MobileLab firmware <em>files</em> par aap ka stuck hona door karta hai — scatter / preloader / DA aur Qualcomm Firehose / rawprogram packages ki scanning, validation aur research. Aur jahan malik ki tasdeeq chahiye wahan <a href="#" data-goto="sahulat">Sahulat / Official Route</a> view mein checklist, consent, service-request letter, case register aur <strong>wajah + official link ke saath</strong> raasta milta hai. Huawei ID, FRP, MDM ya iCloud Activation Lock ka bypass automation is mein nahi hai — ye server-side anti-theft hain; un ke liye <a href="#" data-goto="knowledge">official routes</a> dekhein.</p>
+            <p>MobileLab firmware <em>files</em> par aap ka stuck hona door karta hai — scatter / preloader / DA aur Qualcomm Firehose / rawprogram packages ki scanning, validation aur research. Aur jahan malik ki tasdeeq chahiye wahan <button type="button" class="link-btn" style="display:inline;padding:0" lang="en" data-goto="sahulat">Sahulat / Official Route</button> view mein checklist, consent, service-request letter, case register aur <strong>wajah + official link ke saath</strong> raasta milta hai. Huawei ID, FRP, MDM ya iCloud Activation Lock ka bypass automation is mein nahi hai — ye server-side anti-theft hain; un ke liye <button type="button" class="link-btn" style="display:inline;padding:0" lang="en" data-goto="knowledge">official routes</button> dekhein.</p>
           </div>
         </div>
 
@@ -73,33 +73,33 @@
 
         <div class="two-col">
           <div class="card">
-            <div class="card-head"><h2>Jaldi scan</h2><span class="tag">100% local</span></div>
-            <p class="muted">Firmware folder ka full path dein. App scatter, preloader, DA, Firehose aur rawprogram XML parse kar ke batayega kya missing ya galat hai.</p>
+            <div class="card-head"><h2>Quick scan</h2><span class="tag">100% local</span></div>
+            <p class="muted" lang="ur-PK-Latn">Firmware folder ka full path dein. App scatter, preloader, DA, Firehose aur rawprogram XML parse kar ke batayega kya missing ya galat hai.</p>
             <div class="inline-form">
               <input id="dashPath" placeholder="C:\Firmware\model_folder" spellcheck="false">
               <button class="btn primary" id="dashScanBtn">Scan + Validate</button>
             </div>
-            <button class="link-btn" id="dashSampleBtn">Sample folder use karain (test ke liye)</button>
+            <button class="link-btn" id="dashSampleBtn">Use sample folder (for testing)</button>
             <div id="dashScanOut" class="scan-out"></div>
           </div>
 
           <div class="card">
-            <div class="card-head"><h2>Taaza mobile-software khabarein</h2><button class="btn ghost sm" id="dashNewsBtn">Refresh</button></div>
-            <p class="muted">Live feeds se Roman Urdu khulasa. Poori filtering ke liye Research Agent kholein.</p>
+            <div class="card-head"><h2>Latest mobile-software news</h2><button class="btn ghost sm" id="dashNewsBtn">Refresh</button></div>
+            <p class="muted" lang="ur-PK-Latn">Live feeds se Roman Urdu khulasa. Poori filtering ke liye Research Agent kholein.</p>
             <div id="dashNews" class="mini-news"><div class="skeleton"></div></div>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-head"><h2>App ka focus</h2></div>
+          <div class="card-head"><h2>App focus</h2></div>
           <div class="focus-grid" id="focusGrid"></div>
         </div>
       </section>
 
       <!-- ================= PACKAGES ================= -->
-      <section class="view" id="view-packages">
+      <section class="view" id="view-packages" role="tabpanel" aria-labelledby="tab-packages" tabindex="0">
         <div class="card">
-          <div class="card-head"><h2>Naya package scan karein</h2><span class="tag">MTK + Qualcomm</span></div>
+          <div class="card-head"><h2>Scan a new package</h2><span class="tag">MTK + Qualcomm</span></div>
           <div class="form-row">
             <label class="grow">Firmware folder path
               <input id="pkgPath" placeholder="C:\Firmware\MT6899_UFS" spellcheck="false">
@@ -109,8 +109,8 @@
           </div>
           <div class="row-actions">
             <button class="btn primary" id="pkgScanBtn">Scan + Validate</button>
-            <button class="btn ghost" id="pkgSampleBtn">Sample path bhar do</button>
-            <span class="muted small">Max 4000 files / 6 folder levels. Files hash nahi hoti, fast fingerprint nikalti hai.</span>
+            <button class="btn ghost" id="pkgSampleBtn">Fill sample path</button>
+            <span class="muted small" lang="ur-PK-Latn">Max 4000 files / 6 folder levels. Files hash nahi hoti, fast fingerprint nikalti hai.</span>
           </div>
           <div id="pkgScanOut" class="scan-out"></div>
         </div>
@@ -121,15 +121,15 @@
             <div id="pkgList" class="pkg-list"><div class="skeleton"></div></div>
           </div>
           <div class="card pkg-detail-card">
-            <div id="pkgDetail" class="empty-state">Koi package select karain ya upar naya scan chalayein.</div>
+            <div id="pkgDetail" class="empty-state" lang="ur-PK-Latn">Koi package select karain ya upar naya scan chalayein.</div>
           </div>
         </div>
       </section>
 
       <!-- ================= RESEARCH ================= -->
-      <section class="view" id="view-research">
+      <section class="view" id="view-research" role="tabpanel" aria-labelledby="tab-research" tabindex="0">
         <div class="card">
-          <div class="card-head"><h2>Research Agent — live browsing</h2><span class="tag green" id="fetchStamp">abhi tak fetch nahi</span></div>
+          <div class="card-head"><h2>Research Agent — live browsing</h2><span class="tag green" id="fetchStamp">not fetched yet</span></div>
           <div class="preset-row" id="presetRow"></div>
           <div class="form-row">
             <label class="grow">Query / topic
@@ -140,28 +140,28 @@
           <div class="form-row filters">
             <label>Category <select id="resCat"></select></label>
             <label>Freshness <select id="resDays">
-              <option value="0">Sab</option><option value="2">2 din</option><option value="7">7 din</option>
-              <option value="30" selected>30 din</option><option value="90">90 din</option>
+              <option value="0">All</option><option value="2">2 days</option><option value="7">7 days</option>
+              <option value="30" selected>30 days</option><option value="90">90 days</option>
             </select></label>
             <label>Min score <select id="resScore">
-              <option value="0">Sab dikhayein</option><option value="2">2+</option>
-              <option value="4" selected>4+ (sirf zaroori)</option><option value="7">7+ (bahut mutaliqa)</option>
+              <option value="0">Show all</option><option value="2">2+</option>
+              <option value="4" selected>4+ (important only)</option><option value="7">7+ (highly relevant)</option>
             </select></label>
             <label>Results <select id="resLimit">
               <option value="30">30</option><option value="70" selected>70</option><option value="120">120</option>
             </select></label>
-            <label class="checkline"><input type="checkbox" id="resOnlyImportant"> Sirf zaroori</label>
+            <label class="checkline"><input type="checkbox" id="resOnlyImportant"> Important only</label>
           </div>
           <details class="sources-box">
-            <summary>Sources <span id="srcCount"></span> — choose karein</summary>
+            <summary>Sources <span id="srcCount"></span> — choose</summary>
             <div id="srcChecks" class="check-grid"></div>
-            <div class="row-actions"><button class="link-btn" id="srcAll">Sab select</button><button class="link-btn" id="srcNone">Sab hata dein</button></div>
+            <div class="row-actions"><button class="link-btn" id="srcAll">Select all</button><button class="link-btn" id="srcNone">Clear all</button></div>
           </details>
           <div class="row-actions">
             <button class="btn primary" id="resFetch">Live fetch</button>
-            <button class="btn ghost" id="resRefresh">Force refresh (cache toro)</button>
-            <button class="btn ghost" id="resSavedToggle">Saved dikhao</button>
-            <span class="muted small">Google News, Hacker News, GitHub releases + 7 RSS feeds. Koi API key zaroori nahi.</span>
+            <button class="btn ghost" id="resRefresh">Force refresh (clear cache)</button>
+            <button class="btn ghost" id="resSavedToggle">Show saved</button>
+            <span class="muted small" lang="ur-PK-Latn">Google News, Hacker News, GitHub releases + 7 RSS feeds. Koi API key zaroori nahi.</span>
           </div>
           <div id="resDiag" class="diag"></div>
         </div>
@@ -169,37 +169,37 @@
       </section>
 
       <!-- ================= MODELS ================= -->
-      <section class="view" id="view-models">
+      <section class="view" id="view-models" role="tabpanel" aria-labelledby="tab-models" tabindex="0">
         <div class="card">
           <div class="card-head"><h2>Model Brief</h2><span class="tag">local KB + live</span></div>
           <div class="inline-form">
             <input id="modelQ" placeholder="Maslan: ELE-L29, SM-S918B, CPH2577, 23127PN0CG">
-            <button class="btn primary" id="modelSearch">Brief banayein</button>
-            <label class="checkline"><input type="checkbox" id="modelLive" checked> Live news bhi</label>
+            <button class="btn primary" id="modelSearch">Generate brief</button>
+            <label class="checkline"><input type="checkbox" id="modelLive" checked> Include live news</label>
           </div>
         </div>
         <div id="modelOut"></div>
       </section>
 
       <!-- ================= JOBS ================= -->
-      <section class="view" id="view-jobs">
+      <section class="view" id="view-jobs" role="tabpanel" aria-labelledby="tab-jobs" tabindex="0">
         <div class="notice soft">
-          <div class="notice-icon">✓</div>
-          <div><strong>Ye aap ka legal audit trail hai</strong>
+          <div class="notice-icon" aria-hidden="true">✓</div>
+          <div lang="ur-PK-Latn"><strong>Ye aap ka legal audit trail hai</strong>
             <p>Har device par IMEI, customer aur <em>proof of ownership</em> note karain. Account-related kaam sirf official route + malik ki tasdeeq ke saath. Is se aap ka shop bhi mehfooz rehta hai.</p></div>
         </div>
         <div class="two-col">
           <div class="card">
-            <div class="card-head"><h2>Naya job register karein</h2></div>
+            <div class="card-head"><h2>Register a new job</h2></div>
             <div class="form-grid">
               <label>IMEI / Serial <input id="jobImei" placeholder="86…"></label>
               <label>Model <input id="jobModel" placeholder="ELE-L29"></label>
               <label>Customer <input id="jobCustomer" placeholder="naam / phone"></label>
               <label>Official route <select id="jobRoute"></select></label>
               <label class="wide">Notes <textarea id="jobNotes" rows="3" placeholder="invoice number, documents, kya kiya gaya…"></textarea></label>
-              <label class="checkline wide"><input type="checkbox" id="jobProof"> Purchase proof / malik ki tasdeeq verify ki gayi</label>
+              <label class="checkline wide"><input type="checkbox" id="jobProof"> Purchase proof / owner verification confirmed</label>
             </div>
-            <button class="btn primary" id="jobAdd">Register save karein</button>
+            <button class="btn primary" id="jobAdd">Save to register</button>
           </div>
           <div class="card">
             <div class="card-head"><h2>Official routes</h2></div>
@@ -213,30 +213,30 @@
       </section>
 
       <!-- ================= SAHULAT / OFFICIAL ROUTE ================= -->
-      <section class="view" id="view-sahulat">
+      <section class="view" id="view-sahulat" role="tabpanel" aria-labelledby="tab-sahulat" tabindex="0">
         <div class="notice soft">
-          <div class="notice-icon">✓</div>
-          <div>
+          <div class="notice-icon" aria-hidden="true">✓</div>
+          <div lang="ur-PK-Latn">
             <strong id="sahPolicyTitle">Sahulat &amp; Safe Service Policy</strong>
-            <p id="sahPolicyLead">loading…</p>
+            <p id="sahPolicyLead">Loading…</p>
           </div>
         </div>
 
         <div class="two-col">
           <div class="card">
-            <div class="card-head"><h2>Customer ki request check karein</h2><span class="tag">wajah + raasta</span></div>
-            <p class="muted">Customer ne kya manga? Likhein. Agar account / activation lock ka bypass hai to app <strong>wajah, official link aur agla jaez qadam</strong> dega — sirf "nahi" nahi.</p>
+            <div class="card-head"><h2>Check a customer request</h2><span class="tag">reason + route</span></div>
+            <p class="muted" lang="ur-PK-Latn">Customer ne kya manga? Likhein. Agar account / activation lock ka bypass hai to app <strong>wajah, official link aur agla jaez qadam</strong> dega — sirf "nahi" nahi.</p>
             <div class="inline-form">
               <input id="sahCheckQ" placeholder="Maslan: EMUI 16 mein Huawei ID remove kar do">
-              <button class="btn primary" id="sahCheckBtn">Check karein</button>
+              <button class="btn primary" id="sahCheckBtn">Check</button>
             </div>
-            <div id="sahCheckOut" class="sah-out"></div>
+            <div id="sahCheckOut" class="sah-out" lang="ur-PK-Latn"></div>
           </div>
 
           <div class="card">
             <div class="card-head"><h2>Official routes &amp; required documents</h2><span class="tag green" id="sahRouteCount">—</span></div>
-            <p class="muted">Brand-wise: kya documents chahiye, kaunsa official qadam uthana hai aur verified links.</p>
-            <div id="sahRoutes" class="sah-routes"><div class="skeleton"></div></div>
+            <p class="muted" lang="ur-PK-Latn">Brand-wise: kya documents chahiye, kaunsa official qadam uthana hai aur verified links.</p>
+            <div id="sahRoutes" class="sah-routes" lang="ur-PK-Latn"><div class="skeleton"></div></div>
           </div>
         </div>
 
@@ -244,11 +244,11 @@
           <div class="card-head"><h2>Proof of ownership + consent + service request</h2><span class="tag">audit trail</span></div>
           <div class="sah-grid">
             <div>
-              <h3 class="sah-h3">Zaroori checklist</h3>
-              <div id="sahChecklist" class="sah-checklist"></div>
-              <h3 class="sah-h3">Consent form (print / sign karayein)</h3>
-              <pre id="sahConsent" class="sah-consent"></pre>
-              <button class="btn ghost sm" id="sahConsentCopy">Consent copy karein</button>
+              <h3 class="sah-h3">Required checklist</h3>
+              <div id="sahChecklist" class="sah-checklist" lang="ur-PK-Latn"></div>
+              <h3 class="sah-h3">Consent form (print / have it signed)</h3>
+              <pre id="sahConsent" class="sah-consent" lang="ur-PK-Latn"></pre>
+              <button class="btn ghost sm" id="sahConsentCopy">Copy consent</button>
             </div>
             <div>
               <div class="form-grid">
@@ -257,20 +257,20 @@
                 <label>Brand / Route <select id="sahBrand"></select></label>
                 <label>Model <input id="sahModel" placeholder="ELE-L29"></label>
                 <label>IMEI / Serial <input id="sahDevice" placeholder="sirf aakhri 4 harkat"></label>
-                <label>Masla / issue <input id="sahIssue" placeholder="account recovery / service request"></label>
+                <label>Issue <input id="sahIssue" placeholder="account recovery / service request"></label>
                 <label class="wide">Notes <textarea id="sahNotes" rows="3" placeholder="invoice no, documents, department reference…"></textarea></label>
                 <label class="wide">Letter language <select id="sahLang">
                   <option value="roman">Roman Urdu</option><option value="english">English</option>
                 </select></label>
-                <label class="checkline wide"><input type="checkbox" id="sahConsentChk"> Customer consent form par dastkhat ho gaya</label>
+                <label class="checkline wide"><input type="checkbox" id="sahConsentChk"> Customer has signed the consent form</label>
               </div>
               <div class="row-actions">
-                <button class="btn ghost" id="sahLetterBtn">Sirf letter preview</button>
-                <button class="btn primary" id="sahCaseBtn">Case save + letter</button>
-                <button class="btn ghost" id="sahLetterCopy">Letter copy</button>
+                <button class="btn ghost" id="sahLetterBtn">Letter preview only</button>
+                <button class="btn primary" id="sahCaseBtn">Save case + letter</button>
+                <button class="btn ghost" id="sahLetterCopy">Copy letter</button>
               </div>
-              <div id="sahFormMsg" class="small muted"></div>
-              <pre id="sahLetter" class="sah-letter">Letter yahan aayega. Pehla qadam: checklist tick karain, consent check karain, phir upar wala button dabayein.</pre>
+              <div id="sahFormMsg" class="small muted" aria-live="polite"></div>
+              <pre id="sahLetter" class="sah-letter" lang="ur-PK-Latn">Letter yahan aayega. Pehla qadam: checklist tick karain, consent check karain, phir upar wala button dabayein.</pre>
             </div>
           </div>
         </div>
@@ -281,24 +281,24 @@
             <div id="sahCases"></div>
           </div>
           <div class="card">
-            <div class="card-head"><h2>Service boundary</h2><span class="tag amber">qaida barqarar</span></div>
-            <div id="sahBoundary"></div>
+            <div class="card-head"><h2>Service boundary</h2><span class="tag amber">policy in force</span></div>
+            <div id="sahBoundary" lang="ur-PK-Latn"></div>
           </div>
         </div>
       </section>
 
       <!-- ================= KNOWLEDGE ================= -->
-      <section class="view" id="view-knowledge">
-        <div id="knowledgeOut"></div>
+      <section class="view" id="view-knowledge" role="tabpanel" aria-labelledby="tab-knowledge" tabindex="0">
+        <div id="knowledgeOut" lang="ur-PK-Latn"></div>
       </section>
 
       <!-- ================= SETTINGS ================= -->
-      <section class="view" id="view-settings">
+      <section class="view" id="view-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="0">
         <div class="card">
-          <div class="card-head"><h2>Settings</h2><span class="tag">ikhtiyari</span></div>
-          <p class="muted">Sab kuch default par chal raha hai. Neeche wali LLM settings sirf is liye hain ke research ka Roman Urdu khulasa aur natural ho — ye <strong>zaroori nahi</strong>.</p>
+          <div class="card-head"><h2>Settings</h2><span class="tag">optional</span></div>
+          <p class="muted" lang="ur-PK-Latn">Sab kuch default par chal raha hai. Neeche wali LLM settings sirf is liye hain ke research ka Roman Urdu khulasa aur natural ho — ye <strong>zaroori nahi</strong>.</p>
           <div class="form-grid">
-            <label>Technician naam <input id="setTech"></label>
+            <label>Technician name <input id="setTech"></label>
             <label>Shop / workspace <input id="setShop"></label>
             <label class="wide">OpenAI-compatible endpoint <input id="setEndpoint" placeholder="https://api.example.com/v1"></label>
             <label>API key <input id="setKey" type="password" placeholder="khali chhor dein = offline mode"></label>
@@ -306,7 +306,7 @@
             <label>Cache (minutes) <input id="setCache" type="number" min="1" max="240"></label>
           </div>
           <button class="btn primary" id="setSave">Save</button>
-          <span id="setMsg" class="muted small"></span>
+          <span id="setMsg" class="muted small" aria-live="polite"></span>
         </div>
         <div class="card">
           <div class="card-head"><h2>System status</h2></div>
@@ -318,7 +318,7 @@
   </main>
 </div>
 
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <script src="/app.js"></script>
 </body>
 </html>
