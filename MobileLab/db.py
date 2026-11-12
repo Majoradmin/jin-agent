@@ -216,6 +216,7 @@ DEFAULT_SETTINGS = {
     "llm_endpoint": "",
     "llm_key": "",
     "llm_model": "",
+    "llm_provider": "",
     "auto_min_score": "2",
     "cache_minutes": "15",
     "technician": "",

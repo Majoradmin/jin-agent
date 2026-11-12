@@ -1,7 +1,7 @@
 # design.md — MobileLab UI/UX
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Status:** PHASE 3 final — **READY** (gate review `phases.md` §12); P12 / P13 final sync · **Document version:** 2.2.0
-**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.3.0` (P13 ne code badla)
+**Date:** 2026-11-08 · **Updated:** 2026-11-12 · **Status:** PHASE 3 final — **READY** (gate review `phases.md` §12); P12 / P13 / P14 final sync · **Document version:** 2.3.0
+**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.4.0` (P14 ne code badla)
 **Sources read (2026-11-08):** `web/style.css`, `web/index.html`, `web/app.js` · `docs/phases.md` (P3 row, §2 N/A table, §6 QA map) · `docs/architecture.md` 2.0.0 · `docs/rules.md` §12 / §16 · `docs/PRD.md` §12 · `agent.md` addendum §N.
 **Language (C19 / D22):** information / report / plan / prose = **Roman Urdu**; headings, section titles, table headers, labels, code, CSS tokens, identifiers, paths, IDs aur technical terms = **English** (professional surface). Koi purani content ko English mein bulk rewrite nahi kiya gaya.
 
@@ -243,3 +243,11 @@ Design intent **WCAG 2.1 AA** ke char principles (perceivable, operable, underst
 - **Verification:** `web/index.html` 9 views / 9 nav / 9 `tabpanel`; `web/style.css` 10 `@media`; `web/app.js` 9-view `TITLES` key.
 
 ---
+
+## 15. P14 Settings — Model source (2026-11-12)
+
+- **Control:** `Model source` `<select id="setProvider">` — `Off` (default), `Ollama`, `LM Studio`, `Custom OpenAI-compatible endpoint`. Labels English, wazahat Roman Urdu (C19 / D22).
+- **Conditional fields:** `syncLlmProvider()` non-custom provider par `setEndpoint` / `setKey` ko `disabled` + explanatory `title` deta hai; Save payload unhein sirf `custom` par bhejta hai. Is se stale loopback endpoint wala `400` SSRF error khatam hua.
+- **Diagnostics:** `#llmState` `aria-live` status line (`Model ON …` / `Model OFF …` with reason), `#llmTest` button aur `#llmTestMsg` `aria-live` result. Koi secret UI par nahi.
+- **Invariants unchanged:** 9 views / 9 nav / 9 `role="tabpanel"` / 27 `sah*` IDs / zero inline `<script>` / `lang="en"` / `aria-live` / `:focus-visible` / `prefers-reduced-motion`; `web/style.css` 10 `@media` blocks — koi naya color token ya font nahi.
+- **Light theme:** existing tokens reuse; disabled inputs native browser styling, koi dark surface nahi.

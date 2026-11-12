@@ -290,6 +290,14 @@ Har ADR: date · context · options · final decision · reason · consequences.
 - **Reason:** repo pehle se LF (`core.autocrlf=false`), aur config-level workaround asli drift chhupa deta. `agent.md` verbatim hash guard CRLF se break ho sakta tha, is liye usay chhua hi nahi gaya.
 - **Consequences:** `git diff --check` clean; `agent.md` prefix SHA-256 `1de53535…0840` MATCH; koi remote, koi runtime / DB / dependency change nahi.
 
+### D38 — Local LLM support without weakening the SSRF guard
+
+- **Date:** 2026-11-12 · **Context:** user ne *"ye sbb ok krdo or app ki har category check kro work krti ha ya ni.?"* kaha. Category audit me mila ke local model na chalne ki asli wajah QA #6 `validate_llm_endpoint()` tha: user-supplied loopback endpoint `400` se reject hota tha aur `resolve` gate local providers par bhi `llm_key` mangta tha. Is liye Ollama / LM Studio kabhi enable hi na ho sakte the.
+- **Options:** (1) SSRF guard mein loopback exception dena · (2) **app-owned local provider presets** + key-free local mode · (3) LLM feature hata dena · (4) user ko guard disable karne dena.
+- **Decision:** option (2). `llm_provider` = `off` / `ollama` / `lmstudio` / `custom`; local URLs sirf `research.LOCAL_LLM_ENDPOINTS` code constant se; local par koi API key nahi; custom par purana guard + `_public_endpoint_ok()` barqarar. Diagnostics `/api/status.llm`, `/api/llm/status`, `/api/llm/test`.
+- **Reason:** (1) aur (4) internal / metadata endpoints ka darwaza kholte — `D32` / QA #6 ki security regression toot jati; (3) user ki request ke khilaf tha. Presets se user ko kabhi URL type karne ki zarurat hi nahi, to guard ko chhoot dene ki zarurat hi nahi.
+- **Consequences:** `VERSION 1.4.0`; additive `llm_provider` setting (koi naya table / migration nahi); 17+1 naye tests; `test_service_brief.py` ka hardcoded `1.3.0` assertion `server.VERSION` se compare karta hai; 9 docs + `agent.md` §Q sync; C28 register hua. Koi runtime / binary install nahi — model abhi `OFF` by design, rule-based Roman Urdu fallback chal raha hai.
+
 ---
 
 ## Classification Register
@@ -324,6 +332,7 @@ Har ADR: date · context · options · final decision · reason · consequences.
 | C25 | P5 / P10 `N/A` justified, gates **passed not skipped** (D30 / D31); C23/D29 auto-continue is run me consume hua, N7 se naye kaam par phase-by-phase approval wapas |
 | C26 | PHASE 12 ke liye user ne alag se single-run ijazat di — `Aik hi run me poora karo (Recommended)`; ye **sirf is feature** ke liye N7 ko muattal karti hai, Sahulat & Safe Service Policy par koi asar nahi, koi chhoot nahi |
 | C27 | PHASE 13 (Agent Memory) ne SQLite `memory_*` source of truth + public `t.me/s/` preview + archive-not-delete + local-only design confirm ki (D36) |
+| C28 | PHASE 14 confirm karta hai ke local LLM sirf **app-owned loopback presets** (Ollama / LM Studio) se, key-free aur diagnostics ke sath enable hoga; user-supplied SSRF guard bilkul unchanged rahega, koi runtime silently install nahi hoga (D38) |
 
 ### Assumptions (A — implementation se pehle / usi phase mein confirm)
 - **A1** docs Roman Urdu prose + English headings/codes.

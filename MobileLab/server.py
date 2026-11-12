@@ -29,7 +29,7 @@ import sahulat       # noqa: E402
 import service_brief  # noqa: E402
 import telegram_public  # noqa: E402
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 PORT = int(os.environ.get("MOBILELAB_PORT", "8765"))
 
 MIME = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8",
@@ -447,6 +447,7 @@ class Handler(BaseHTTPRequestHandler):
                 "service_brief_version": service_brief.VERSION,
                 "service_brief_sources": len(service_brief.SOURCES),
                 "memory_version": agent_memory.VERSION,
+                "llm": research.llm_status(_safe_settings(s)),
             })
 
         if path == "/api/knowledge":
@@ -584,6 +585,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/settings":
             return self._json(_mask_settings(db.get_settings()))
+
+        if path == "/api/llm/status":
+            return self._json(research.llm_status(_safe_settings(db.get_settings())))
 
         # ---- Sahulat & Safe Service Toolkit (PHASE 1B) ----
         if path == "/api/sahulat/overview":
@@ -730,12 +734,18 @@ class Handler(BaseHTTPRequestHandler):
             data = dict(b)
             if data.get("llm_key") == "***":
                 data.pop("llm_key")        # preserve the stored key on round-trip
+            prov = str(data.get("llm_provider") or "").strip().lower()
+            if prov and prov not in research.LLM_PROVIDERS:
+                return self._err("Model provider ghalat hai", 400)
             ep = (data.get("llm_endpoint") or "").strip()
             if ep:
                 ok, reason = _check_endpoint(ep)
                 if not ok:
                     return self._err(reason, 400)   # QA #6: reject internal endpoint
             return self._json({"ok": True, "settings": _mask_settings(db.set_settings(data))})
+
+        if path == "/api/llm/test":
+            return self._json(research.llm_probe(_safe_settings(db.get_settings())))
 
         # ---- Sahulat & Safe Service Toolkit (PHASE 1B) ----
         if path == "/api/sahulat/letter":

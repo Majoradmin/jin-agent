@@ -1,7 +1,7 @@
 # architecture.md — MobileLab System Architecture
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Status:** PHASE 2 `READY` + P3–P13 final doc-vs-code sync — project `READY` · **Document version:** 2.2.0
-**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.3.0` (P13 ne code badla)
+**Date:** 2026-11-08 · **Updated:** 2026-11-12 · **Status:** PHASE 2 `READY` + P3–P14 final doc-vs-code sync — project `READY` · **Document version:** 2.3.0
+**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.4.0` (P14 ne code badla)
 **Language (C19 / D22):** information / report / plan / prose = **Roman Urdu**; headings, labels, code, identifiers, paths, API routes, commits aur technical terms = **English**.
 
 > **Research honesty:** P0 mein koi web browse nahi tha. P1 ne 16 official / verified sources `PRD.md` §5.3 (S1–S16) mein `URL + date checked = 2026-11-08` ke sath darj kiye. P2 ne 12 official technology / security sources `P2-01…P2-12` directly check kiye, sab ka `date checked = 2026-11-08` hai. Python docs pages `3.13.18 documentation` hain jabke local runtime `Python 3.13.14` hai — ye patch-level farq §19.3 mein darj hai. Telegram ka P2 anchor re-check juzwi raha; baqi Telegram facts P1 `S9` se retained hain, koi naya dawa nahi. **Facts** aur **Recommendations** alag hain; koi citation banawati nahi, koi speculation fact nahi.
@@ -430,6 +430,18 @@ P0 Bootstrap `READY` → P1 PRD `READY` → **P2 Architecture + research `READY`
 
 ---
 
-## 26. Future modules (planned, not delivered)
+## 26. PHASE 14 — Local Model Support & Full Category Audit (final sync, 2026-11-12)
+
+- **Status:** delivered / `READY` (`phases.md` §23).
+- **Runtime:** `server.VERSION 1.4.0`; `GET /api/status` ab `llm` diagnostics block return karta hai; naye routes `GET /api/llm/status`, `POST /api/llm/test`. Sab stdlib (`urllib.request`), koi naya dependency nahi.
+- **Config flow:** `db.DEFAULT_SETTINGS["llm_provider"]` (additive, `INSERT OR IGNORE` auto-migrate) → `research.resolve_llm()` → `llm_status()` / `llm_probe()` / `llm_rewrite()`. `POST /api/settings` provider ko `LLM_PROVIDERS` se validate karta hai aur `llm_key === "***"` ko ignore karta hai.
+- **Security:** QA #6 `_check_endpoint()` bilkul unchanged; local loopback URLs sirf code-owned `LOCAL_LLM_ENDPOINTS` se; custom endpoint `_public_endpoint_ok()` (DNS-free) + server guard se dobara check. Key `GET` par `***` masked; diagnostics / probe response / log mein kabhi plaintext nahi.
+- **Frontend:** Settings view mein `setProvider` select + `llmState` + `llmTest` / `llmTestMsg`; `syncLlmProvider()` endpoint/key fields ko custom-only disable karta hai aur `setSave` unhein sirf `custom` par bhejta hai. 9 views / 9 nav / 9 tabpanels / 27 `sah*` IDs barqarar, zero inline `<script>`.
+- **Category audit:** static shell, Dashboard, Packages, Research, Models, Jobs, Sahulat, Service Brief, Agent Memory, Settings, LLM, Security aur Frontend wiring — HTTP smoke + regression tests se verify (`phases.md` §23). Audit ke do "failures" tool ki apni ghalti thin (`policy` nested object, dynamic `$('#view-' + view)`, `/web/app.js` ki jagah `/app.js`) — code defect nahi.
+- **Verification:** `PY_COMPILE_OK` · `NODE_CHECK_OK` · `git diff --check` clean · `/api/status` 200 (`VERSION 1.4.0`) · `/api/llm/status` aur `/api/llm/test` 200 · `agent.md` prefix SHA-256 MATCH · docs `9/9` · full suite `Ran 192 tests in 123.628s — OK`.
+
+---
+
+## 27. Future modules (planned, not delivered)
 
 - Roadmap empty; koi phase skip nahi (C15); naye phase phase-by-phase approval ke sath shuru hoga (N7).

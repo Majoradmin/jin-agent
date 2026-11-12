@@ -199,3 +199,12 @@
 - **Service brief boundary:** `service_brief.py` stateless; masked last-4 only; khali official worksheets; no fabricated status finding; koi IMEI / credential / GSX / carrier-login store (D35 / D19).
 - **Memory safety:** memory poisoning se bachao — har fact / query / source ke saath source + timestamp; facts vs claims alag; unverified leads 14 din baad re-check; low-value sources archive, delete na.
 - **Privacy:** memory me full IMEI, passwords, tokens, private messages, payment data store nahi (C9 / D22); `/api/memory/*` koi secret na return karta.
+
+## 21. PHASE 14 — Local LLM rules (D38 / C28)
+
+- **App-owned URLs only:** `LOCAL_LLM_ENDPOINTS` code mein fixed hain; user se kabhi loopback URL na lein. `ollama` / `lmstudio` par `llm_endpoint` setting ignore hoti hai.
+- **SSRF guard immutable:** `server._check_endpoint()` aur `validate_llm_endpoint()` mein koi chhoot na dein — `127.0.0.1`, `localhost`, `::1`, `10.*`, `169.254.169.254`, `metadata.google.internal` user-supplied endpoint ke tor par hamesha `400` / `False` (`D32` regression test barqarar).
+- **Keys:** local providers ko key nahi chahiye; `custom` ko public `http/https` endpoint + key + model chahiye. `llm_status()` / `llm_probe()` / `/api/llm/test` kabhi key, token ya `Authorization` header return na karein; `GET /api/settings` `***` mask kare.
+- **No silent install:** app koi model runtime / binary download ya install na kare; model `OFF` hone par rule-based Roman Urdu fallback hi sahih behavior hai, koi error na dikhein.
+- **Probe bounds:** `llm_probe()` aik chhota request, `timeout=8` default, reply 80 chars tak, exception type se zyada detail client ko na jaye; failure graceful `{"ok": false, "error": ...}`.
+- **Policy:** Sahulat & Safe Service Policy bilkul unchanged — model sirf research khulasa rewrite karta hai, koi device / account / lock operation nahi.

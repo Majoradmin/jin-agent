@@ -1,6 +1,6 @@
 # phases.md — 12 Phases, Gates aur PHASE REVIEW
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Current phase:** PHASE 13 (Agent Memory) — ✅ **READY / project complete** · **Next:** koi nahi (N7: naye kaam par phase-by-phase approval wapas)
+**Date:** 2026-11-08 · **Updated:** 2026-11-12 · **Current phase:** PHASE 14 (Local Model Support) — ✅ **READY / project complete** · **Next:** koi nahi (N7: naye kaam par phase-by-phase approval wapas)
 **Rule:** koi phase skip nahi. Jin items ka is app par matlab nahi, unhein **"N/A + wajah"** likh kar gate pass kiya jaye ga. Har `READY` ke baad **user ki ijazat** zaroori; khud aage na barhna. C15: har phase mukammal, kuch incomplete na chhorhein. **C23 / D29** ki P3–P11 blanket auto-continue ijazat is run me consume ho chuki; N7 ke mutabiq agle naye kaam par asli phase-by-phase rule wapas lagu hoga. P5 / P10 `N/A` justified, **gates passed not skipped** (`D30` / `D31` / `C25`).
 
 ---
@@ -397,3 +397,20 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Definition of done:** met · **Gate:** READY.
 - **Commit:** local-only central commit `feat: deliver P12 service brief and P13 agent memory with synced governance docs` (2026-11-12, P12 + P13 code / tests / docs / addendum).
 - **Next:** project complete; real Telegram group handles + hardware specs user se lene hain (memory feature un ke intezar mein hai).
+
+## 23. PHASE REVIEW — PHASE 14 — Local Model Support & Full Category Audit — 2026-11-12
+
+- **Status:** READY
+- **Confirmed / Assumptions / Risks:** C1–C28 · A1–A17 · D19–D38 · R20 (local runtime galat port / band) / R21 (custom key leak). Boundary **unchanged**.
+- **TASK:** user ki request *"ye sbb ok krdo or app ki har category check kro work krti ha ya ni.?"* — poori app ki har category verify karna aur "model kyun nahi chal raha" ka asli sabab theek karna.
+- **IMPLEMENTATION:** `research.py` mein `LOCAL_LLM_ENDPOINTS` / `LLM_PROVIDERS` / `resolve_llm()` / `_public_endpoint_ok()` / `llm_status()` / `llm_probe()` aur `llm_rewrite()` ka gate; `server.py` `VERSION 1.4.0`, `/api/status.llm`, `GET /api/llm/status`, `POST /api/llm/test`, `POST /api/settings` provider validation; `db.py` additive `llm_provider`; `web/index.html` + `web/app.js` mein Model source / status / Test model aur custom-only fields; `tests/test_research.py` +17, `tests/test_static_governance.py` +1, `tests/test_service_brief.py` version fix.
+- **VERIFICATION:** full suite `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -q` → **`Ran 192 tests in 123.628s — OK`** (zero `ResourceWarning`) · `PY_COMPILE_OK` · `NODE_CHECK_OK` · `git diff --check` clean · `agent.md` prefix SHA-256 MATCH · docs `9/9` · HTTP smoke **17/17 PASS** (static shell, Dashboard, Packages, Research, Models, Jobs, Sahulat, Service Brief, Agent Memory, Settings, LLM, Security, Frontend wiring, CSP header) · `off → ollama → lmstudio → off` provider flow 200 · invalid provider 400 · user-supplied loopback / link-local endpoint 400 · `GET /api/settings` key `***` masked · `POST /api/llm/test` bina runtime graceful `{"ok": false}` · production settings audit ke baad restore.
+- **RESULT:** P14 `READY` — har category kaam karti hai; local model ab app-owned presets se enable ho sakta hai; SSRF guard kamzor nahi hua; rule-based fallback barqarar.
+- **Deliverables:** [x] `research.py` · [x] `server.py` · [x] `db.py` · [x] `web/index.html` · [x] `web/app.js` · [x] `tests/test_research.py` · [x] `tests/test_static_governance.py` · [x] `tests/test_service_brief.py` · [x] 9 docs sync · [x] `agent.md` addendum §Q.
+- **N/A items + justification:** real Ollama / LM Studio runtime + model binary install = **N/A + wajah** — user ke PC par koi runtime maujood nahi; bina ijazat koi binary install nahi kiya gaya. App presets, diagnostics aur graceful failure ke sath configured-ready hai, is liye gate pass hai (koi skip nahi, wajah darj hai).
+- **Security review:** `_check_endpoint()` unchanged; local URLs code-owned; custom endpoint dobara validated; key kabhi response / log / toast mein plaintext nahi; probe bounded; Sahulat & Safe Service Policy bilkul unchanged — koi bypass automation / device write / erase / flash / IMEI operation nahi.
+- **Documentation status:** P14 `decisions.md` D38 / C28, `PRD.md` §20, `architecture.md` §26, `design.md` §15, `rules.md` §21, `progress.md`, `memory.md`, `changelog.md` aur `agent.md` §Q mein darj hai.
+- **Tests passed:** 192/192. **Tests failed:** koi nahi.
+- **Definition of done:** met · **Gate:** READY.
+- **Commit:** local-only central commit `feat: add P14 local model support, full category audit, and synced governance docs` (2026-11-12, code + tests + docs + addendum ek saath).
+- **Next:** koi naya gate nahi. Model chalane ke liye user ko apne PC par Ollama ya LM Studio start karke model name Settings mein dalna hoga; ya custom public endpoint. N7 ke mutabiq koi bhi naya feature phase-by-phase approval se shuru hoga.

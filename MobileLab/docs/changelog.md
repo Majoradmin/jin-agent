@@ -6,6 +6,19 @@
 
 ## 2026-11-12
 
+### `feat:` — PHASE 14 / Local model support + LLM diagnostics (user request)
+**User-visible app behavior:** Settings mein naya `Model source` (`Off` / `Ollama` / `LM Studio` / `Custom`). Local model ab **bina API key** aur **bina URL type kiye** enable hota hai; app apne fixed loopback presets istemal karta hai. `Model` status line aur `Test model` button batate hain ke model ON hai ya OFF, aur kyun. `/api/status`, `/api/llm/status`, `/api/llm/test` key-free diagnostics dete hain. Files: `research.py`, `server.py`, `db.py`, `web/index.html`, `web/app.js`.
+
+### `fix:` — audit me mili kharabian
+Local loopback endpoints ka SSRF rejection aur local providers par `llm_key` ki ghair-zaroori shart theek ki gaye **bina guard kamzor kiye**; `off` par `key_required: true` wali galat diagnostic `false` ki gayi; `syncLlmProvider()` ab non-custom provider par endpoint/key fields disable karta hai aur Save unhein bhejta hi nahi; `test_service_brief.py` ka hardcoded `1.3.0` assertion `server.VERSION` se compare hota hai.
+
+### `test:` — P14 verification (2026-11-12)
+`test_research.py` +17 local-LLM / HTTP regression tests, `test_static_governance.py` +1 P14 UI gate. Full suite `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -q` → **`Ran 192 tests in 123.628s — OK`** · `PY_COMPILE_OK` · `NODE_CHECK_OK` · `git diff --check` clean · HTTP category smoke **17/17 PASS** · `agent.md` prefix SHA-256 MATCH · docs `9/9` · CSP har response par.
+
+### `docs:` — P14 governance sync
+`PRD.md` 1.6.0 §20, `architecture.md` 2.3.0 §26, `design.md` 2.3.0 §15, `rules.md` §21, `phases.md` §23 `PHASE REVIEW — PHASE 14 READY`, `decisions.md` D38 / C28, `progress.md`, `memory.md`, `changelog.md` aur `agent.md` addendum §Q. Sirf LF, verbatim prefix untouched.
+
+
 ### `chore:` — LF line-ending normalization + P12 / P13 central commit
 **User-visible app behavior:** koi badlao nahi. 9 governance docs CRLF se wapas LF par laye gaye (repo `core.autocrlf=false`, koi `.gitattributes` nahi) — is se `git diff --check` clean hua. `agent.md` ke verbatim bytes bilkul untouched rahe (prefix SHA-256 MATCH). P12 / P13 ka pending code + docs aik local-only central commit mein gaya; koi remote nahi.
 

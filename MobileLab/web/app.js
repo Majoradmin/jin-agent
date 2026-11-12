@@ -923,16 +923,35 @@ function renderKnowledge() {
 }
 
 /* ------------------------------------------------------------------ settings */
+/* Endpoint / key are CUSTOM-only. For local providers the app owns the
+   loopback URL, so sending a stale user endpoint would hit the SSRF guard. */
+function syncLlmProvider() {
+  const custom = $('#setProvider').value === 'custom';
+  for (const id of ['#setEndpoint', '#setKey']) {
+    const el = $(id);
+    el.disabled = !custom;
+    el.title = custom ? '' : 'Sirf custom provider ke liye';
+  }
+}
+
 async function loadSettings() {
   try {
     const s = await api('/api/settings');
     $('#setTech').value = s.technician || ''; $('#setShop').value = s.shop || '';
     $('#setEndpoint').value = s.llm_endpoint || ''; $('#setKey').value = '';
     $('#setModel').value = s.llm_model || ''; $('#setCache').value = s.cache_minutes || '15';
+    $('#setProvider').value = s.llm_provider || 'off';
+    syncLlmProvider();
+    const lm = await api('/api/llm/status').catch(() => null);
+    const modelLine = !lm ? 'Model: status dastiyab nahi'
+      : (lm.enabled ? `Model ON — ${lm.provider} / ${lm.model}; research khulasa LLM se rewrite hoga.`
+                    : `Model OFF — ${lm.reason}`);
+    $('#llmState').textContent = modelLine;
     const st = state.status || await api('/api/status');
     $('#statusOut').innerHTML = Object.entries({
       'App version': st.version, 'Python': st.python, 'Local URL': st.web,
-      'Database': st.db, 'Live sources': st.sources, 'Security': st.security_note,
+      'Database': st.db, 'Live sources': st.sources, 'Model': modelLine,
+      'Security': st.security_note,
     }).map(([a,b]) => `<div class="k">${esc(a)}</div><div>${esc(b)}</div>`).join('');
   } catch (e) { toast(e.message, true); }
 }
@@ -1086,15 +1105,33 @@ function bind() {
   $('#svcRunBtn').onclick = svcRun;
   $('#svcCopyBtn').onclick = () => copyText($('#svcOutput').textContent, 'Report copied');
 
+  $('#setProvider').onchange = syncLlmProvider;
   $('#setSave').onclick = async () => {
     try {
-      await post('/api/settings', { technician:$('#setTech').value, shop:$('#setShop').value,
-        llm_endpoint:$('#setEndpoint').value, llm_key:$('#setKey').value,
-        llm_model:$('#setModel').value, cache_minutes:$('#setCache').value });
+      const payload = { technician:$('#setTech').value, shop:$('#setShop').value,
+        llm_provider:$('#setProvider').value,
+        llm_model:$('#setModel').value, cache_minutes:$('#setCache').value };
+      if (payload.llm_provider === 'custom') {
+        payload.llm_endpoint = $('#setEndpoint').value;
+        payload.llm_key = $('#setKey').value;
+      }
+      await post('/api/settings', payload);
       $('#setMsg').textContent = '✓ Saved'; $('#setKey').value = '';
       setTimeout(() => $('#setMsg').textContent = '', 3000);
       toast('Settings saved');
+      await loadSettings();
     } catch (e) { toast(e.message, true); }
+  };
+  $('#llmTest').onclick = async () => {
+    const out = $('#llmTestMsg');
+    out.textContent = 'Testing…';
+    try {
+      const r = await post('/api/llm/test', {});
+      out.textContent = r.ok
+        ? `✓ ${r.provider} / ${r.model} — ${r.latency_ms} ms`
+        : `✗ ${r.error || 'Model se rabta nahi ho saka'}`;
+      toast(r.ok ? 'Model chal raha hai' : 'Model test fail', !r.ok);
+    } catch (e) { out.textContent = '✗ ' + e.message; toast(e.message, true); }
   };
 }
 

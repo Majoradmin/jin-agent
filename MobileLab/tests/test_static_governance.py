@@ -98,6 +98,25 @@ class TestStaticGovernance(unittest.TestCase):
             with self.subTest(tok=tok):
                 self.assertNotIn(tok, prod, tok)
 
+    def test_p14_model_source_ui(self):
+        """P14: provider select + custom-only endpoint/key + LLM diagnostics."""
+        js = (BASE / "web" / "app.js").read_text(encoding="utf-8")
+        for token in ('id="setProvider"', 'id="llmState"', 'id="llmTest"',
+                      'id="llmTestMsg"'):
+            with self.subTest(token=token):
+                self.assertIn(token, HTML)
+        for opt in ("off", "ollama", "lmstudio", "custom"):
+            with self.subTest(opt=opt):
+                self.assertIn('value="%s"' % opt, HTML)
+        self.assertIn("function syncLlmProvider()", js)
+        self.assertIn("$('#setProvider').onchange = syncLlmProvider;", js)
+        self.assertIn("payload.llm_provider === 'custom'", js)
+        self.assertIn("/api/llm/status", js)
+        self.assertIn("/api/llm/test", js)
+        # A stale loopback endpoint must never be posted for a local provider.
+        self.assertNotIn(
+            "llm_endpoint:$('#setEndpoint').value, llm_key:$('#setKey').value,", js)
+
     def test_policy_boundary_unchanged_static(self):
         sah = (BASE / "sahulat.py").read_text(encoding="utf-8")
         kn = (BASE / "knowledge.py").read_text(encoding="utf-8")

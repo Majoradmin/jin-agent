@@ -5,6 +5,7 @@ Every outbound call is mocked: ``research.fetch`` (pipeline), ``urllib.request.u
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import time
@@ -177,6 +178,126 @@ class TestResearchHelpers(unittest.TestCase):
         for text, cat in cases.items():
             with self.subTest(text=text):
                 self.assertEqual(R.category_of(text), cat)
+
+
+class TestLocalLLMConfig(unittest.TestCase):
+    """P14: local model support without weakening the QA #6 SSRF guard."""
+
+    def test_off_is_rule_based_with_reason(self):
+        c = R.resolve_llm({})
+        self.assertFalse(c["enabled"])
+        self.assertEqual(c["mode"], "rule_based")
+        self.assertTrue(c["reason"])
+        self.assertFalse(c["key_required"])   # OFF means no key is needed either
+
+    def test_ollama_needs_no_key(self):
+        c = R.resolve_llm({"llm_provider": "ollama", "llm_model": "qwen2.5:0.5b"})
+        self.assertTrue(c["enabled"])
+        self.assertEqual(c["base"], "http://127.0.0.1:11434/v1")
+        self.assertFalse(c["key_required"])
+
+    def test_lmstudio_endpoint(self):
+        c = R.resolve_llm({"llm_provider": "lmstudio", "llm_model": "local-model"})
+        self.assertTrue(c["enabled"])
+        self.assertEqual(c["base"], "http://127.0.0.1:1234/v1")
+
+    def test_local_without_model_stays_off(self):
+        c = R.resolve_llm({"llm_provider": "ollama"})
+        self.assertFalse(c["enabled"])
+        self.assertIn("Model ka naam", c["reason"])
+
+    def test_custom_requires_key(self):
+        base = {"llm_provider": "custom", "llm_endpoint": "https://api.example.com/v1",
+                "llm_model": "m"}
+        self.assertFalse(R.resolve_llm(base)["enabled"])
+        self.assertTrue(R.resolve_llm({**base, "llm_key": "k"})["enabled"])
+
+    def test_custom_internal_endpoint_blocked(self):
+        for ep in ("http://127.0.0.1:11434/v1", "http://localhost/v1",
+                   "http://169.254.169.254/latest", "http://10.0.0.1/v1",
+                   "ftp://x/v1"):
+            with self.subTest(ep=ep):
+                c = R.resolve_llm({"llm_provider": "custom", "llm_endpoint": ep,
+                                   "llm_key": "k", "llm_model": "m"})
+                self.assertFalse(c["enabled"])
+
+    def test_legacy_endpoint_still_custom(self):
+        c = R.resolve_llm({"llm_endpoint": "https://api.example.com/v1",
+                           "llm_key": "k", "llm_model": "m"})
+        self.assertTrue(c["enabled"])
+        self.assertEqual(c["provider"], "custom")
+
+    def test_status_never_leaks_key(self):
+        st = R.llm_status({"llm_provider": "custom",
+                           "llm_endpoint": "https://api.example.com/v1",
+                           "llm_key": "SUPERSECRET", "llm_model": "m"})
+        self.assertNotIn("SUPERSECRET", json.dumps(st))
+        self.assertNotIn("llm_key", st)
+
+    def test_probe_disabled_returns_reason(self):
+        r = R.llm_probe({})
+        self.assertFalse(r["ok"])
+        self.assertTrue(r["error"])
+
+    def test_probe_success_mocked(self):
+        resp = mock.MagicMock()
+        resp.__enter__.return_value.read.return_value = (
+            b'{"choices":[{"message":{"content":" OK "}}]}')
+        with mock.patch("urllib.request.urlopen", return_value=resp):
+            r = R.llm_probe({"llm_provider": "ollama", "llm_model": "tiny"}, timeout=1)
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["reply"], "OK")
+
+    def test_rewrite_local_omits_auth_header(self):
+        resp = mock.MagicMock()
+        resp.__enter__.return_value.read.return_value = (
+            b'{"choices":[{"message":{"content":"Roman Urdu"}}]}')
+        with mock.patch("urllib.request.urlopen", return_value=resp) as u:
+            out = R.llm_rewrite("note", {"llm_provider": "ollama", "llm_model": "tiny"})
+        self.assertEqual(out, "Roman Urdu")
+        req = u.call_args[0][0]
+        self.assertNotIn("Authorization", req.headers)
+        self.assertIn("127.0.0.1:11434", req.full_url)
+
+
+class TestLLMHTTP(unittest.TestCase):
+    def setUp(self):
+        H.reset_db()
+
+    def test_status_llm_block_off(self):
+        code, _, body = H.get_json(_PORT, "/api/status")
+        self.assertEqual(code, 200)
+        self.assertIn("llm", body)
+        self.assertFalse(body["llm"]["enabled"])
+
+    def test_llm_status_endpoint(self):
+        code, _, body = H.get_json(_PORT, "/api/llm/status")
+        self.assertEqual(code, 200)
+        self.assertIn("mode", body)
+
+    def test_invalid_provider_rejected(self):
+        code, _, _ = H.post_json(_PORT, "/api/settings", {"llm_provider": "evil"})
+        self.assertEqual(code, 400)
+
+    def test_ollama_settings_enable_model(self):
+        code, _, _ = H.post_json(_PORT, "/api/settings",
+                                 {"llm_provider": "ollama", "llm_model": "tiny"})
+        self.assertEqual(code, 200)
+        _, _, st = H.get_json(_PORT, "/api/status")
+        self.assertTrue(st["llm"]["enabled"])
+        self.assertEqual(st["llm"]["provider"], "ollama")
+
+    def test_llm_test_endpoint_off_is_safe(self):
+        code, _, body = H.post_json(_PORT, "/api/llm/test", {})
+        self.assertEqual(code, 200)
+        self.assertFalse(body["ok"])
+        self.assertTrue(body.get("error"))
+
+    def test_ssrf_guard_still_rejects_loopback_endpoint(self):
+        code, _, _ = H.post_json(
+            _PORT, "/api/settings",
+            {"llm_provider": "custom", "llm_endpoint": "http://127.0.0.1:9/v1"})
+        self.assertEqual(code, 400)
 
 
 if __name__ == "__main__":

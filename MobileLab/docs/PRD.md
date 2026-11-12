@@ -1,7 +1,7 @@
 # PRD — MobileLab
 
-**Version:** 1.5.0 (PHASE 3–P13 delivered state) · **Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Root:** `J:\Ai Agent`
-**Status:** PHASE 0 / 1 / 1B / 2 `READY` + **PHASE 3–P13 `READY`** — **project complete** (C23 / D29 auto-continue run). Reviews `phases.md` §8–§22 mein; P5 / P10 N/A gates `D30` / `D31` se justified. N7: naye kaam par phase-by-phase approval wapas lagu hogi. Delivered states §17 (P3–P11), §18 (P12), §19 (P13) mein.
+**Version:** 1.6.0 (PHASE 3–P14 delivered state) · **Date:** 2026-11-08 · **Updated:** 2026-11-12 · **Root:** `J:\Ai Agent`
+**Status:** PHASE 0 / 1 / 1B / 2 `READY` + **PHASE 3–P14 `READY`** — **project complete** (C23 / D29 auto-continue run). Reviews `phases.md` §8–§23 mein; P5 / P10 N/A gates `D30` / `D31` se justified. N7: naye kaam par phase-by-phase approval wapas lagu hogi. Delivered states §17 (P3–P11), §18 (P12), §19 (P13), §20 (P14) mein.
 **Language (C19 / D22):** information, report, plan aur tamam prose = **Roman Urdu**; headings, table headers, code, identifiers, paths, API routes, commit messages, UI labels aur technical terms = **English** (professional surface). C9 refined, khatam nahi.
 
 > **Research honesty:** is file mein sirf wo sources hain jo 2026-11-08 ko directly fetch ya official search result se verify kiye gaye. Har fact ke saath URL aur `date checked` hai. **Facts** aur **Recommendations** alag sections mein hain. P2 ke 12 official technology / security sources `architecture.md` §19 me darj hain; is PRD me unka §16 linkage hai. Market-size ya reseller ke ghair-tasdeeq numbers PRD mein shamil nahi kiye gaye. Koi citation banawati nahi.
@@ -589,6 +589,25 @@ O1–O8, O10, O11, O12, O13 upar `decisions.md` mein; **O9 resolved** (D21). **C
 
 ---
 
-## 20. Future phases / roadmap (planned, not delivered)
+## 20. PHASE 14 — Local Model Support & LLM Diagnostics (delivered state, 2026-11-12)
 
-> **Roadmap note (C15 / N7):** koi phase skip nahi. P12 / P13 ab delivered hain; naye phases phase-by-phase approval ke sath shuru honge. Roadmap abhi empty hai.
+> **Delivered on user request:** *"ye sbb ok krdo or app ki har category check kro work krti ha ya ni.?"* — poori app ka category audit + model ki asli kharabi ka fix. Product scope / policy **bilkul unchanged** (`§10`).
+
+| Area | Delivered | Reference |
+|---|---|---|
+| Root cause | QA #6 SSRF guard user-supplied loopback endpoint ko reject karta tha aur local runtimes ko bhi `llm_key` mangta tha; is liye Ollama / LM Studio kabhi enable hi na ho sakte the | `D38` |
+| Provider presets | `llm_provider` = `off` / `ollama` / `lmstudio` / `custom`; local URLs **app-owned** (`127.0.0.1:11434/v1`, `127.0.0.1:1234/v1`) — user se loopback URL kabhi nahi liya jata | `D38`, `C28` |
+| Key-free local mode | Local providers par koi API key nahi; `resolve_llm()` / `llm_status()` / `llm_probe()` key-free diagnostics; local par `Authorization` header nahi bhejta | `D38` |
+| Diagnostics | `GET /api/status` → `llm` block, `GET /api/llm/status`, `POST /api/llm/test` (8s timeout, key kabhi response / log mein nahi); Settings mein `Model source`, `Model` status line, `Test model` | `AC-P14-01…AC-P14-05` |
+| SSRF guard | `server._check_endpoint()` / `validate_llm_endpoint()` **unchanged** — user-supplied `127.0.0.1` / `localhost` / `10.*` / `169.254.169.254` / metadata ab bhi `400` / `False` | `D32`, `D38` |
+| Tests | `test_research.py` +17, `test_static_governance.py` +1 P14 UI gate, `test_service_brief.py` hardcoded version assertion fix; full suite `Ran 192 tests in 123.628s — OK` | `D33` |
+
+- **App `VERSION`:** `1.4.0`. `db.DEFAULT_SETTINGS` mein additive `llm_provider` (`INSERT OR IGNORE` auto-migrate); koi naya table / migration / dependency nahi.
+- **Rule-based fallback:** `off` default hai. Model na hone par Roman Urdu khulasa pehle ki tarah rule-based chalta hai — ye bug nahi.
+- **Honestly deferred:** Ollama / LM Studio runtime aur model binary user ke PC par abhi install nahi; app configured-ready hai, model abhi `OFF`. Bina ijazat koi runtime / binary install nahi kiya gaya.
+
+---
+
+## 21. Future phases / roadmap (planned, not delivered)
+
+> **Roadmap note (C15 / N7):** koi phase skip nahi. P12 / P13 / P14 ab delivered hain; naye phases phase-by-phase approval ke sath shuru honge. Roadmap abhi empty hai.

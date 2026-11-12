@@ -39,6 +39,129 @@ log = logging.getLogger(__name__)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MobileLab/1.0 (local research agent)"
 TIMEOUT = 10
 
+# Optional LLM: local runtimes use APP-OWNED loopback URLs, never a URL typed by
+# the user. This keeps the QA #6 SSRF guard intact for user-supplied endpoints
+# while still allowing a fully local Ollama / LM Studio model (C7 / C11).
+LOCAL_LLM_ENDPOINTS = {
+    "ollama": "http://127.0.0.1:11434/v1",
+    "lmstudio": "http://127.0.0.1:1234/v1",
+}
+LLM_PROVIDERS = ("off", "ollama", "lmstudio", "custom")
+
+
+def _public_endpoint_ok(url: str) -> bool:
+    """Cheap, DNS-free safety check for a user-supplied custom LLM endpoint."""
+    try:
+        p = urllib.parse.urlsplit(str(url or "").strip())
+        if p.scheme not in ("http", "https") or p.username or p.password:
+            return False
+        host = (p.hostname or "").lower().rstrip(".")
+        if (not host or host in ("localhost", "metadata", "metadata.google.internal",
+                                 "instance-data", "metadata.goog")
+                or host.endswith(".localhost") or host.endswith(".internal")):
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+        except ValueError:
+            pass                      # public hostname: no live DNS (offline app)
+        return True
+    except Exception:
+        return False
+
+
+def resolve_llm(settings: dict) -> dict:
+    """Resolve a SAFE description of the optional LLM configuration.
+
+    ``off`` / empty  -> rule-based Roman Urdu (default, zero network).
+    ``ollama`` / ``lmstudio`` -> app-owned loopback URL, NO API key needed.
+    ``custom`` -> user endpoint + key + model, public http/https only.
+    """
+    s = settings or {}
+    provider = str(s.get("llm_provider") or "").strip().lower()
+    model = str(s.get("llm_model") or "").strip()
+    key = str(s.get("llm_key") or "").strip()
+    endpoint = str(s.get("llm_endpoint") or "").strip().rstrip("/")
+
+    if not provider and endpoint:
+        provider = "custom"           # backward compatibility (pre-P14 settings)
+    if provider not in LLM_PROVIDERS:
+        provider = "off"
+
+    base, key_required, reason = "", False, ""
+    if provider in LOCAL_LLM_ENDPOINTS:
+        base, key_required = LOCAL_LLM_ENDPOINTS[provider], False
+    elif provider == "custom":
+        key_required = True                 # only a custom remote endpoint needs a key
+        if not endpoint:
+            reason = "Custom provider chuna hai magar endpoint khali hai."
+        elif not _public_endpoint_ok(endpoint):
+            reason = "Custom endpoint SSRF guard se block hua (sirf public http/https)."
+        else:
+            base = endpoint
+    else:
+        reason = ("Model band hai: koi provider set nahi. Rule-based Roman Urdu "
+                  "khulasa chal raha hai (ye bug nahi).")
+
+    if base and not model:
+        reason = "Model ka naam khali hai (maslan qwen2.5:0.5b ya gpt-4o-mini)."
+    elif base and key_required and not key:
+        reason = "Custom endpoint ke liye API key zaroori hai."
+
+    enabled = bool(base and model and (key or not key_required))
+    return {
+        "enabled": enabled,
+        "provider": provider,
+        "base": base,
+        "model": model,
+        "key_required": key_required,
+        "key_present": bool(key),
+        "mode": "llm" if enabled else "rule_based",
+        "reason": "" if enabled else (reason or "Model configuration adhoori hai."),
+    }
+
+
+def llm_status(settings: dict) -> dict:
+    """Public, key-free LLM diagnostics for ``/api/status`` and Settings UI."""
+    c = resolve_llm(settings)
+    return {k: c[k] for k in ("enabled", "provider", "model", "mode", "reason",
+                              "key_required")} | {"endpoint": c["base"]}
+
+
+def llm_probe(settings: dict, timeout: float = 8) -> dict:
+    """Test the configured model with one tiny request. Never leaks the key."""
+    c = resolve_llm(settings)
+    info = {"ok": False, "provider": c["provider"], "model": c["model"],
+            "endpoint": c["base"], "mode": c["mode"]}
+    if not c["enabled"]:
+        info["error"] = c["reason"] or "Model configure nahi hai."
+        return info
+    url = c["base"] if c["base"].endswith("/chat/completions") else c["base"] + "/chat/completions"
+    payload = {"model": c["model"],
+               "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+               "temperature": 0, "max_tokens": 8}
+    headers = {"Content-Type": "application/json", "User-Agent": UA}
+    key = str(settings.get("llm_key") or "").strip()
+    if key:
+        headers["Authorization"] = "Bearer " + key
+    started = time.monotonic()
+    try:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
+                                     headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        info.update({"ok": True,
+                     "reply": str(data["choices"][0]["message"]["content"]).strip()[:80],
+                     "latency_ms": round((time.monotonic() - started) * 1000)})
+    except Exception as e:
+        log.warning("LLM probe failed (%s): %s", type(e).__name__, e)
+        info.update({"ok": False,
+                     "error": ("Model se rabta nahi ho saka (%s). Local runtime chal raha "
+                               "hai aur model download hua hai?" % type(e).__name__),
+                     "latency_ms": round((time.monotonic() - started) * 1000)})
+    return info
+
 GITHUB_REPOS = [
     ("bkerler/mtkclient", "MTK client"),
     ("bkerler/edl", "Qualcomm EDL client"),
@@ -430,28 +553,30 @@ def make_khulasa(rec: dict, cat: str, matched: list[str], score: float) -> str:
 def llm_rewrite(text: str, settings: dict) -> str | None:
     """Optional OpenAI-compatible rewrite of a Roman-Urdu khulasa.
 
-    Returns None when LLM settings are absent or the call fails. Any runtime
-    failure is logged (QA #12) instead of being silently swallowed.
+    Local providers (Ollama / LM Studio) need NO API key; custom public
+    endpoints still need one. Returns None when the model is off or the call
+    fails. Any runtime failure is logged (QA #12), never silently swallowed.
     """
-    ep = (settings.get("llm_endpoint") or "").strip().rstrip("/")
-    key = (settings.get("llm_key") or "").strip()
-    model = (settings.get("llm_model") or "").strip()
-    if not (ep and key and model):
+    c = resolve_llm(settings or {})
+    if not c["enabled"]:
         return None
-    url = ep if ep.endswith("/chat/completions") else ep + "/chat/completions"
+    url = c["base"] if c["base"].endswith("/chat/completions") else c["base"] + "/chat/completions"
     payload = {
-        "model": model,
+        "model": c["model"],
         "messages": [
             {"role": "system", "content": "Rewrite the given mobile-software news note in natural Roman Urdu (Urdu written in Latin script). Keep technical terms like firmware, firehose, preloader, bootloader, FRP, EMUI in English. Be concise, 2 sentences. Never add facts that are not in the source."},
             {"role": "user", "content": text},
         ],
         "temperature": 0.2, "max_tokens": 180,
     }
+    headers = {"Content-Type": "application/json", "User-Agent": UA}
+    key = str((settings or {}).get("llm_key") or "").strip()
+    if key:
+        headers["Authorization"] = "Bearer " + key
     try:
         req = urllib.request.Request(
             url, data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Authorization": "Bearer " + key,
-                     "User-Agent": UA}, method="POST")
+            headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=25) as r:
             data = json.loads(r.read().decode("utf-8", "replace"))
         return data["choices"][0]["message"]["content"].strip()
@@ -600,8 +725,8 @@ def research(params: dict, settings: dict | None = None) -> dict:
     results.sort(key=lambda x: x["score"], reverse=True)  # stable: date breaks ties
     results = results[:limit]
 
-    # Optional LLM rewrite for top items only
-    if settings.get("llm_endpoint") and settings.get("llm_key") and settings.get("llm_model"):
+    # Optional LLM rewrite for top items only (local providers need no API key)
+    if resolve_llm(settings or {})["enabled"]:
         for r in results[:12]:
             better = llm_rewrite(r["khulasa"] + " | Source: " + r["title"], settings)
             if better:

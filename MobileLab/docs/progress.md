@@ -1,11 +1,11 @@
 # progress.md — Current Progress
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Current phase:** `PHASE 13 — Agent Memory — READY`
-**Current task:** koi nahi. P0–P2, P3–P12 aur PHASE 13 sab mukammal; project `READY`.
-**Gate status:** `READY` — `PHASE REVIEW — PHASE 3…PHASE 11` `phases.md` §12–§20, `PHASE REVIEW — PHASE 12` §21 aur `PHASE REVIEW — PHASE 13` §22 mein darj hain; P5 / P10 `N/A` justified (D30 / D31), gates **passed not skipped**; `VERSION 1.3.0`, 10 files / 174 tests.
+**Date:** 2026-11-08 · **Updated:** 2026-11-12 · **Current phase:** `PHASE 14 — Local Model Support — READY`
+**Current task:** koi nahi. P0–P2, P3–P13 aur PHASE 14 sab mukammal; project `READY`.
+**Gate status:** `READY` — `PHASE REVIEW — PHASE 3…PHASE 11` `phases.md` §12–§20, `PHASE REVIEW — PHASE 12` §21 aur `PHASE REVIEW — PHASE 13` §22 aur `PHASE REVIEW — PHASE 14` §23 mein darj hain; P5 / P10 `N/A` justified (D30 / D31), gates **passed not skipped**; `VERSION 1.4.0`, 10 files / 192 tests.
 **Previous gates:** `PHASE 0` ✅ `READY` (§8) · `PHASE 1` ✅ `READY` (§9) · `PHASE 1B` ✅ `READY` (§10) · `PHASE 2` ✅ `READY` (§11).
 **Language:** content Roman Urdu, surface English (C19 / D22).
-**Approval:** C23 / D29 P3–P11 blanket auto-continue is run me **consume** hua. PHASE 12 ke liye user ne alag se "Aik hi run me poora karo (Recommended)" single-run ijazat di — ye **sirf is feature** ke liye N7 ko muattal karti hai, Sahulat & Safe Service Policy par koi asar nahi, koi chhoot nahi; agle naye kaam par N7 phase-by-phase approval wapas lagu hogi (C26 / D35). PHASE 13 ke liye user ne **explicit feature request** par implement kar di (C27 / D36); PHASE REVIEW — PHASE 13 `phases.md` §22 mein `READY` darj (D36); koi N7 hold nahi tha is phase ke liye.
+**Approval:** C23 / D29 P3–P11 blanket auto-continue is run me **consume** hua. PHASE 12 ke liye user ne alag se "Aik hi run me poora karo (Recommended)" single-run ijazat di — ye **sirf is feature** ke liye N7 ko muattal karti hai, Sahulat & Safe Service Policy par koi asar nahi, koi chhoot nahi; agle naye kaam par N7 phase-by-phase approval wapas lagu hogi (C26 / D35). PHASE 13 ke liye user ne **explicit feature request** par implement kar di (C27 / D36); PHASE REVIEW — PHASE 13 `phases.md` §22 mein `READY` darj (D36). PHASE 14 user ki *"ye sbb ok krdo or app ki har category check kro work krti ha ya ni.?"* request par category audit + fix tha — koi naya policy scope nahi, koi N7 chhoot nahi (C28 / D38).
 
 ---
 
@@ -15,6 +15,16 @@
 - **VERIFICATION:** 174/174 tests OK · `PY_COMPILE_OK` / `NODE_CHECK_OK` · `/api/status` 200 · `agent.md` prefix SHA-256 MATCH · `git remote -v` empty.
 - **LLM status:** `llm_endpoint` / `llm_key` / `llm_model` khali hain → LLM rewrite **OFF by design**; rule-based Roman Urdu fallback chal raha hai, ye bug nahi. Enable karne ke liye Settings mein OpenAI-compatible endpoint + key + model, ya local Ollama / LM Studio (`127.0.0.1:11434` / `:1234`).
 - **Next:** koi naya gate nahi. Naya feature aane par N7 phase-by-phase approval wapas lagu hogi.
+
+---
+
+## 0B. PHASE 14 — Local Model Support & Full Category Audit — 2026-11-12
+
+- **Current task:** mukammal. Har category HTTP smoke + regression tests se verify; model ki asli kharabi (SSRF guard + key requirement) fix; `VERSION 1.4.0`.
+- **VERIFICATION:** 192/192 tests OK · `PY_COMPILE_OK` / `NODE_CHECK_OK` · `git diff --check` clean · HTTP smoke 17/17 PASS · `agent.md` prefix SHA-256 MATCH · docs `9/9` · `git remote -v` empty.
+- **LLM status:** `llm_provider = off` default; rule-based Roman Urdu khulasa chal raha hai. Ollama / LM Studio presets ready hain magar koi runtime / model binary PC par install nahi — is liye model `OFF` hai, ye bug nahi. `GET /api/llm/status` aur `POST /api/llm/test` wajah batate hain.
+- **Audit note:** pehle audit ke 3 "failures" tool ki apni ghalti thin — `policy` nested object, dynamic `$('#view-' + view)` selector aur galat static path `/web/app.js` (sahi `/app.js`). Code defect nahi tha; verify karke false-positive darj kiya gaya.
+- **Next:** koi naya gate nahi. Model chalane ke liye user ko local runtime start karke model name Settings mein dalna hoga.
 
 ---
 
@@ -88,12 +98,12 @@
 | Security baseline | code read-back | ✅ four security headers + CSP + `Cache-Control: no-store`, `MAX_BODY` 1 MiB, `_authorize_path` (realpath/commonpath), `validate_llm_endpoint`, `_xml_precheck`, `_mask_settings`, `db._session()` closes every connection |
 | Git hygiene | `git remote -v`, `core.autocrlf`, `git diff --check` | ✅ empty remote · `false` · clean `git diff --check`; koi commit is assistant ne nahi kiya |
 
-**Note:** 47-test targeted suite aur `2.059s` purane P2 / P1B records hain; ab **poora project suite 174 tests** hai — koi jhootha "partial = full" claim nahi. `85.402s` aik asli central run ka waqt hai; machine load ke sath waqt badalta hai (aakhri final re-run `Ran 174 tests in 85.402s — OK`), lekin **174 tests / `OK` / zero `ResourceWarning`** har run par barqarar.
+**Note:** 47-test targeted suite aur `2.059s` purane P2 / P1B records hain; ab **poora project suite 192 tests** hai — koi jhootha "partial = full" claim nahi. `85.402s` aik asli central run ka waqt hai; machine load ke sath waqt badalta hai (aakhri final re-run `Ran 174 tests in 85.402s — OK`), lekin **174 tests / `OK` / zero `ResourceWarning`** har run par barqarar.
 
 ## 5. Remaining Work
 
-**Is phase:** koi nahi — PHASE 13 `READY`, **project complete**.
-**Agle phases:** koi nahi — P3–P13 sab delivered.
+**Is phase:** koi nahi — PHASE 14 `READY`, **project complete**.
+**Agle phases:** koi nahi — P3–P14 sab delivered.
 **Deferred open questions (alag, honestly listed; inka koi invented resolution nahi):** O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 (`decisions.md` D34). Ye project complete hone se nahi rokte; naye kaam par N7 ke mutabiq phase-by-phase approval ke sath khulenge.
 
 ## 6. Known Risks
@@ -102,4 +112,4 @@ R1 verbatim drift (mitigated: hash + `core.autocrlf=false`) · R2 banawati citat
 
 ## 7. Next Action
 
-**Project complete** — PHASE 0 / 1 / 1B / 2 aur P3–P13 sab `READY`; `phases.md` §12–§22 mein 11 final `PHASE REVIEW`s darj (P3–P11 + P12 + P13). Koi agla internal action nahi. N7 ke mutabiq **naye kaam par phase-by-phase approval wapas lagu hogi** (C23 / D29 auto-continue is run tak seemit tha). `status` bole to `progress.md` + `phases.md` §1 parho; `review` bole to §12–§22 ka PHASE REVIEW dikhao. Central coordinator final commit karega — is assistant ne koi commit nahi kiya.
+**Project complete** — PHASE 0 / 1 / 1B / 2 aur P3–P14 sab `READY`; `phases.md` §12–§23 mein 12 final `PHASE REVIEW`s darj (P3–P11 + P12 + P13 + P14). Koi agla internal action nahi. N7 ke mutabiq **naye kaam par phase-by-phase approval wapas lagu hogi** (C23 / D29 auto-continue is run tak seemit tha). `status` bole to `progress.md` + `phases.md` §1 parho; `review` bole to §12–§22 ka PHASE REVIEW dikhao. Central coordinator final commit karega — is assistant ne koi commit nahi kiya.

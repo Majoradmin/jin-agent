@@ -1,6 +1,6 @@
 # memory.md — Project Context
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Root:** `J:\Ai Agent` · **App:** `MobileLab` · **Current phase:** `PHASE 13 — Agent Memory` — ✅ **READY** · **App `VERSION`:** `1.3.0`
+**Date:** 2026-11-08 · **Updated:** 2026-11-12 · **Root:** `J:\Ai Agent` · **App:** `MobileLab` · **Current phase:** `PHASE 14 — Local Model Support` — ✅ **READY** · **App `VERSION`:** `1.4.0`
 Ye file project ki **lasting context** rakhti hai. Rozana ka detail `progress.md`, faisle `decisions.md`, user-visible badlao `changelog.md` mein.
 
 ---
@@ -90,4 +90,12 @@ Local Windows **mobile-software / firmware workbench**. Mobile-software technici
 
 ## 8. Next recommended action
 
-PHASE 0, 1, 1B, 2 aur **PHASE 3–P13** sab `READY` — **project complete**. `phases.md` §12–§22 mein 11 final `PHASE REVIEW`s, `decisions.md` D30–D36 / C24–C27, `architecture.md` 2.1.0 §23 / §24 / §25, `PRD.md` 1.5.0 §18 / §19 darj. **PHASE 12** (`phases.md` §21) aur **PHASE 13** (`phases.md` §22) ab `READY` hain — P12 Service Brief aur P13 Agent Memory delivered; `VERSION 1.3.0`. Koi agla internal action nahi. **N7:** naye kaam par phase-by-phase approval wapas lagu hogi (C23 / D29 auto-continue is run tak seemit tha); P5 / P10 `N/A` justified hain, skip nahi. `status` bole to `progress.md` aur `phases.md` §1 parho; `review` bole to §12–§22 ka PHASE REVIEW dikhao. Central coordinator final commit karega; is assistant ne koi commit nahi kiya. Har reply / report / plan Roman Urdu me (C19).
+PHASE 0, 1, 1B, 2 aur **PHASE 3–P14** sab `READY` — **project complete**. `phases.md` §12–§23 mein 12 final `PHASE REVIEW`s, `decisions.md` D30–D38 / C24–C28, `architecture.md` 2.1.0 §23 / §24 / §25, `PRD.md` 1.5.0 §18 / §19 darj. **PHASE 12** (`phases.md` §21) aur **PHASE 13** (`phases.md` §22) ab `READY` hain — P12 Service Brief aur P13 Agent Memory delivered; `VERSION 1.3.0`. Koi agla internal action nahi. **N7:** naye kaam par phase-by-phase approval wapas lagu hogi (C23 / D29 auto-continue is run tak seemit tha); P5 / P10 `N/A` justified hain, skip nahi. `status` bole to `progress.md` aur `phases.md` §1 parho; `review` bole to §12–§23 ka PHASE REVIEW dikhao. Central coordinator final commit karega; is assistant ne koi commit nahi kiya. Har reply / report / plan Roman Urdu me (C19).
+
+## 9. PHASE 14 — Local Model Support (2026-11-12)
+
+- User ki *"ye sbb ok krdo or app ki har category check kro work krti ha ya ni.?"* request par poori app ka HTTP category audit kiya gaya; sab categories kaam karti hain (17/17 smoke, 192/192 tests).
+- Asli defect: local LLM endpoints QA #6 SSRF guard se block the aur local providers ko bhi API key mangte the. Fix = `llm_provider` presets (`off` / `ollama` / `lmstudio` / `custom`) + app-owned loopback URLs + key-free local mode. Guard **unchanged** (`D38` / `C28`).
+- Diagnostics: `/api/status.llm`, `/api/llm/status`, `/api/llm/test`; Settings mein `Model source`, `Model` status line aur `Test model`. Key kabhi plaintext return nahi hoti.
+- `VERSION 1.4.0`; koi naya table, dependency ya runtime install nahi. Model abhi `OFF` by design — rule-based Roman Urdu fallback sahih behavior hai.
+- **Lesson:** audit tool ke apne assumptions bhi verify karo — nested `policy.id`, JS template literals se bane dynamic IDs aur `/app.js` jaise static paths par 3 false positives mile; code theek tha, script galat tha.

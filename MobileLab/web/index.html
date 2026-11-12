@@ -448,13 +448,24 @@
           <div class="form-grid">
             <label>Technician name <input id="setTech"></label>
             <label>Shop / workspace <input id="setShop"></label>
-            <label class="wide">OpenAI-compatible endpoint <input id="setEndpoint" placeholder="https://api.example.com/v1"></label>
-            <label>API key <input id="setKey" type="password" placeholder="khali chhor dein = offline mode"></label>
-            <label>Model <input id="setModel" placeholder="maslan gpt-4o-mini"></label>
+            <label class="wide">Model source
+              <select id="setProvider">
+                <option value="off">Off — rule-based Roman Urdu (default)</option>
+                <option value="ollama">Ollama (local 127.0.0.1:11434)</option>
+                <option value="lmstudio">LM Studio (local 127.0.0.1:1234)</option>
+                <option value="custom">Custom OpenAI-compatible endpoint</option>
+              </select>
+            </label>
+            <label class="wide">OpenAI-compatible endpoint (custom only) <input id="setEndpoint" placeholder="https://api.example.com/v1"></label>
+            <label>API key (custom only) <input id="setKey" type="password" placeholder="local model par khali chhor dein"></label>
+            <label>Model <input id="setModel" placeholder="maslan qwen2.5:0.5b ya gpt-4o-mini"></label>
             <label>Cache (minutes) <input id="setCache" type="number" min="1" max="240"></label>
           </div>
           <button class="btn primary" id="setSave">Save</button>
           <span id="setMsg" class="muted small" aria-live="polite"></span>
+          <p class="muted small" id="llmState" aria-live="polite">Model: checking…</p>
+          <button class="btn ghost" id="llmTest" type="button">Test model</button>
+          <span id="llmTestMsg" class="muted small" aria-live="polite"></span>
         </div>
         <div class="card">
           <div class="card-head"><h2>System status</h2></div>

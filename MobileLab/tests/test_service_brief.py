@@ -464,7 +464,7 @@ class TestServiceBriefHTTP(unittest.TestCase):
     def test_status_endpoint_version_and_policy(self):
         code, _, body = H.get_json(_PORT, "/api/status")
         self.assertEqual(code, 200)
-        self.assertEqual(body["version"], "1.3.0")
+        self.assertEqual(body["version"], server.VERSION)
         self.assertEqual(body["policy_id"], sahulat.POLICY_ID)
         self.assertEqual(body["service_brief_sources"], 8)
         self.assertEqual(body["service_brief_version"], sb.VERSION)
