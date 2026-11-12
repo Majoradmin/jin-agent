@@ -260,7 +260,37 @@ label{display:flex;flex-direction:column;gap:5px;font-size:11.8px;font-weight:60
   border-radius:9px;padding:12px 14px;margin:0 0 10px;color:var(--text);max-height:330px;overflow:auto}
 .sah-letter{margin-top:12px;background:#fbfcff}
 #sahFormMsg{margin-top:9px;line-height:1.5}
-@media(max-width:1050px){.sah-grid{grid-template-columns:1fr}}
+
+/* P12 — Service Brief & Official Status Checks (inside the Sahulat view). */
+#svcCard{border-left:3px solid var(--primary)}
+.svc-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;margin-top:4px}
+.svc-cols .sah-checklist{margin-bottom:10px}
+.svc-cols .checkline{font-size:11.6px}
+.svc-src{padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.5}
+.svc-src a{color:var(--blue);text-decoration:none}
+.svc-src a:hover{text-decoration:underline}
+.svc-src .small{display:block;margin-top:2px;line-height:1.45}
+.svc-links{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.svc-links .sah-h3{width:100%;margin-bottom:2px}
+.svc-links a{font-size:11.6px;background:var(--surface);border:1px solid var(--border);
+  padding:3px 9px;border-radius:99px;text-decoration:none;color:var(--blue)}
+#svcMsg{margin-top:9px;line-height:1.5}
+#svcOutput{max-height:420px}
+#svcSources{margin-top:14px}
+#svcDisclaimer{margin-top:10px;line-height:1.6}
+@media(max-width:1050px){.sah-grid,.svc-cols{grid-template-columns:1fr}}
+
+/* P13 - Agent Memory view. */
+.mem-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;margin-top:10px}
+.mem-item{border:1px solid var(--border);border-radius:9px;padding:9px 11px;background:var(--surface2)}
+.mem-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px}
+.mem-top strong{font-size:12.4px}
+.mem-text{font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;margin:4px 0}
+.mem-results{margin-top:10px;display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto}
+.mem-item .row-actions{margin-top:6px;gap:6px}
+.mem-item .small{line-height:1.5}
+#memSourceList,#memTgList{max-height:340px}
+@media(max-width:900px){.mem-list,.mem-results{max-height:none}}
 
 .toast{position:fixed;right:22px;bottom:22px;background:#1c2536;color:#fff;padding:11px 17px;border-radius:9px;
   font-size:12.7px;box-shadow:0 10px 30px rgba(0,0,0,.2);opacity:0;transform:translateY(12px);

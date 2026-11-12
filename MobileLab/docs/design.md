@@ -1,15 +1,10 @@
 # design.md — MobileLab UI/UX
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Status:** PHASE 3 final — **READY** (gate review `phases.md` §12); P11 final sync · **Document version:** 2.0.0
-**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.1.0` (P3 ne code nahi badla)
-**Sources read (2026-11-08):** `web\style.css`, `web\index.html`, `web\app.js` · `docs\phases.md` (P3 row, §2 N/A table, §6 QA map) · `docs\architecture.md` 2.0.0 · `docs\rules.md` §12 / §16 · `docs\PRD.md` §12 · `agent.md` addendum §N.
+**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Status:** PHASE 3 final — **READY** (gate review `phases.md` §12); P12 / P13 final sync · **Document version:** 2.2.0
+**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.3.0` (P13 ne code badla)
+**Sources read (2026-11-08):** `web/style.css`, `web/index.html`, `web/app.js` · `docs/phases.md` (P3 row, §2 N/A table, §6 QA map) · `docs/architecture.md` 2.0.0 · `docs/rules.md` §12 / §16 · `docs/PRD.md` §12 · `agent.md` addendum §N.
 **Language (C19 / D22):** information / report / plan / prose = **Roman Urdu**; headings, section titles, table headers, labels, code, CSS tokens, identifiers, paths, IDs aur technical terms = **English** (professional surface). Koi purani content ko English mein bulk rewrite nahi kiya gaya.
 
-> **Verification split (honesty):** Har neeche wala dawa do tags mein se aik rakhta hai — **[VERIFIED NOW]** matlab `style.css` / `index.html` / `app.js` se 2026-11-08 ko directly parha gaya; **[P9 PLAN]** matlab ye P9 ka design target hai jo aik **alag subagent** code mein implement karega, **abhi code mein maujood nahi**. P3 sirf documentation-only gate hai: is phase ne koi `web/*`, `.py`, `.js`, `.css`, DB ya `agent.md` file nahi badli, koi `git` command / commit nahi chalaya aur `unittest` suite nahi chalayi (central coordinator karega, `agent.md §N5`).
-> **QA #9 link:** a11y markup fixes ka regression test `test_a11y_markup` hai (`phases.md §6`, QA #9 → P9). CSP, `safe_url()` / URL allowlist aur security headers bhi usi P9 subagent ke scope hain (`rules.md §5`, `architecture.md §4`); P3 unhe sirf design target ke tor par likhta hai — "fix ho gaya" ka jhootha dawa nahi karta.
-> **Scope boundary (Sahulat & Safe Service Policy — immutable):** ye design sirf read / validate / catalog / plan / explain surfaces ko cover karta hai. Koi Huawei ID / Google FRP / Samsung Account / Knox Guard / MDM / carrier / iCloud Activation Lock bypass automation, koi device write / erase / flash / bootloader / IMEI operation aur koi lock-removal step kahin document nahi. Canonical note `D19` barqarar: policy ka **naam** badla hai, **qaida** nahi.
-
----
 
 ## 1. UI/UX principles
 
@@ -20,9 +15,9 @@
 - Koi placeholder UI ko final implementation na mana jaye; har dynamic string `esc()` se guzare, har rendered link `safe_url()` (`http`/`https` only) se (`web\app.js:6–20`).
 - Status kabhi sirf rang se na bataya jaye — har badge / issue ka text label ho (`.tag`, `.issue`, `.score`, `.do-list`, `.diag`).
 
-## 2. Views (8) — exact nav labels
+## 2. Views (9) — exact nav labels
 
-**[VERIFIED NOW]** `index.html:31–38` ke `<button class="nav-item" data-view="…">` elements, sidebar order mein:
+**[VERIFIED NOW]** `index.html` ke `<button class="nav-item" data-view="…">` elements, sidebar order mein:
 
 | # | Nav label (exact) | `data-view` | Section id |
 |---|---|---|---|
@@ -32,10 +27,11 @@
 | 4 | `Model Brief` | `models` | `view-models` |
 | 5 | `Job Register` | `jobs` | `view-jobs` |
 | 6 | `Sahulat / Official Route` | `sahulat` | `view-sahulat` |
-| 7 | `Knowledge / Help` | `knowledge` | `view-knowledge` |
-| 8 | `Settings` | `settings` | `view-settings` |
+| 7 | `Agent Memory` | `memory` | `view-memory` |
+| 8 | `Knowledge / Help` | `knowledge` | `view-knowledge` |
+| 9 | `Settings` | `settings` | `view-settings` |
 
-8th view `Sahulat / Official Route` PHASE 1B mein add hua (`D21`, `O9` resolved) aur `Job Register` ke baad hai. Markup counts: `class="view"` × 8, `id="view-"` × 8, `data-view="` × 8. Navigation hash routing (`location.hash` + `hashchange`) aur `nav(view)` se chalti hai (`web\app.js:61–74`): `.nav-item.active` toggle, `.view.active` toggle, `TITLES` map se `#viewTitle` / `#viewSub` update. `TITLES` (`app.js:22–31`) bhi inhi 8 keys par hai.
+8th view `Sahulat / Official Route` PHASE 1B mein add hua (`D21`, `O9` resolved) aur `Job Register` ke baad; 9th view `Agent Memory` PHASE 13 mein add hua (`D36`). Markup counts: `class="view"` × 9, `id="view-"` × 9, `data-view="` × 9; `tests/test_static_governance.py` aur `tests/test_sahulat.py` me 9-view assertion green. Navigation hash routing (`location.hash` + `hashchange`) aur `nav(view)` se chalti hai (`web/app.js:61-74`): `.nav-item.active` toggle, `.view.active` toggle, `TITLES` map se `#viewTitle` / `#viewSub` update. `TITLES` (`app.js:22-31`) bhi inhi 9 keys par hai.
 
 ## 3. Design token audit — light theme (VERIFIED NOW)
 
@@ -228,3 +224,22 @@ Design intent **WCAG 2.1 AA** ke char principles (perceivable, operable, underst
 - **P9 a11y / URL / CSP fixes delivered (`D32`):** `test_a11y_markup` green; `web/app.js` `safe_url()` http/https allowlist (`test_javascript_url_rejected`); four security headers + CSP (`test_security_headers_present`); `<html lang="en">` ADR (§8.4) amal me aaya. §8.3 ke `[P9 PLAN]` targets ab implemented hain.
 - **Central verification:** `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → `Ran 101 tests in 77.621s — OK`, zero `ResourceWarning`; `node --check web/app.js` → `NODE_CHECK_OK`; `agent.md` verbatim prefix SHA-256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH; docs `9/9`.
 - **Security review:** Sahulat & Safe Service Policy bilkul unchanged — koi bypass automation, device write / erase / flash / IMEI operation ya lock-removal step kahin nahi (D19 canonical note barqarar).
+
+---
+
+## 13. P12 / P13 design sync (2026-11-09)
+
+- **P12 Service Brief design:** Sahulat view card with `svc*` IDs (`svcCard`, `svcAsk`, `svcAskBtn`, `svcAskOut`, `svcMode`, `svcBrand`, `svcCustomer`, `svcModel`, `svcId`, `svcChecks`, `svcProof`, `svcConsentChk`, `svcLive`, `svcRunBtn`, `svcCopyBtn`, `svcOutput`, `svcFacts`, `svcSources`, `svcDisclaimer`, `svcMsg`); styling via `.svc-cols`, `.svc-src`, `#svcOutput`; reuse of existing tokens (`--surface`, `--border`, `--primary`, `--muted`). Card is stateless.
+- **P13 Agent Memory design:** 9th view `memory` with `memStats` (stat grid), source card (`memSourceList`), Telegram card (`memTgList`, `memTgSearch*`, `memTgResults`), recall (`memRecallOut`), problem memory (`memProbList`), query history (`memQueries`), feedback (`memFeedback`), `memExportBtn` / `memReloadBtn` / `memExportMsg`; CSS block `/* P13 - Agent Memory view. */` with `.mem-list`, `.mem-item`, `.mem-top`, `.mem-text`, `.mem-results`; one new responsive rule `@media(max-width:900px){.mem-list,.mem-results{max-height:none}}`.
+- **Design truth:** design.md keeps its P3 snapshot + P11/P12/P13 sync notes; tokens / breakpoints / states / a11y unchanged by P13 except the new responsive rule (explicitly registered as an added media query).
+
+---
+
+## 14. P13 final design note - PHASE 13 `READY` (2026-11-09)
+
+- **Status:** PHASE 13 `READY` (`phases.md` section 22).
+- **Design delta:** +1 view (`memory`), +1 `@media` block (max-width 900), reuse of existing tokens only (no new colour tokens, no new font). a11y attributes retained (`aria-live`, `lang`, `aria-labelledby`).
+- **O12 / D34 English-chrome note remains valid:** nav labels / headings / buttons English; Roman Urdu content retained (`C19` / `D22`).
+- **Verification:** `web/index.html` 9 views / 9 nav / 9 `tabpanel`; `web/style.css` 10 `@media`; `web/app.js` 9-view `TITLES` key.
+
+---

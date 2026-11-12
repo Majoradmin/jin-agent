@@ -110,6 +110,106 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- ------------------------------------------------------------------
+-- Agent memory (P13). Append-only-ish: user sources are archived, not
+-- hard-deleted, so history and learning scores are never lost.
+-- ------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS memory_sources (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    key         TEXT UNIQUE NOT NULL,
+    name        TEXT NOT NULL,
+    url         TEXT DEFAULT '',
+    type        TEXT DEFAULT 'web',
+    category    TEXT DEFAULT 'general',
+    trust       REAL DEFAULT 0.5,
+    usefulness  INTEGER DEFAULT 3,
+    priority    INTEGER DEFAULT 0,
+    status      TEXT DEFAULT 'active',
+    notes       TEXT DEFAULT '',
+    added_by    TEXT DEFAULT 'system',
+    ok_count    INTEGER DEFAULT 0,
+    fail_count  INTEGER DEFAULT 0,
+    last_ok     REAL DEFAULT 0,
+    last_error  TEXT DEFAULT '',
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mem_src_rank ON memory_sources(status, priority DESC, usefulness DESC);
+
+CREATE TABLE IF NOT EXISTS memory_telegram (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel     TEXT UNIQUE NOT NULL,
+    title       TEXT DEFAULT '',
+    category    TEXT DEFAULT 'general',
+    notes       TEXT DEFAULT '',
+    enabled     INTEGER DEFAULT 1,
+    ok_count    INTEGER DEFAULT 0,
+    fail_count  INTEGER DEFAULT 0,
+    last_ok     REAL DEFAULT 0,
+    last_error  TEXT DEFAULT '',
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_queries (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    qkey           TEXT UNIQUE NOT NULL,
+    query          TEXT NOT NULL,
+    category       TEXT DEFAULT 'all',
+    terms          TEXT DEFAULT '',
+    result_count   INTEGER DEFAULT 0,
+    returned       INTEGER DEFAULT 0,
+    sources_ok     INTEGER DEFAULT 0,
+    sources_failed INTEGER DEFAULT 0,
+    hits           INTEGER DEFAULT 1,
+    created_at     REAL NOT NULL,
+    updated_at     REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mem_q_updated ON memory_queries(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS memory_problems (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    model       TEXT DEFAULT '',
+    symptoms    TEXT DEFAULT '',
+    findings    TEXT DEFAULT '',
+    status      TEXT DEFAULT 'open',
+    notes       TEXT DEFAULT '',
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_reports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_no   TEXT UNIQUE NOT NULL,
+    query       TEXT DEFAULT '',
+    title       TEXT DEFAULT '',
+    category    TEXT DEFAULT 'all',
+    item_count  INTEGER DEFAULT 0,
+    confidence  TEXT DEFAULT 'mixed',
+    markdown    TEXT DEFAULT '',
+    created_at  REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_feedback (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_type TEXT DEFAULT 'query',
+    target_key  TEXT DEFAULT '',
+    source      TEXT DEFAULT '',
+    rating      TEXT DEFAULT 'useful',
+    note        TEXT DEFAULT '',
+    created_at  REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_entities (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT UNIQUE NOT NULL,
+    type        TEXT DEFAULT 'entity',
+    aliases     TEXT DEFAULT '',
+    last_seen   REAL NOT NULL,
+    notes       TEXT DEFAULT ''
+);
 """
 
 DEFAULT_SETTINGS = {
@@ -332,4 +432,8 @@ def counts() -> dict:
         "models": one("SELECT COUNT(*) n FROM models")["n"],
         "jobs": one("SELECT COUNT(*) n FROM jobs")["n"],
         "cases": one("SELECT COUNT(*) n FROM cases")["n"],
+        "memory_sources": one("SELECT COUNT(*) n FROM memory_sources WHERE status='active'")["n"],
+        "memory_queries": one("SELECT COUNT(*) n FROM memory_queries")["n"],
+        "memory_problems": one("SELECT COUNT(*) n FROM memory_problems")["n"],
+        "memory_telegram": one("SELECT COUNT(*) n FROM memory_telegram WHERE enabled=1")["n"],
     }

@@ -21,12 +21,15 @@ WEB = os.path.join(BASE, "web")
 sys.path.insert(0, BASE)
 
 import db            # noqa: E402
+import agent_memory  # noqa: E402
 import firmware      # noqa: E402
 import knowledge     # noqa: E402
 import research      # noqa: E402
 import sahulat       # noqa: E402
+import service_brief  # noqa: E402
+import telegram_public  # noqa: E402
 
-VERSION = "1.1.0"
+VERSION = "1.3.0"
 PORT = int(os.environ.get("MOBILELAB_PORT", "8765"))
 
 MIME = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8",
@@ -389,14 +392,28 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         try:
             m = re.match(r"/api/packages/(\d+)$", path)
-            if not m:
-                return self._err("Not found", 404)
-            pid = int(m.group(1))
-            if not db.one("SELECT id FROM packages WHERE id=?", (pid,)):
-                return self._err("Package nahi mila", 404)
-            db.execute("DELETE FROM package_files WHERE package_id=?", (pid,))
-            db.execute("DELETE FROM packages WHERE id=?", (pid,))
-            return self._json({"ok": True, "deleted": pid})
+            if m:
+                pid = int(m.group(1))
+                if not db.one("SELECT id FROM packages WHERE id=?", (pid,)):
+                    return self._err("Package nahi mila", 404)
+                db.execute("DELETE FROM package_files WHERE package_id=?", (pid,))
+                db.execute("DELETE FROM packages WHERE id=?", (pid,))
+                return self._json({"ok": True, "deleted": pid})
+            m = re.match(r"/api/memory/sources/(\d+)$", path)
+            if m:
+                try:
+                    row = agent_memory.archive_source(int(m.group(1)))
+                except ValueError as e:
+                    return self._err(str(e), 404)
+                return self._json({"ok": True, "archived": True, "source": row})
+            m = re.match(r"/api/memory/telegram/(\d+)$", path)
+            if m:
+                try:
+                    row = agent_memory.archive_telegram(int(m.group(1)))
+                except ValueError as e:
+                    return self._err(str(e), 404)
+                return self._json({"ok": True, "archived": True, "telegram": row})
+            return self._err("Not found", 404)
         except _BadParam as e:
             return self._err(str(e), 400)
         except Exception:
@@ -427,6 +444,9 @@ class Handler(BaseHTTPRequestHandler):
                 "policy": sahulat.POLICY["name"], "policy_id": sahulat.POLICY_ID,
                 "settings": _mask_settings(s),
                 "security_note": knowledge.SECURITY_NOTE,
+                "service_brief_version": service_brief.VERSION,
+                "service_brief_sources": len(service_brief.SOURCES),
+                "memory_version": agent_memory.VERSION,
             })
 
         if path == "/api/knowledge":
@@ -462,6 +482,15 @@ class Handler(BaseHTTPRequestHandler):
             }
             if q.get("sources"):
                 params["sources"] = [x for x in q["sources"].split(",") if x]
+            preset_q = next((p["q"] for p in research.PRESETS
+                             if p["id"] == params["preset"]), "")
+            recall_q = params["q"] or preset_q
+            try:
+                recall = agent_memory.recall(recall_q, params["category"])
+            except Exception as e:
+                _log("memory recall", e)
+                recall = {"known": False, "queries": [], "problems": [],
+                          "sources": [], "message": ""}
             settings = _safe_settings(db.get_settings())
             result = research.research(params, settings)
             _prune_research_cache()
@@ -475,6 +504,12 @@ class Handler(BaseHTTPRequestHandler):
                     m = mm.get(i["guid"], {})
                     i["saved"] = bool(m.get("saved"))
                     i["is_read"] = bool(m.get("is_read"))
+            try:
+                saved = agent_memory.record_research(params, result)
+            except Exception as e:
+                _log("memory record", e)
+                saved = None
+            result["memory"] = {"recall": recall, "saved": saved}
             result["counts"] = db.counts()
             return self._json(result)
 
@@ -559,6 +594,77 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/sahulat/check":
             return self._json(sahulat.check_request(q.get("q", "")))
+
+        # ---- Service Brief & Official Status Checks (PHASE 12) ----
+        if path == "/api/service-brief/overview":
+            return self._json(service_brief.overview())
+
+        if path == "/api/service-brief/classify":
+            return self._json(service_brief.classify(q.get("q", "")))
+
+        # ---- Agent memory (P13) ----
+        if path == "/api/memory/overview":
+            return self._json(agent_memory.overview())
+
+        if path == "/api/memory/sources":
+            return self._json({
+                "items": agent_memory.list_sources(
+                    include_archived=_truthy(q.get("include_archived")),
+                    limit=_parse_num(q.get("limit"), cast=int, default=200,
+                                     lo=1, hi=500, name="limit")),
+            })
+
+        if path == "/api/memory/telegram":
+            return self._json({
+                "items": agent_memory.list_telegram(
+                    include_disabled=_truthy(q.get("include_disabled")),
+                    limit=_parse_num(q.get("limit"), cast=int, default=200,
+                                     lo=1, hi=500, name="limit")),
+            })
+
+        if path == "/api/memory/telegram/search":
+            limit = _parse_num(q.get("limit"), cast=int, default=20,
+                               lo=1, hi=100, name="limit")
+            channel = (q.get("channel") or "").strip()
+            if not channel:
+                return self._err("Telegram channel likhein", 400)
+            try:
+                ch = telegram_public.normalize_channel(channel)
+            except ValueError as e:
+                return self._err(str(e), 400)
+            result = telegram_public.fetch_channel(ch, q.get("q", ""), limit)
+            agent_memory.touch_telegram(ch, bool(result.get("ok")), result.get("error", ""))
+            if result.get("ok") and _truthy(q.get("remember", "1")):
+                agent_memory.remember_telegram_if_new(ch)
+            return self._json(result)
+
+        if path == "/api/memory/recall":
+            return self._json(agent_memory.recall(
+                q.get("q", ""), q.get("category", "all"),
+                _parse_num(q.get("limit"), cast=int, default=6,
+                           lo=1, hi=30, name="limit")))
+
+        if path == "/api/memory/queries":
+            limit = _parse_num(q.get("limit"), cast=int, default=50,
+                               lo=1, hi=300, name="limit")
+            return self._json({"items": db.rows(
+                "SELECT * FROM memory_queries ORDER BY updated_at DESC LIMIT ?", (limit,))})
+
+        if path == "/api/memory/problems":
+            limit = _parse_num(q.get("limit"), cast=int, default=50,
+                               lo=1, hi=300, name="limit")
+            return self._json({"items": db.rows(
+                "SELECT * FROM memory_problems ORDER BY updated_at DESC LIMIT ?", (limit,))})
+
+        if path == "/api/memory/feedback":
+            limit = _parse_num(q.get("limit"), cast=int, default=50,
+                               lo=1, hi=300, name="limit")
+            return self._json({"items": agent_memory.list_feedback(limit)})
+
+        if path == "/api/memory/markdown":
+            body = agent_memory.export_markdown().encode("utf-8")
+            return self._send(200, body, "text/markdown; charset=utf-8",
+                              {"Content-Disposition": 'inline; filename="agent_memory.md"'})
 
         return self._err("Unknown API: " + path, 404)
 
@@ -661,6 +767,58 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sahulat/check":
             return self._json(sahulat.check_request(b.get("q", "")))
 
+        # ---- Service Brief & Official Status Checks (PHASE 12) ----
+        if path == "/api/service-brief/classify":
+            return self._json(service_brief.classify(str(b.get("q") or "")))
+
+        if path == "/api/service-brief/status":
+            try:
+                return self._json(service_brief.build_status_report(b))
+            except ValueError as e:
+                return self._err(str(e), 400)
+
+        if path == "/api/service-brief/gsx":
+            try:
+                return self._json(service_brief.build_gsx_worksheet(b))
+            except ValueError as e:
+                return self._err(str(e), 400)
+
+        if path == "/api/service-brief/problem":
+            query = str(b.get("q") or b.get("issue") or "").strip()
+            if not query:
+                return self._err("Masla / sawaal likhein", 400)
+            cls = service_brief.classify(query)
+            # A blocked request NEVER triggers a live search: only the official
+            # route + reason is returned. This is both safer and network-free.
+            result = {"items": [], "diagnostics": [], "sources_ok": 0,
+                      "sources_failed": 0, "terms": cls["terms"], "query": query}
+            if not cls["blocked"] and _truthy(b.get("live", True)):
+                params = {
+                    "q": (" ".join(cls["terms"])[:200] or query[:200]),
+                    "preset": "all", "category": "all", "exclude": "",
+                    "days": 0, "min_score": 0, "limit": 20,
+                    "sources": ["gnews", "hn", "github", "gsmarena", "xda",
+                                "androidauthority", "sammobile", "apple"],
+                    "refresh": False,
+                }
+                try:
+                    result = research.research(params, _safe_settings(db.get_settings()))
+                    _prune_research_cache()
+                except Exception as e:
+                    _log("service-brief research", e)   # QA #12: log, don't swallow
+                    result["diagnostics"] = [{"source": "research", "ok": False,
+                                              "count": 0,
+                                              "error": "Live research dastiyab nahi"}]
+                    result["sources_failed"] = 1
+            elif cls["blocked"]:
+                result["diagnostics"] = [{"source": "policy", "ok": True, "count": 0}]
+            try:
+                brief = service_brief.build_problem_brief(query, result)
+            except ValueError as e:
+                return self._err(str(e), 400)
+            brief["classification"] = cls
+            return self._json(brief)
+
         if path == "/api/reveal":
             target = (b.get("path") or "").strip()
             if not target:
@@ -682,6 +840,52 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 _log("os.startfile", e)
                 return self._err("Folder kholne mein masla aaya", 500)
+
+        # ---- Agent memory (P13) ----
+        if path == "/api/memory/sources":
+            try:
+                row = agent_memory.add_source(b)
+            except ValueError as e:
+                return self._err(str(e), 400)
+            return self._json({"ok": True, "source": row})
+
+        if path == "/api/memory/sources/promote":
+            try:
+                sid = int(b.get("id") or 0)
+            except (TypeError, ValueError):
+                return self._err("Source id ghalat hai", 400)
+            try:
+                row = agent_memory.promote_source(sid, _truthy(b.get("useful", True)))
+            except ValueError as e:
+                return self._err(str(e), 404)
+            return self._json({"ok": True, "source": row})
+
+        if path == "/api/memory/telegram":
+            try:
+                row = agent_memory.add_telegram(b)
+            except ValueError as e:
+                return self._err(str(e), 400)
+            return self._json({"ok": True, "telegram": row})
+
+        if path == "/api/memory/problems":
+            try:
+                row = agent_memory.add_problem(b)
+            except ValueError as e:
+                return self._err(str(e), 400)
+            return self._json({"ok": True, "problem": row})
+
+        if path == "/api/memory/feedback":
+            try:
+                row = agent_memory.add_feedback(b)
+            except ValueError as e:
+                return self._err(str(e), 400)
+            return self._json({"ok": True, "feedback": row})
+
+        if path == "/api/memory/report":
+            return self._json({"ok": True, "report": agent_memory.save_report(b)})
+
+        if path == "/api/memory/export":
+            return self._json(agent_memory.write_markdown())
 
         return self._err("Unknown API: " + path, 404)
 

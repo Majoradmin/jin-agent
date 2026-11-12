@@ -1,6 +1,6 @@
 # phases.md — 12 Phases, Gates aur PHASE REVIEW
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Current phase:** PHASE 11 (Docs / Monitoring) — ✅ **READY / project complete** · **Next:** koi nahi (N7: naye kaam par phase-by-phase approval wapas)
+**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Current phase:** PHASE 13 (Agent Memory) — ✅ **READY / project complete** · **Next:** koi nahi (N7: naye kaam par phase-by-phase approval wapas)
 **Rule:** koi phase skip nahi. Jin items ka is app par matlab nahi, unhein **"N/A + wajah"** likh kar gate pass kiya jaye ga. Har `READY` ke baad **user ki ijazat** zaroori; khud aage na barhna. C15: har phase mukammal, kuch incomplete na chhorhein. **C23 / D29** ki P3–P11 blanket auto-continue ijazat is run me consume ho chuki; N7 ke mutabiq agle naye kaam par asli phase-by-phase rule wapas lagu hoga. P5 / P10 `N/A` justified, **gates passed not skipped** (`D30` / `D31` / `C25`).
 
 ---
@@ -21,6 +21,8 @@
 | **P9 Security / Perf / A11y** | 13 QA findings band — **DONE** | fixes + `safe_url`, realpath, XML hardening, SSRF, headers, pagination, a11y | P8 READY (red tests) | poora suite green + `run.bat` 8-view smoke + `node --check` + `py_compile` | R3 workflow tootna | bara |
 | **P10 Deploy / CI-CD** | N/A justify — **DONE** (N/A justified, `D31`) | `decisions.md` mein local-only distribution (`D31`) | P9 READY | justification signed, koi remote na ho | — | bohot chhota |
 | **P11 Docs / Monitoring** | final consistency — **DONE** | 9 docs final, in-app KB, local logging, final `status`, doc-vs-code audit, `D30`–`D34` | P10 READY | suite final green, docs checklist, `status` output | R4 doc drift | darmiyana |
+| **P12 Service Brief / Official Status** | official status-check surface — **DONE** | `service_brief.py`, 5 `/api/service-brief/*` routes, Sahulat view card, 8 official sources, masked last-4 only, stateless | P11 READY | `test_service_brief.py` green, unknown API 404, no full-IMEI storage | R2 banawati citations, R17 status misuse | darmiyana |
+| **P13 Agent Memory** | persistent research memory — **DONE** | `agent_memory.py`, `telegram_public.py`, 7 `memory_*` tables, 9th UI view, source/Telegram feedback, Markdown export | P12 READY | `test_memory.py` green, full suite 174 OK, archive-not-delete, SSRF-guarded Telegram preview | R18 memory poisoning, R19 private-data creep | bara |
 
 ## 2. N/A items (pehle se tay, gate pass — skip nahi)
 
@@ -195,7 +197,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** `test_a11y_markup`, `test_javascript_url_rejected`, `test_security_headers_present`. **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY.
 - **Open questions:** O12 resolved; baqi deferred `D34`.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 4 (Project setup) — C23 / D29 auto-continue.
 
 ---
@@ -215,7 +217,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** `test_run_bat_python_version_guard`, `py_compile`, `node --check`. **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY.
 - **Open questions:** O1 skills/MCP deferred (`D34`); koi P4 blocker nahi.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 5 (Auth / Authorization — N/A justified) — C23 / D29 auto-continue.
 
 ---
@@ -235,7 +237,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** poora suite (N/A ka koi auth test zaroori nahi). **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY — N/A justified.
 - **Open questions:** O13 (exposure model) deferred (`D34`); tab P5 / P10 N/A dobara khulenge.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 6 (Core features / CRUD) — C23 / D29 auto-continue.
 
 ---
@@ -255,7 +257,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** upar wale + poora suite. **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY.
 - **Open questions:** O11 (case retention / export / deletion) deferred (`D34`).
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 7 (Integrations) — C23 / D29 auto-continue.
 
 ---
@@ -275,7 +277,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** upar wale + poora suite. **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY.
 - **Open questions:** O2 / O4 / O5 / O6 / O7 / O8 deferred (`D34`); koi jhootha resolution nahi.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 8 (Testing / QA) — C23 / D29 auto-continue.
 
 ---
@@ -295,7 +297,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** 101/101. **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY.
 - **Open questions:** koi P8 blocker nahi; deferred questions `D34`.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 9 (Security / Perf / A11y) — C23 / D29 auto-continue.
 
 ---
@@ -315,7 +317,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** 101/101. **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY.
 - **Open questions:** O2 / O3 / O11 deferred (`D34`) — at-rest encryption, log retention, case retention / export / deletion ka koi jhootha resolution nahi.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 10 (Deploy / CI-CD — N/A justified) — C23 / D29 auto-continue.
 
 ---
@@ -335,7 +337,7 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** poora suite (N/A ka koi deploy test zaroori nahi). **Tests failed:** koi nahi.
 - **Definition of done:** met · **Gate:** READY — N/A justified.
 - **Open questions:** O13 (exposure model) deferred (`D34`); tab P5 / P10 N/A dobara khulenge.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** PHASE 11 (Docs / Monitoring) — C23 / D29 auto-continue.
 
 ---
@@ -355,5 +357,43 @@ Baqi named cases: `test_scan_valid_mtk_package_happy_path`, `test_scan_valid_qco
 - **Tests passed:** 101/101. **Tests failed:** koi nahi.
 - **Definition of done:** met (§7 checked checklist) · **Gate:** READY.
 - **Open questions:** O1 / O2 / O3 / O4 / O5 / O6 / O7 / O8 / O11 / O13 deferred with reason (`D34`); O10 / O12 resolved. Koi jhootha resolution nahi.
-- **Commit:** Final review commit: pending central commit.
+- **Commit:** local central commits `a68cd7c` (P3–P11 code) + `69cf0d2` (P3–P11 PHASE REVIEWs).
 - **Next:** project complete; naye kaam par phase-by-phase approval wapas lagu (N7). Central coordinator final commit karega.
+
+---
+
+## 21. PHASE REVIEW — PHASE 12 — Service Brief / Official Status — 2026-11-09
+
+- **Status:** READY
+- **Confirmed / Assumptions / Risks:** C1–C26 · A1–A16 · D19–D35 · R2 / R4 / R17 (status-check misuse). Sahulat & Safe Service Policy boundary **unchanged**.
+- **TASK:** mobile technician ke liye official status-check / service-brief surface — carrier / OEM / Apple / government checks ke **official links + khali worksheets**, bina koi status query, GSX access ya full-IMEI storage.
+- **IMPLEMENTATION:** `service_brief.py` (deterministic classifier + brief builder, 8 official sources, `modes ['auto','status','gsx','brief']`, `gsx_is_report False`), 5 `/api/service-brief/*` routes, Sahulat view card `svc*` IDs, masked last-4 only, stateless (koi case/credential store nahi). `knowledge.SECURITY_NOTE` extended. Koi bypass capability add nahi hui.
+- **VERIFICATION:** `tests/test_service_brief.py` green; unknown `/api/service-brief/*` → 404; request validation → 400; `/api/status` 200 (`service_brief_version`, `service_brief_sources 8`); full suite P12 par `Ran 157 tests — OK`.
+- **RESULT:** P12 `READY` — official-route surface delivered, boundary intact; user ne is feature ke liye single-run ijazat di thi (C26 / D35), N7 sirf is feature ke liye muattal raha.
+- **Deliverables:** [x] `service_brief.py` · [x] `server.py` routes · [x] `web/index.html` · [x] `web/app.js` · [x] `web/style.css` · [x] `tests/test_service_brief.py` · [x] docs sync.
+- **N/A items + justification:** P12 par koi N/A nahi.
+- **Security review:** stateless; koi full IMEI / credential / GSX / carrier login store nahi; masked last-4 only; koi fabricated status finding nahi; official links sirf verified.
+- **Documentation status:** P12 ab `decisions.md` D35 / C26, `PRD.md` §18, `architecture.md` §24, `design.md` §13, `rules.md` §20 mein darj hai.
+- **Tests passed:** 157/157 (P12 run). **Tests failed:** koi nahi.
+- **Definition of done:** met · **Gate:** READY.
+- **Commit:** local-only central commit `feat: deliver P12 service brief and P13 agent memory with synced governance docs` (2026-11-12, P12 + P13 code / tests / docs / addendum).
+- **Next:** PHASE 13 (Agent Memory) — user ki explicit request par.
+
+---
+
+## 22. PHASE REVIEW — PHASE 13 — Agent Memory — 2026-11-09
+
+- **Status:** READY
+- **Confirmed / Assumptions / Risks:** C1–C27 · A1–A17 · D19–D36 · R18 (memory poisoning) / R19 (private-data creep). Boundary **unchanged**.
+- **TASK:** user ki request — agent har search yaad rakhe: special sites, Telegram public channels, purani queries, problems, reports aur feedback; low-value sources **archive** hon, delete na hon; memory user ko visible ho.
+- **IMPLEMENTATION:** `agent_memory.py` (source registry, Telegram registry, query/problem/report/feedback/entity memory, recall, overview, Markdown export), `telegram_public.py` (public `t.me/s/<channel>` preview only, SSRF-guarded, size-capped, no login/MTProto), 7 additive `memory_*` tables in `db.py`, 13 memory API routes, research recall-before / record-after integration, 9th UI view `Agent Memory`, `Useful` / `Not useful` feedback buttons, `data/agent_memory.md` export. Source delete = archive (`status='archived'`, priority 0).
+- **VERIFICATION:** `tests/test_memory.py` 17 tests green (sources, unsafe URLs, Telegram normalize/parse/mock-fetch, recall, feedback, overview, markdown, research memory payload); full suite `python -m unittest discover -s tests` → **`Ran 174 tests — OK`**; `PY_COMPILE_OK`; `NODE_CHECK_OK`; docs `9/9`.
+- **RESULT:** P13 `READY` — memory persistent, inspectable, archive-not-delete, local-only; no cloud, no secrets, no private messages.
+- **Deliverables:** [x] `agent_memory.py` · [x] `telegram_public.py` · [x] `db.py` (`memory_*`) · [x] `server.py` (13 routes + research integration + `VERSION 1.3.0`) · [x] `web/index.html` · [x] `web/app.js` · [x] `web/style.css` · [x] `tests/test_memory.py` · [x] `tests/_harness.py` reset · [x] `data/agent_memory.md` export · [x] docs sync.
+- **N/A items + justification:** Telegram private groups / userbot / MTProto = **N/A + wajah** — sirf public preview, koi account / login / private data nahi (`D36`). Illegal onion/marketplace automation = **N/A + wajah** — C13 barqarar.
+- **Security review:** `research.validate_url` SSRF guard for user URLs; Telegram host allowlist `t.me` / `telegram.me`, 10s timeout, 2 MB cap, no auth; feedback only adjusts source scores; no private/secret storage; Sahulat boundary unchanged.
+- **Documentation status:** P13 ab `decisions.md` D36 / C27, `PRD.md` §19, `architecture.md` §25, `design.md` §13, `rules.md` §20, `memory.md`, `progress.md`, `changelog.md` mein darj hai; `data/agent_memory.md` human-readable export.
+- **Tests passed:** 174/174. **Tests failed:** koi nahi.
+- **Definition of done:** met · **Gate:** READY.
+- **Commit:** local-only central commit `feat: deliver P12 service brief and P13 agent memory with synced governance docs` (2026-11-12, P12 + P13 code / tests / docs / addendum).
+- **Next:** project complete; real Telegram group handles + hardware specs user se lene hain (memory feature un ke intezar mein hai).

@@ -40,13 +40,13 @@ CSS = (BASE / "web" / "style.css").read_text(encoding="utf-8")
 
 class TestStaticGovernance(unittest.TestCase):
     def test_a11y_markup(self):
-        # 8 views / 8 nav items / 8 tabpanels / 27 sah* IDs.
-        self.assertEqual(HTML.count('class="view'), 8)
-        self.assertEqual(HTML.count('id="view-'), 8)
-        self.assertEqual(HTML.count('data-view="'), 8)
-        self.assertEqual(HTML.count('class="nav-item'), 8)
-        self.assertEqual(HTML.count('role="tab"'), 8)
-        self.assertEqual(HTML.count('role="tabpanel"'), 8)
+        # 9 views / 9 nav items / 9 tabpanels / 27 sah* IDs (P13 added Memory).
+        self.assertEqual(HTML.count('class="view'), 9)
+        self.assertEqual(HTML.count('id="view-'), 9)
+        self.assertEqual(HTML.count('data-view="'), 9)
+        self.assertEqual(HTML.count('class="nav-item'), 9)
+        self.assertEqual(HTML.count('role="tab"'), 9)
+        self.assertEqual(HTML.count('role="tabpanel"'), 9)
         self.assertEqual(len(re.findall(r'id="sah[A-Za-z]', HTML)), 27)
         # Language + live-region + focus/motion accessibility.
         self.assertIn('lang="en"', HTML)

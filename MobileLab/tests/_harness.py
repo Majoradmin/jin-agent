@@ -31,7 +31,9 @@ _ORIG_DB_PATH = db.DB_PATH
 
 def reset_db() -> None:
     """Deterministic clean state via SQL only (no file deletion)."""
-    for t in ("package_files", "packages", "articles", "models", "jobs", "cases"):
+    for t in ("package_files", "packages", "articles", "models", "jobs", "cases",
+              "memory_sources", "memory_telegram", "memory_queries", "memory_problems",
+              "memory_reports", "memory_feedback", "memory_entities"):
         db.execute("DELETE FROM " + t)
     db.execute("DELETE FROM settings")
     db.init()                       # re-seed DEFAULT_SETTINGS

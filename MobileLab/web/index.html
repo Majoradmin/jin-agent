@@ -31,6 +31,7 @@
       <button class="nav-item active" id="tab-dashboard" data-view="dashboard" role="tab" aria-selected="true" aria-controls="view-dashboard" aria-current="page" tabindex="0"><span class="ni" aria-hidden="true">◈</span> Dashboard</button>
       <button class="nav-item" id="tab-packages" data-view="packages" role="tab" aria-selected="false" aria-controls="view-packages" tabindex="-1"><span class="ni" aria-hidden="true">▤</span> Firmware Packages</button>
       <button class="nav-item" id="tab-research" data-view="research" role="tab" aria-selected="false" aria-controls="view-research" tabindex="-1"><span class="ni" aria-hidden="true">◎</span> Research Agent <span class="nav-dot" aria-hidden="true"></span></button>
+      <button class="nav-item" id="tab-memory" data-view="memory" role="tab" aria-selected="false" aria-controls="view-memory" tabindex="-1"><span class="ni" aria-hidden="true">◫</span> Agent Memory <span class="nav-dot" aria-hidden="true"></span></button>
       <button class="nav-item" id="tab-models" data-view="models" role="tab" aria-selected="false" aria-controls="view-models" tabindex="-1"><span class="ni" aria-hidden="true">⌗</span> Model Brief</button>
       <button class="nav-item" id="tab-jobs" data-view="jobs" role="tab" aria-selected="false" aria-controls="view-jobs" tabindex="-1"><span class="ni" aria-hidden="true">✓</span> Job Register</button>
       <button class="nav-item" id="tab-sahulat" data-view="sahulat" role="tab" aria-selected="false" aria-controls="view-sahulat" tabindex="-1"><span class="ni" aria-hidden="true">✦</span> Sahulat / Official Route</button>
@@ -65,7 +66,7 @@
           <div class="notice-icon" aria-hidden="true">i</div>
           <div lang="ur-PK-Latn">
             <strong>Logon ki sahulat pehle — Sahulat &amp; Safe Service Policy</strong>
-            <p>MobileLab firmware <em>files</em> par aap ka stuck hona door karta hai — scatter / preloader / DA aur Qualcomm Firehose / rawprogram packages ki scanning, validation aur research. Aur jahan malik ki tasdeeq chahiye wahan <button type="button" class="link-btn" style="display:inline;padding:0" lang="en" data-goto="sahulat">Sahulat / Official Route</button> view mein checklist, consent, service-request letter, case register aur <strong>wajah + official link ke saath</strong> raasta milta hai. Huawei ID, FRP, MDM ya iCloud Activation Lock ka bypass automation is mein nahi hai — ye server-side anti-theft hain; un ke liye <button type="button" class="link-btn" style="display:inline;padding:0" lang="en" data-goto="knowledge">official routes</button> dekhein.</p>
+            <p>MobileLab firmware <em>files</em> par aap ka stuck hona door karta hai — scatter / preloader / DA aur Qualcomm Firehose / rawprogram packages ki scanning, validation aur research. Aur jahan malik ki tasdeeq chahiye wahan <button type="button" class="link-btn" style="display:inline;padding:0" lang="en" data-goto="sahulat">Sahulat / Official Route</button> view mein checklist, consent, service-request letter, case register aur <strong>wajah + official link ke saath</strong> raasta milta hai. Huawei ID, FRP, MDM ya iCloud Activation Lock ka bypass automation is mein nahi hai — ye server-side anti-theft hain; un ke liye <button type="button" class="link-btn" style="display:inline;padding:0" lang="en" data-goto="knowledge">official routes</button> dekhein. Naya <button type="button" class="link-btn" style="display:inline;padding:0" lang="en" data-goto="sahulat">Service Brief &amp; Official Status Checks</button> section bhi isi view mein hai: iPhone / Android ke official status-check worksheets, GSX request worksheet aur masle par research brief.</p>
           </div>
         </div>
 
@@ -168,6 +169,100 @@
         <div id="resResults" class="res-wrap"></div>
       </section>
 
+      <!-- ================= AGENT MEMORY ================= -->
+      <section class="view" id="view-memory" role="tabpanel" aria-labelledby="tab-memory" tabindex="0">
+        <div class="notice soft">
+          <div class="notice-icon" aria-hidden="true">◫</div>
+          <div lang="ur-PK-Latn">
+            <strong>Agent Memory — har search yaad rehti hai</strong>
+            <p>Yahan woh sites aur Telegram public channels register karain jo aap ke kaam ke hain. Agent unhein priority deta hai, fetch success/failure aur aap ke feedback se score seekhta hai, aur purani queries / problems recall karta hai. Kuch delete nahi hota — low-value sources <em>archive</em> hoti hain.</p>
+          </div>
+        </div>
+
+        <div class="stat-grid" id="memStats"></div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h2>Special sites / sources</h2><span class="tag green" id="memSrcCount">—</span></div>
+            <div class="form-row">
+              <label class="grow">Name <input id="memSourceName" placeholder="Maslan: My firmware forum"></label>
+              <label class="grow">URL <input id="memSourceUrl" placeholder="https://example.com/feed"></label>
+            </div>
+            <div class="form-row">
+              <label>Type <select id="memSourceType">
+                <option value="web">Website</option><option value="feed">RSS / feed</option>
+                <option value="telegram">Telegram</option><option value="official">Official</option>
+                <option value="community">Community</option><option value="search">Search / API</option>
+              </select></label>
+              <label>Category <input id="memSourceCat" placeholder="gsm / mtk / security / ai"></label>
+              <label>Usefulness <select id="memSourceUse"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+            </div>
+            <div class="row-actions"><button class="btn primary" id="memSourceAdd">Remember this site</button></div>
+            <div id="memSourceList" class="mem-list"><div class="skeleton"></div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Telegram public channels</h2><span class="tag" id="memTgCount">—</span></div>
+            <p class="muted small" lang="ur-PK-Latn">Sirf public <code>t.me/s/&lt;channel&gt;</code> preview. Private group ya login-based reading nahi.</p>
+            <div class="form-row">
+              <label class="grow">Channel <input id="memTgChannel" placeholder="@channel_name"></label>
+              <label>Category <input id="memTgCat" placeholder="gsm / osint / ai"></label>
+            </div>
+            <div class="row-actions"><button class="btn primary" id="memTgAdd">Remember channel</button></div>
+            <div id="memTgList" class="mem-list"><div class="skeleton"></div></div>
+            <h3 class="sah-h3">Search a public channel</h3>
+            <div class="form-row">
+              <label class="grow">Channel <input id="memTgSearchChannel" placeholder="@gsmarena"></label>
+              <label class="grow">In-channel query (optional) <input id="memTgSearchQ" placeholder="firmware"></label>
+              <label>Limit <select id="memTgSearchLimit"><option>10</option><option selected>20</option><option>40</option></select></label>
+            </div>
+            <div class="row-actions"><button class="btn primary" id="memTgSearchBtn">Search public preview</button></div>
+            <div id="memTgResults" class="mem-results"></div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h2>Recall memory</h2></div>
+            <div class="inline-form">
+              <input id="memRecallQ" placeholder="Maslan: SM-S918B bootloop">
+              <button class="btn primary" id="memRecallBtn">Recall</button>
+            </div>
+            <div id="memRecallOut" class="mem-results" lang="ur-PK-Latn"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Problem memory</h2></div>
+            <div class="form-row">
+              <label class="grow">Problem / symptom <input id="memProbTitle" placeholder="bootloop after update"></label>
+              <label>Model <input id="memProbModel" placeholder="SM-S918B"></label>
+            </div>
+            <div class="row-actions"><button class="btn ghost" id="memProbAdd">Save problem</button></div>
+            <div id="memProbList" class="mem-list"></div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><h2>Query history</h2><span class="tag">auto-saved</span></div>
+            <div id="memQueries" class="mem-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Feedback log</h2><span class="tag" id="memFbCount">—</span></div>
+            <div id="memFeedback" class="mem-list"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Human-readable memory file</h2><span class="tag green">data/agent_memory.md</span></div>
+          <p class="muted" lang="ur-PK-Latn">SQLite hi asal memory hai; ye button us se <code>data/agent_memory.md</code> dobara likhta hai taake aap file khol kar sab kuch parh sakein.</p>
+          <div class="row-actions">
+            <button class="btn primary" id="memExportBtn">Regenerate agent_memory.md</button>
+            <button class="btn ghost" id="memReloadBtn">Reload memory</button>
+          </div>
+          <div id="memExportMsg" class="small muted" aria-live="polite"></div>
+        </div>
+      </section>
+
       <!-- ================= MODELS ================= -->
       <section class="view" id="view-models" role="tabpanel" aria-labelledby="tab-models" tabindex="0">
         <div class="card">
@@ -220,6 +315,59 @@
             <strong id="sahPolicyTitle">Sahulat &amp; Safe Service Policy</strong>
             <p id="sahPolicyLead">Loading…</p>
           </div>
+        </div>
+
+        <!-- ============ SERVICE BRIEF & OFFICIAL STATUS CHECKS (P12) ============ -->
+        <div class="card" id="svcCard">
+          <div class="card-head"><h2>Service Brief &amp; Official Status Checks</h2><span class="tag green" id="svcVersion">P12</span></div>
+          <p class="muted" lang="ur-PK-Latn">Yahan likh kar batayein ke kya chahiye: iPhone ka blacklist / carrier lock / FMI ON-OFF <em>status check</em>, Apple GSX <em>request worksheet</em>, Android IMEI / model ki official maloomat, ya koi masla jis par taaza khabarain aur service routes chahiye. App <strong>khud koi carrier / OEM / Apple / sarkari database query ya GSX access nahi karta</strong> — sirf khali official worksheet, verified links aur Roman Urdu report deta hai.</p>
+
+          <div class="inline-form">
+            <input id="svcAsk" placeholder="Maslan: iPhone blacklist carrier lock FMI off on check kar ke report do" spellcheck="false">
+            <button class="btn primary" id="svcAskBtn">Analyze request</button>
+          </div>
+          <div id="svcAskOut" class="sah-out" lang="ur-PK-Latn" aria-live="polite"></div>
+
+          <div class="form-row">
+            <label>Mode <select id="svcMode">
+              <option value="auto">Auto (from request)</option>
+              <option value="status">Status check worksheet</option>
+              <option value="gsx">GSX request worksheet</option>
+              <option value="brief">Problem / research brief</option>
+            </select></label>
+            <label>Brand <select id="svcBrand">
+              <option value="apple">Apple iPhone</option>
+              <option value="android">Android</option>
+              <option value="other">Other</option>
+            </select></label>
+            <label>Customer <input id="svcCustomer" placeholder="naam"></label>
+            <label>Contact <input id="svcContact" placeholder="phone / email"></label>
+            <label>Model <input id="svcModel" placeholder="iPhone 13 / SM-S918B"></label>
+            <label>Identifier <input id="svcId" maxlength="40" placeholder="sirf aakhri 4 harkat"></label>
+          </div>
+
+          <div class="svc-cols">
+            <div>
+              <h3 class="sah-h3">Checks to include</h3>
+              <div id="svcChecks" class="sah-checklist" lang="ur-PK-Latn"></div>
+            </div>
+            <div>
+              <h3 class="sah-h3">Proof of ownership (required for GSX)</h3>
+              <div id="svcProof" class="sah-checklist" lang="ur-PK-Latn"></div>
+              <label class="checkline"><input type="checkbox" id="svcConsentChk"> Customer has signed the consent form</label>
+              <label class="checkline"><input type="checkbox" id="svcLive" checked> Include live news search (Problem brief only)</label>
+            </div>
+          </div>
+
+          <div class="row-actions">
+            <button class="btn primary" id="svcRunBtn">Generate report / worksheet</button>
+            <button class="btn ghost" id="svcCopyBtn">Copy output</button>
+          </div>
+          <div id="svcMsg" class="small muted" aria-live="polite"></div>
+          <pre id="svcOutput" class="sah-letter" lang="ur-PK-Latn">Yahan report / worksheet aayegi. Pehle upar apna sawaal likh kar "Analyze request" dabayein, phir form bhar kar "Generate" karein.</pre>
+          <div id="svcFacts"></div>
+          <div id="svcSources" lang="ur-PK-Latn"></div>
+          <div id="svcDisclaimer" class="small muted" lang="ur-PK-Latn"></div>
         </div>
 
         <div class="two-col">

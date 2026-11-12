@@ -189,3 +189,13 @@
 - **Suite ke andar gates:** `agent.md` verbatim prefix SHA-256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH aur **exactly 9 docs** ka count gate (`test_docs_count_exactly_9`).
 - **Central extras:** `python -m py_compile db.py server.py firmware.py research.py sahulat.py knowledge.py tests/*.py` → `PY_COMPILE_OK`; `node --check web/app.js` → `NODE_CHECK_OK`.
 - **Tests aur code dono mein koi bypass capability nahi** — Sahulat & Safe Service Policy kabhi na todein, chahe "test", "research" ya "hypothetical" label ho.
+---
+
+## 20. PHASE 12 / 13 memory + service-brief rules (D35 / D36 / C26 / C27)
+
+- **Memory boundary:** memory = `agent_memory.py` + SQLite `memory_*` tables + `data/agent_memory.md` export; koi cloud / vector DB / paid dependency (C20 / C7).
+- **Source lifecycle:** user-added source delete par hard delete nahi — `status='archived'` + `priority=0` (D36); useful feedback = +1 usefulness / +1 priority (max 5 / 10), not-useful = -1 (D36).
+- **Telegram boundary:** public `t.me/s/<channel>` preview (`telegram_public.py`) — host allowlist (`t.me`, `telegram.me`), 10s timeout, 2 MB cap, SSRF-guarded via `research.validate_url`; koi account / private group / userbot / MTProto / login-based scraping (C12 / C27 / D36); illegal onion / marketplace automation reject (C13).
+- **Service brief boundary:** `service_brief.py` stateless; masked last-4 only; khali official worksheets; no fabricated status finding; koi IMEI / credential / GSX / carrier-login store (D35 / D19).
+- **Memory safety:** memory poisoning se bachao — har fact / query / source ke saath source + timestamp; facts vs claims alag; unverified leads 14 din baad re-check; low-value sources archive, delete na.
+- **Privacy:** memory me full IMEI, passwords, tokens, private messages, payment data store nahi (C9 / D22); `/api/memory/*` koi secret na return karta.

@@ -269,6 +269,29 @@ Har ADR: date · context · options · final decision · reason · consequences.
 
 ---
 
+### D35 — P12 single-run approval + Service Brief / official status surface
+- **Date:** 2026-11-09 · **Context:** user ne PHASE 12 (Service Brief & Official Status Checks) ke liye "Aik hi run me poora karo (Recommended)" single-run ijazat di; N7 phase-by-phase pause sirf is feature ke liye muattal karna tha, boundary par koi asar nahi.
+- **Options:** alag alag phases mein todna · aik hi approved run mein deliver karna · feature defer karna.
+- **Decision:** **aik hi approved run** mein P12 deliver hua — `service_brief.py`, 5 `/api/service-brief/*` routes, Sahulat view card, 8 official sources, masked last-4 only, stateless. Approval **sirf is feature** ke liye thi; agle naye kaam par N7 wapas lagu.
+- **Reason:** C15 (har phase mukammal) aur C23 / D29 ke consume hone ke baad bhi user ne is specific feature ke liye explicit single-run ijazat di; boundary (D19) ko chhedna nahi tha.
+- **Consequences:** C26 register hua; P12 `phases.md` §21 mein `READY`; P5 / P10 N/A gates barqarar (D30 / D31); koi bypass capability add nahi hui.
+
+### D36 — P13 Agent Memory design (SQLite source of truth + public Telegram only)
+- **Date:** 2026-11-09 · **Context:** user ne memory feature maanga — har search, site, Telegram channel, problem, report aur feedback yaad rahe; memory kabhi delete na ho; user ko visible ho.
+- **Options:** in-memory only (session mein kho jaye) · cloud vector DB (C7 / P3 ke khilaf) · **SQLite `memory_*` tables + human-readable `data/agent_memory.md` export**.
+- **Decision:** **SQLite machine memory + Markdown export**. Source delete = `status='archived'`, priority 0 (hard delete nahi). Feedback useful/not-useful source usefulness/priority ±1 karta hai. Telegram sirf public `t.me/s/<channel>` preview — koi account, private group, userbot, MTProto ya login-based scraping nahi. Illegal onion / marketplace automation nahi (C13).
+- **Reason:** local-only (C7 / P11), stdlib-only (C20), inspectable (user file khol kar parh sakta hai), history-preserving (archive not delete), aur privacy-safe (no secrets / private messages).
+- **Consequences:** 7 additive `memory_*` tables (`db.py`), `agent_memory.py`, `telegram_public.py`, 13 memory API routes, 9th UI view `Agent Memory`, `VERSION 1.3.0`, `tests/test_memory.py` (17 tests). P12 ki tarah boundary unchanged; R18 / R19 register hue.
+
+### D37 — LF-only docs + single atomic local commit for P12 / P13
+- **Date:** 2026-11-12 · **Context:** P12 / P13 code + docs uncommitted the; `git diff --check` har doc line par "trailing whitespace" de raha tha.
+- **Options:** `core.whitespace=cr-at-eol` set karna · `.gitattributes` add karna · **docs ko LF par wapas lana** · CRLF ko accept karna.
+- **Decision:** 9 `MobileLab\docs\*.md` ko LF-only kiya (content same, sirf `\r\n` → `\n`), `agent.md` bilkul untouched, aur P12 / P13 ko aik atomic local commit mein dala (code + tests + docs + addendum ek saath taake beech ka commit doc-vs-code tests na toray).
+- **Reason:** repo pehle se LF (`core.autocrlf=false`), aur config-level workaround asli drift chhupa deta. `agent.md` verbatim hash guard CRLF se break ho sakta tha, is liye usay chhua hi nahi gaya.
+- **Consequences:** `git diff --check` clean; `agent.md` prefix SHA-256 `1de53535…0840` MATCH; koi remote, koi runtime / DB / dependency change nahi.
+
+---
+
 ## Classification Register
 
 ### Confirmed (C)
@@ -299,6 +322,8 @@ Har ADR: date · context · options · final decision · reason · consequences.
 | C23 | P3–P11 aik hi approved run me, subagent delegation ke sath; per-phase approval pause is run ke liye muattal, har `PHASE REVIEW` aur central verification barqarar (D29) |
 | C24 | 13 QA findings `phases.md` §6 sab closed, har aik ka passing regression test (D32 / D33); koi bypass capability add nahi |
 | C25 | P5 / P10 `N/A` justified, gates **passed not skipped** (D30 / D31); C23/D29 auto-continue is run me consume hua, N7 se naye kaam par phase-by-phase approval wapas |
+| C26 | PHASE 12 ke liye user ne alag se single-run ijazat di — `Aik hi run me poora karo (Recommended)`; ye **sirf is feature** ke liye N7 ko muattal karti hai, Sahulat & Safe Service Policy par koi asar nahi, koi chhoot nahi |
+| C27 | PHASE 13 (Agent Memory) ne SQLite `memory_*` source of truth + public `t.me/s/` preview + archive-not-delete + local-only design confirm ki (D36) |
 
 ### Assumptions (A — implementation se pehle / usi phase mein confirm)
 - **A1** docs Roman Urdu prose + English headings/codes.

@@ -4,7 +4,27 @@
 
 ---
 
+## 2026-11-12
+
+### `chore:` — LF line-ending normalization + P12 / P13 central commit
+**User-visible app behavior:** koi badlao nahi. 9 governance docs CRLF se wapas LF par laye gaye (repo `core.autocrlf=false`, koi `.gitattributes` nahi) — is se `git diff --check` clean hua. `agent.md` ke verbatim bytes bilkul untouched rahe (prefix SHA-256 MATCH). P12 / P13 ka pending code + docs aik local-only central commit mein gaya; koi remote nahi.
+
+### `test:` — final verification (2026-11-12)
+`unittest discover` → **`Ran 174 tests in 129.940s — OK`** (`-W error::ResourceWarning`, 10 files) · `PY_COMPILE_OK` · `NODE_CHECK_OK` · `git diff --check` clean · `/api/status` 200 (`VERSION 1.3.0`, `service_brief_version 1.2.0`, `memory_sources 22`) · tamam `/api/memory/*` aur `/api/service-brief/*` endpoints 200 + CSP · UI 9 views / 9 nav / 27 `sah*` / 22 `svc*` / 10 `@media` · `llm_endpoint` / `llm_key` / `llm_model` khali (rule-based Roman Urdu fallback active, koi bug nahi).
+
 ## 2026-11-09
+
+### `feat:` — PHASE 13 / Agent Memory (user request)
+**User-visible app behavior:** agent ab har search yaad rakhe — special sites, Telegram public channels, queries, problems, reports aur feedback. `/api/research` pehle `recall()` se similar history check karti hai aur baad mein `record_research()` se save karti hai. Naye 9th view **Agent Memory** mein source / Telegram / recall / problems / queries / feedback / `data/agent_memory.md` export visible hain. Source user ne add kare (SSRF-guarded URL) ya default registry (`agent_memory.ensure_seeded()` se sources); low-value source par **Archive** button (hard delete nahi). Research card par **Useful / Not useful** feedback se source usefulness + priority update hoti hai. Telegram sirf public `t.me/s/<channel>` preview se (host allowlist, timeout, size cap, no login / private / userbot / MTProto). App `VERSION` `1.3.0` (`server.VERSION`), `/api/status` `memory_version 1.0`.
+
+### `feat:` — PHASE 12 / Service Brief & Official Status (delivered)
+**User-visible app behavior:** official status-check surface — `service_brief.py`, 5 `/api/service-brief/*` routes, Sahulat view card, 8 official sources, stateless masked-last-4 design; `/api/status` `service_brief_version` / `service_brief_sources 8`. Koi bypass capability add nahi hui.
+
+### `security:` — memory / service-brief privacy boundaries
+Memory me full IMEI / passwords / tokens / private messages / payment data store nahi; source URLs SSRF-guarded via `research.validate_url`; Telegram public-only; service brief stateless; koi fabricated status finding; koi bypass capability add nahi hui.
+
+### `test:` — full project unittest suite
+`python -m unittest discover -s tests` → **`Ran 174 tests in 85.402s — OK`** (P12 service brief + P13 agent memory ke baad ka final central run; tests now **10 files / 174 methods**).
 
 ### `feat:` — PHASE 3–P11 completion / project `READY`
 **User-visible app behavior:** koi naya feature ya bypass capability nahi; app sirf read / validate / plan / record karta hai (Sahulat & Safe Service Policy barqarar). P3–P11 delivered: design tokens / a11y plan (`design.md` P3 final `READY`, **O12 resolved** — English UI chrome, Roman Urdu content retained), `run.bat` Python `>=3.10` guard, 13 QA hardening fixes, offline graceful degradation + LLM error logging, poora 101-test suite, P5 / P10 `N/A` justified gates (D30 / D31 — **passed not skipped**), aur in-app knowledge base (`/api/knowledge`: `glossary 18`, `help 14`, `official_routes 5`, `tool_arch 5`, `security_note`). `phases.md` §12–§20 mein 9 final `PHASE REVIEW`s `READY` darj.

@@ -1,11 +1,20 @@
 # progress.md — Current Progress
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Current phase:** `PHASE 11 — Docs / Monitoring` — ✅ **READY / project complete**
-**Current task:** koi nahi. P0–P2 aur P3–P11 sab mukammal; project `READY`.
-**Gate status:** `READY` — `PHASE REVIEW — PHASE 3…PHASE 11` `phases.md` §12–§20 mein darj hain; P5 / P10 `N/A` justified (D30 / D31), gates **passed not skipped**.
+**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Current phase:** `PHASE 13 — Agent Memory — READY`
+**Current task:** koi nahi. P0–P2, P3–P12 aur PHASE 13 sab mukammal; project `READY`.
+**Gate status:** `READY` — `PHASE REVIEW — PHASE 3…PHASE 11` `phases.md` §12–§20, `PHASE REVIEW — PHASE 12` §21 aur `PHASE REVIEW — PHASE 13` §22 mein darj hain; P5 / P10 `N/A` justified (D30 / D31), gates **passed not skipped**; `VERSION 1.3.0`, 10 files / 174 tests.
 **Previous gates:** `PHASE 0` ✅ `READY` (§8) · `PHASE 1` ✅ `READY` (§9) · `PHASE 1B` ✅ `READY` (§10) · `PHASE 2` ✅ `READY` (§11).
 **Language:** content Roman Urdu, surface English (C19 / D22).
-**Approval:** C23 / D29 P3–P11 blanket auto-continue is run me **consume** hua; N7 ke mutabiq naye kaam par phase-by-phase approval wapas lagu hogi.
+**Approval:** C23 / D29 P3–P11 blanket auto-continue is run me **consume** hua. PHASE 12 ke liye user ne alag se "Aik hi run me poora karo (Recommended)" single-run ijazat di — ye **sirf is feature** ke liye N7 ko muattal karti hai, Sahulat & Safe Service Policy par koi asar nahi, koi chhoot nahi; agle naye kaam par N7 phase-by-phase approval wapas lagu hogi (C26 / D35). PHASE 13 ke liye user ne **explicit feature request** par implement kar di (C27 / D36); PHASE REVIEW — PHASE 13 `phases.md` §22 mein `READY` darj (D36); koi N7 hold nahi tha is phase ke liye.
+
+---
+
+## 0. Maintenance — 2026-11-12 (post-P13)
+
+- **Current task:** koi nahi; project `READY` barqarar. Sirf repo hygiene — 9 docs CRLF → LF, `git diff --check` clean, P12 / P13 central commit local-only.
+- **VERIFICATION:** 174/174 tests OK · `PY_COMPILE_OK` / `NODE_CHECK_OK` · `/api/status` 200 · `agent.md` prefix SHA-256 MATCH · `git remote -v` empty.
+- **LLM status:** `llm_endpoint` / `llm_key` / `llm_model` khali hain → LLM rewrite **OFF by design**; rule-based Roman Urdu fallback chal raha hai, ye bug nahi. Enable karne ke liye Settings mein OpenAI-compatible endpoint + key + model, ya local Ollama / LM Studio (`127.0.0.1:11434` / `:1234`).
+- **Next:** koi naya gate nahi. Naya feature aane par N7 phase-by-phase approval wapas lagu hogi.
 
 ---
 
@@ -44,11 +53,13 @@
 | P5 Auth / Authorization | `N/A` justified, **gate passed not skipped** | `decisions.md` D30 · `phases.md` §14 |
 | P6 Core features / CRUD | `_parse_num` safe numeric parse (`400`), error handling, stack trace hatana, article action allowlist | `decisions.md` D32 · `phases.md` §15 |
 | P7 Integrations | offline graceful degradation, feed host allowlist, LLM error logging | `architecture.md` §12 · `phases.md` §16 |
-| P8 Testing / QA | stdlib `unittest`, 8 files / 101 tests / 32 named tests, `_harness.py`, mocked network, SQL-only reset | `decisions.md` D33 · `phases.md` §17 |
+| P8 Testing / QA | stdlib `unittest`, 8 files / 101 tests / 32 named tests, `_harness.py`, mocked network, SQL-only reset (P13 se 10 files / 174 tests) | `decisions.md` D33 · `phases.md` §17 |
 | P9 Security / Perf / A11y | 13/13 QA findings closed with passing regression tests; four security headers + CSP, `MAX_BODY` 1 MiB, `_authorize_path`, `validate_llm_endpoint`, `_xml_precheck`, masked `llm_key`, `db._session()` leak fix | `decisions.md` D32 · `rules.md` §18–§19 · `phases.md` §18 |
 | P10 Deploy / CI-CD | `N/A` justified, **gate passed not skipped** | `decisions.md` D31 · `phases.md` §19 |
-| P11 Docs / Monitoring | `server._log` local-only logging, 9 `PHASE REVIEW`s P3–P11, final doc-vs-code sync, in-app KB | `decisions.md` D34 · `architecture.md` §23 · `phases.md` §20 |
+| P11 Docs / Monitoring | `server._log` local-only logging, 9 `PHASE REVIEW`s P3–P11, final doc-vs-code sync, in-app KB | `decisions.md` D34 / D35 / D36 · `architecture.md` §23 / §24 / §25 · `phases.md` §20 / §21 / §22 |
 
+- **PHASE 12 / Service Brief & Official Status Checks (2026-11-09):** `service_brief.py` + 5 `/api/service-brief/*` routes + Sahulat view card + 8 official sources + stateless masked-last-4 design; `/api/status` `service_brief_version` / `service_brief_sources 8`; `tests/test_service_brief.py`; **`PHASE REVIEW — PHASE 12` `phases.md` §21` `READY` (C26 / D35).**
+- **PHASE 13 / Agent Memory (2026-11-09):** user ke **explicit feature request** par implement hua — `agent_memory.py` source registry / recall / problems / reports / feedback / entities / Markdown export, `telegram_public.py` public `t.me/s/<channel>` preview, 7 additive `memory_*` tables, 13 memory API routes, `/api/research` recall-before + record-after, feedback — usefulness/priority learning, `data/agent_memory.md` export, `VERSION 1.3.0`; `tests/test_memory.py` 17 green; **`PHASE REVIEW — PHASE 13` `phases.md` §22` `READY` (C27 / D36).** Memory archive-not-delete; Telegram public-only; local-only.
 - **Boundary unchanged:** koi bypass capability add nahi hui; app sirf read / validate / plan / record karta hai (Sahulat & Safe Service Policy).
 - **Koi commit is assistant ne nahi kiya** — `Final review commit: pending central commit` (coordinator karega), koi hash invent nahi.
 
@@ -64,25 +75,25 @@
 
 | Check | Method | Result |
 |---|---|---|
-| Full project suite | `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` | ✅ `Ran 101 tests in 77.621s — OK`, **zero `ResourceWarning`** |
-| Test files | `tests/` read-back | ✅ exactly **8 files**: `_harness.py`, `test_sahulat.py`, `test_security.py`, `test_firmware.py`, `test_db.py`, `test_research.py`, `test_server_api.py`, `test_static_governance.py`; **101** methods |
+| Full project suite | `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` | ✅ `Ran 174 tests in 85.402s — OK`, zero `ResourceWarning` |
+| Test files | `tests/` read-back | ✅ exactly **10 files**: `_harness.py`, `test_sahulat.py`, `test_security.py`, `test_firmware.py`, `test_db.py`, `test_research.py`, `test_server_api.py`, `test_static_governance.py`, `test_service_brief.py`, `test_memory.py`; **174** methods |
 | Named regression tests | `phases.md` §6 read-back | ✅ **32/32** named regression / characterization tests present; sab outbound network mocked, production DB never touched, fixed throwaway `data/_p8_test.db` SQL `DELETE FROM` reset |
 | QA findings | `phases.md` §6 / `decisions.md` D32 | ✅ **13/13 closed**, har aik ka named passing regression test + asli code-fix |
 | Python syntax | `python -m py_compile db.py server.py firmware.py research.py sahulat.py knowledge.py tests/*.py` | ✅ `PY_COMPILE_OK` |
 | JavaScript syntax | `node --check web/app.js` | ✅ `NODE_CHECK_OK` |
-| `agent.md` verbatim | SHA-256 prefix compare | ✅ `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH · `37314 bytes` · `CRLF False` |
+| `agent.md` verbatim | SHA-256 prefix compare | ✅ `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH · `41605 bytes` · `CRLF False` |
 | Docs count | `ls docs/*.md \| wc -l` | ✅ `9 / 9` |
-| Runtime loopback smoke | `127.0.0.1:8765` | ✅ `/api/status` 200 (`version 1.1.0`, `policy_id SAHULAT-SAFE-SERVICE-v1`, `db` basename-only, `llm_key` masked `***`); `/api/knowledge` 200 (`boundary, glossary 18, help 14, official_routes 5, security_note, tool_arch 5`); `/index.html`, `/style.css`, `/app.js` 200 with `Content-Security-Policy` |
-| Static UI | static read-back | ✅ 8 views / 8 nav items / 8 `role="tabpanel"` / 27 `sah*` IDs / zero inline `<script>` / `lang="en"` / `aria-live` / `:focus-visible` / `prefers-reduced-motion` |
+| Runtime loopback smoke | `127.0.0.1:8765` | ✅ `/api/status` 200 (`version 1.3.0`, `policy_id SAHULAT-SAFE-SERVICE-v1`, `db` basename-only, `llm_key` masked, `service_brief_version 1.2.0`, `service_brief_sources 8`, `memory_version 1.0`); `/api/service-brief/overview` 200 (`modes ['auto','status','gsx','brief']`, `gsx_is_report False`); `/api/knowledge` 200 (`boundary, glossary 22, help 16, official_routes 5, security_note, tool_arch 5`); `/index.html`, `/style.css`, `/app.js` 200 with `Content-Security-Policy` |
+| Static UI | static read-back | ✅ 9 views / 9 nav items / 9 `role="tabpanel"` / 27 `sah*` IDs / zero inline `<script>` / `lang="en"` / `aria-live` / `:focus-visible` / `prefers-reduced-motion` / 9th `Agent Memory` view |
 | Security baseline | code read-back | ✅ four security headers + CSP + `Cache-Control: no-store`, `MAX_BODY` 1 MiB, `_authorize_path` (realpath/commonpath), `validate_llm_endpoint`, `_xml_precheck`, `_mask_settings`, `db._session()` closes every connection |
 | Git hygiene | `git remote -v`, `core.autocrlf`, `git diff --check` | ✅ empty remote · `false` · clean `git diff --check`; koi commit is assistant ne nahi kiya |
 
-**Note:** 47-test targeted suite aur `2.059s` purane P2 / P1B records hain; ab **poora project suite 101 tests** hai — koi jhootha "partial = full" claim nahi. `77.621s` aik asli central run ka waqt hai; machine load ke sath waqt badalta hai (aakhri final re-run `Ran 101 tests in 74.521s — OK`), lekin **101 tests / `OK` / zero `ResourceWarning`** har run par barqarar.
+**Note:** 47-test targeted suite aur `2.059s` purane P2 / P1B records hain; ab **poora project suite 174 tests** hai — koi jhootha "partial = full" claim nahi. `85.402s` aik asli central run ka waqt hai; machine load ke sath waqt badalta hai (aakhri final re-run `Ran 174 tests in 85.402s — OK`), lekin **174 tests / `OK` / zero `ResourceWarning`** har run par barqarar.
 
 ## 5. Remaining Work
 
-**Is phase:** koi nahi — PHASE 11 `READY`, **project complete**.
-**Agle phases:** koi nahi — P3–P11 sab delivered.
+**Is phase:** koi nahi — PHASE 13 `READY`, **project complete**.
+**Agle phases:** koi nahi — P3–P13 sab delivered.
 **Deferred open questions (alag, honestly listed; inka koi invented resolution nahi):** O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 (`decisions.md` D34). Ye project complete hone se nahi rokte; naye kaam par N7 ke mutabiq phase-by-phase approval ke sath khulenge.
 
 ## 6. Known Risks
@@ -91,4 +102,4 @@ R1 verbatim drift (mitigated: hash + `core.autocrlf=false`) · R2 banawati citat
 
 ## 7. Next Action
 
-**Project complete** — PHASE 0 / 1 / 1B / 2 aur P3–P11 sab `READY`; `phases.md` §12–§20 mein 9 final `PHASE REVIEW`s darj. Koi agla internal action nahi. N7 ke mutabiq **naye kaam par phase-by-phase approval wapas lagu hogi** (C23 / D29 auto-continue is run tak seemit tha). `status` bole to `progress.md` + `phases.md` §1 parho; `review` bole to §12–§20 ka PHASE REVIEW dikhao. Central coordinator final commit karega — is assistant ne koi commit nahi kiya.
+**Project complete** — PHASE 0 / 1 / 1B / 2 aur P3–P13 sab `READY`; `phases.md` §12–§22 mein 11 final `PHASE REVIEW`s darj (P3–P11 + P12 + P13). Koi agla internal action nahi. N7 ke mutabiq **naye kaam par phase-by-phase approval wapas lagu hogi** (C23 / D29 auto-continue is run tak seemit tha). `status` bole to `progress.md` + `phases.md` §1 parho; `review` bole to §12–§22 ka PHASE REVIEW dikhao. Central coordinator final commit karega — is assistant ne koi commit nahi kiya.

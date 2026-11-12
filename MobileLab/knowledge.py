@@ -22,6 +22,7 @@ BOUNDARY = {
         "6 brand-wise official routes with required documents aur verified links.",
         "Proof-of-ownership checklist, customer consent form aur Roman Urdu / English service-request letter.",
         "Case / asset register — sarkari aur department devices ka local audit trail.",
+        "Service Brief & Official Status Checks: iPhone / Android ke khali official status-check worksheets, GSX request worksheet aur masle par research brief.",
     ],
     "does": [
         "Local firmware packages scan, parse aur validate karta hai (MTK scatter/preloader/DA, Qualcomm Firehose/rawprogram/patch/GPT).",
@@ -29,6 +30,7 @@ BOUNDARY = {
         "Har package ka local catalog, fingerprint, notes aur model card rakhta hai — sab kuch aap ke apne PC par.",
         "Real-time research agent: Google News, HN, GitHub releases aur 7 RSS feeds se live info la kar Roman Urdu mein khulasa deta hai, filters ke saath.",
         "Ownership / job register: IMEI, customer, proof-of-ownership aur official route ka record.",
+        "Service Brief: OFFICIAL status-check / GSX request worksheets aur Roman Urdu research brief — facts (URL + date checked) aur recommendations alag alag.",
     ],
     "does_not": [
         "Huawei ID, Google FRP, Samsung Account / KG, MDM, carrier lock ya iCloud Activation Lock bypass karne ka koi automation ya step-by-step tareeqa nahi deta.",
@@ -151,6 +153,10 @@ GLOSSARY = [
     ("XML DTD/entity", "XML ka DOCTYPE / ENTITY declaration, jo external file ya network se data mangwa sakta hai (XXE). MobileLab rawprogram / patch XML ko parse karne se pehle inhen reject kar deta hai."),
     ("WAL", "Write-Ahead Logging: SQLite ka journal mode jisme tabdeeliyan pehle -wal file mein likhi jati hain, is liye read aur write aik doosre ko nahi rokte aur local DB mehfooz rehti hai."),
     ("loopback", "127.0.0.1 / localhost yani aap ka apna PC. Server sirf isi address par sunta hai, is liye app LAN ya Internet par expose nahi hoti."),
+    ("GSX / ATLAS", "Apple Global Service Exchange: sirf Apple-authorized service facility ke technicians ko apne account se access milta hai. MobileLab GSX par login nahi karta, credentials store nahi karta aur koi GSX report fabricate nahi karta — sirf khali request / case worksheet deta hai."),
+    ("FMI / Find My", "Find My iPhone / Activation Lock ka ON-OFF status. Ye Apple ke activation server par rehta hai; second-hand device lene se pehle Hello screen aur previous owner ka account removal verify karna Apple ka official mashwara hai. App isay band karne ka koi tareeqa nahi deta."),
+    ("DIRBS / DVS", "PTA ka Device Verification System (dirbs.pta.gov.pk, SMS 8484): Pakistan mein IMEI / device status ka sarkari zariya. MobileLab is par khud query nahi karta; worksheet mein sirf official link aur khali result field hota hai."),
+    ("Masked identifier", "Privacy rule: poora IMEI / serial response, worksheet ya log mein kabhi nahi likha jata. Sirf aakhri 4 harkat ('•••• 2345') dikhti hain; poora identifier aap ke apne case file ya official portal par rahe."),
 ]
 
 HELP = [
@@ -168,6 +174,8 @@ HELP = [
     ("Python 3.10+ guard", "run.bat pehle python / py dhoondta hai, phir sys.version_info se major.minor parrh kar 3.10 se chhota version reject karta hai, kyunke naye type hints purane Python par import hi nahi hote. Koi install nahi — sirf Python 3.10+ chahiye."),
     ("Policy & toolkit kahan", "Sahulat & Safe Service Policy aur official-route toolkit 'Sahulat / Official Route' view (left nav, 8th view) mein hai: request-check, 6 brand-wise official links, required documents, proof checklist, consent, Roman Urdu / English letter aur case register aik jagah. Mukammal boundary 'Knowledge / Help' view mein bhi maujood hai."),
     ("Local test suite", "Tests chalane ke liye MobileLab folder mein ye command likhein: python -m unittest discover -s tests -p \"test_*.py\". Ye temporary DB aur loopback server use karta hai; production DB aur live internet kabhi touch nahi karta."),
+    ("Service Brief & Status Checks", "'Sahulat / Official Route' view ke andar naya section: apna sawaal likhein (maslan iPhone blacklist / carrier lock / FMI ON-OFF check), 'Analyze request' dabayein, phir mode / brand / customer / proof bhar kar 'Generate' karein. Output aik KHALI official worksheet ya Roman Urdu research brief hai — app khud koi carrier, OEM, Apple ya sarkari database query nahi karta, koi natija fabricate nahi karta, aur full IMEI store nahi karta."),
+    ("GSX report kyun nahi", "Apple GSX ka access sirf Apple-authorized service facility ke technicians ko un ke apne account se milta hai (S19). Is liye MobileLab sirf 'GSX REQUEST / CASE WORKSHEET' banata hai jisme saare findings khali hote hain: koi login, koi credential, koi third-party report seller, koi banawati model / activation / warranty status nahi. Jo data authorized channel se mile, woh technician khud bhare."),
 ]
 
-SECURITY_NOTE = "Hassas partitions (frp, persistent, config, devinfo, modemst1/2, nvram, nvdata, seccfg, proinfo, ...) sirf FLAG kiye jate hain taake aap galti se identity / calibration data na mitayein. App in par koi write/erase operation nahi banata. Is ke sath security headers, 1 MiB body cap, path authorization, SSRF validation, XML safe-check aur masked settings active hain; hassas partitions sirf FLAG hote hain, un par kabhi write nahi hota."
+SECURITY_NOTE = "Hassas partitions (frp, persistent, config, devinfo, modemst1/2, nvram, nvdata, seccfg, proinfo, ...) sirf FLAG kiye jate hain taake aap galti se identity / calibration data na mitayein. App in par koi write/erase operation nahi banata. Is ke sath security headers, 1 MiB body cap, path authorization, SSRF validation, XML safe-check aur masked settings active hain; hassas partitions sirf FLAG hote hain, un par kabhi write nahi hota. P12 Service Brief bhi stateless hai: koi carrier / OEM / Apple / government status query, koi GSX access, koi credential store, koi fabricated finding aur koi full-IMEI storage nahi — sirf masked last-4, khali official worksheets aur verified links."

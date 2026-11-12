@@ -420,13 +420,15 @@ class TestStaticAssets(unittest.TestCase):
                 self.assertEqual(code, 200)
                 self.assertTrue(body.strip())
 
-    def test_eight_views_and_nav(self):
+    def test_nine_views_and_nav(self):
         _, html = self._get_text("/index.html")
-        self.assertEqual(html.count('class="view'), 8)
-        self.assertEqual(html.count('id="view-'), 8)
-        self.assertEqual(html.count('data-view="'), 8)
+        self.assertEqual(html.count('class="view'), 9)
+        self.assertEqual(html.count('id="view-'), 9)
+        self.assertEqual(html.count('data-view="'), 9)
         self.assertIn('id="view-sahulat"', html)
         self.assertIn('data-view="sahulat"', html)
+        self.assertIn('id="view-memory"', html)
+        self.assertIn('data-view="memory"', html)
 
     def test_sahulat_element_ids(self):
         _, html = self._get_text("/index.html")

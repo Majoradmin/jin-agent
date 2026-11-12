@@ -1,7 +1,7 @@
 # PRD — MobileLab
 
-**Version:** 1.4.0 (PHASE 3–P11 delivered state) · **Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Root:** `J:\Ai Agent`
-**Status:** PHASE 0 / 1 / 1B / 2 `READY` + **PHASE 3–P11 `READY`** — **project complete** (C23 / D29 auto-continue run). Reviews `phases.md` §8–§20 mein; P5 / P10 N/A gates `D30` / `D31` se justified. N7: naye kaam par phase-by-phase approval wapas lagu hogi. Delivered state §17 mein.
+**Version:** 1.5.0 (PHASE 3–P13 delivered state) · **Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Root:** `J:\Ai Agent`
+**Status:** PHASE 0 / 1 / 1B / 2 `READY` + **PHASE 3–P13 `READY`** — **project complete** (C23 / D29 auto-continue run). Reviews `phases.md` §8–§22 mein; P5 / P10 N/A gates `D30` / `D31` se justified. N7: naye kaam par phase-by-phase approval wapas lagu hogi. Delivered states §17 (P3–P11), §18 (P12), §19 (P13) mein.
 **Language (C19 / D22):** information, report, plan aur tamam prose = **Roman Urdu**; headings, table headers, code, identifiers, paths, API routes, commit messages, UI labels aur technical terms = **English** (professional surface). C9 refined, khatam nahi.
 
 > **Research honesty:** is file mein sirf wo sources hain jo 2026-11-08 ko directly fetch ya official search result se verify kiye gaye. Har fact ke saath URL aur `date checked` hai. **Facts** aur **Recommendations** alag sections mein hain. P2 ke 12 official technology / security sources `architecture.md` §19 me darj hain; is PRD me unka §16 linkage hai. Market-size ya reseller ke ghair-tasdeeq numbers PRD mein shamil nahi kiye gaye. Koi citation banawati nahi.
@@ -555,3 +555,40 @@ O1–O8, O10, O11, O12, O13 upar `decisions.md` mein; **O9 resolved** (D21). **C
 - Loopback smoke: `/api/status` 200 (`version 1.1.0`, `policy_id SAHULAT-SAFE-SERVICE-v1`, `llm_key` masked `***`), `/api/knowledge` 200, `/index.html` / `/style.css` / `/app.js` 200 with `Content-Security-Policy`.
 
 **Deferred (koi jhootha resolution nahi):** O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 — tafseel `decisions.md` D34. N7 ke mutabiq naye kaam par phase-by-phase approval wapas lagu hogi.
+
+---
+
+## 18. PHASE 12 — Service Brief / Official Status (delivered state, 2026-11-09)
+
+> **Document-only sync.** Product scope, out-of-scope list aur Sahulat & Safe Service Policy **bilkul unchanged** (`§10`).
+
+| Area | Delivered | Reference |
+|---|---|---|
+| Official status-check surface | `service_brief.py` + 5 `/api/service-brief/*` routes + Sahulat view card + 8 official sources; deterministic brief builder; `modes ['auto','status','gsx','brief']`; `gsx_is_report False` | `AC-P12-01`, `D35`, `phases.md` §21 |
+| Privacy / policy | masked last-4 only, khali official worksheets, verified official links; **stateless** (koi credential / IMEI / fabricated finding nahi) | `C26`, `D35`, `D19` |
+
+- **App `VERSION`:** P12 ke baad `1.2.0` (service brief ne app bump nahi kiya).
+- **Tests / verification:** `tests/test_service_brief.py` green; full suite `Ran 157 tests — OK` (`2026-11-09`).
+
+---
+
+## 19. PHASE 13 — Agent Memory (delivered state, 2026-11-09)
+
+> **Delivered on user request.** Product scope / policy **bilkul unchanged** (`§10`).
+
+| Area | Delivered | Reference |
+|---|---|
+| Source registry | `agent_memory.py` + additive `memory_sources` rows; user-added sites validated via `research.validate_url` (SSRF), usefulness / priority bounded | `D36`, `AC-M13-01` |
+| Telegram memory | `telegram_public.py` public `t.me/s/<channel>` preview only (host allowlist `t.me`, 10s timeout, 2 MB cap, no login / private / userbot / MTProto); user adds channels | `D36`, `C27` |
+| Recall / learning | `/api/research` recall-before + record-after; queries / problems / entities / source health / hits; useful feedback → +1 usefulness/priority, not-useful → −1 | `D36`, `D32` |
+| Memory export | `data/agent_memory.md` human-readable (SQLite source of truth; user-driven regenerate) | `AC-M13-02` |
+| Runtime | `server.VERSION 1.3.0`, `/api/status` `memory_version 1.0`, counts in `db.counts()` | `D36` |
+
+- **Tests / verification:** `tests/test_memory.py` 17 green; full suite `python -m unittest discover -s tests` → **`Ran 174 tests — OK`** (`2026-11-09`).
+- **Deferred:** real Telegram group handles user se lene hain; hardware specs (RAM / GPU / VRAM); monitoring retention policy (O3).
+
+---
+
+## 20. Future phases / roadmap (planned, not delivered)
+
+> **Roadmap note (C15 / N7):** koi phase skip nahi. P12 / P13 ab delivered hain; naye phases phase-by-phase approval ke sath shuru honge. Roadmap abhi empty hai.

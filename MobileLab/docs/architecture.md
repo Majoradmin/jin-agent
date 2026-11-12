@@ -1,7 +1,7 @@
 # architecture.md — MobileLab System Architecture
 
-**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Status:** PHASE 2 `READY` + P3–P11 final doc-vs-code sync — project `READY` · **Document version:** 2.1.0
-**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.1.0` (P2 ne code nahi badla)
+**Date:** 2026-11-08 · **Updated:** 2026-11-09 · **Status:** PHASE 2 `READY` + P3–P13 final doc-vs-code sync — project `READY` · **Document version:** 2.2.0
+**Root:** `J:\Ai Agent` · **App:** `J:\Ai Agent\MobileLab` · **App `VERSION`:** `1.3.0` (P13 ne code badla)
 **Language (C19 / D22):** information / report / plan / prose = **Roman Urdu**; headings, labels, code, identifiers, paths, API routes, commits aur technical terms = **English**.
 
 > **Research honesty:** P0 mein koi web browse nahi tha. P1 ne 16 official / verified sources `PRD.md` §5.3 (S1–S16) mein `URL + date checked = 2026-11-08` ke sath darj kiye. P2 ne 12 official technology / security sources `P2-01…P2-12` directly check kiye, sab ka `date checked = 2026-11-08` hai. Python docs pages `3.13.18 documentation` hain jabke local runtime `Python 3.13.14` hai — ye patch-level farq §19.3 mein darj hai. Telegram ka P2 anchor re-check juzwi raha; baqi Telegram facts P1 `S9` se retained hain, koi naya dawa nahi. **Facts** aur **Recommendations** alag hain; koi citation banawati nahi, koi speculation fact nahi.
@@ -409,3 +409,27 @@ P0 Bootstrap `READY` → P1 PRD `READY` → **P2 Architecture + research `READY`
 **Central verification (2026-11-09):** `python -W error::ResourceWarning -m unittest discover -s tests -p "test_*.py" -v` → `Ran 101 tests in 77.621s — OK` (zero `ResourceWarning`) · `python -m py_compile db.py server.py firmware.py research.py sahulat.py knowledge.py tests/*.py` → `PY_COMPILE_OK` · `node --check web/app.js` → `NODE_CHECK_OK` · `agent.md` verbatim prefix SHA-256 `1de53535942d8e7f1b31b3d9b55c9ae4854e85fd667e14e02f314a62010fd840` MATCH (`size 37314`, `CRLF False`) · docs `9/9` · `git diff --check` clean · `git remote -v` empty · `core.autocrlf=false`.
 
 **13 QA findings:** sab closed with passing regression tests (`D32`, `phases.md` §6). **Koi bypass capability add nahi hui** — app sirf read / validate / plan / record karta hai. **Deferred open questions:** O1, O2, O3, O4, O5, O6, O7, O8, O11, O13 (`D34`) — inmein se koi resolution invent nahi kiya gaya.
+
+---
+
+## 24. PHASE 12 — Service Brief (final sync, 2026-11-09)
+
+- **Status:** delivered / `READY` (`phases.md` §21).
+- **Delivered:** `service_brief.py` (deterministic classifier + brief builder, 8 official sources, `modes ['auto','status','gsx','brief']`, `gsx_is_report False`), 5 `/api/service-brief/*` routes, Sahulat view card, `/api/status` `service_brief_version` / `service_brief_sources`.
+- **Architecture impact:** naya module + routes + UI card; additive; DB schema change nahi; policy boundary `D19` unchanged; stateless (koi IMEI / credential / fabricated finding store nahi).
+- **Verification:** `tests/test_service_brief.py` green; full suite P12 par `Ran 157 tests — OK`.
+
+---
+
+## 25. PHASE 13 — Agent Memory (final sync, 2026-11-09)
+
+- **Status:** delivered / `READY` (`phases.md` §22).
+- **Delivered modules:** `agent_memory.py` (source registry / recall / problems / reports / feedback / entities / Markdown export), `telegram_public.py` (public `t.me/s/<channel>` preview, SSRF-guarded, 10s timeout, 2 MB cap, no auth / private / userbot / MTProto), 7 additive `memory_*` DB tables, 13 memory API routes, research recall-before / record-after, 9th UI view `Agent Memory`, `data/agent_memory.md` export, `/api/status` `memory_version`.
+- **Architecture impact:** additive DB tables + routes + modules; source delete = archive (`status='archived'`, priority 0) — history-preserving; feedback adjusts source usefulness/priority only; boundary `D19` / C27 unchanged; local-only (C7).
+- **Verification:** `tests/test_memory.py` 17 green; full suite `python -m unittest discover -s tests` → **`Ran 174 tests — OK`** (`2026-11-09`); `VERSION 1.3.0`.
+
+---
+
+## 26. Future modules (planned, not delivered)
+
+- Roadmap empty; koi phase skip nahi (C15); naye phase phase-by-phase approval ke sath shuru hoga (N7).

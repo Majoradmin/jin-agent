@@ -24,6 +24,7 @@ const TITLES = {
   dashboard: ['Dashboard', 'Your local mobile-software workspace'],
   packages:  ['Firmware Packages', 'Scan, validate and catalog — MTK scatter/preloader/DA and Qualcomm Firehose'],
   research:  ['Research Agent', 'Live browsing, filters and Roman Urdu summaries'],
+  memory:    ['Agent Memory', 'Persistent sources, Telegram public channels, queries, problems and feedback'],
   models:    ['Model Brief', 'Local model card and live information for this model'],
   jobs:      ['Job Register', 'IMEI, ownership proof and official route records'],
   sahulat:   ['Sahulat / Official Route', 'Checklist, consent, service-request letter and case register — with reason + official link'],
@@ -36,6 +37,8 @@ const state = {
   packages: [], selected: null, researchLoaded: false, savedMode: false,
   preset: 'all', lastItems: [], sampleDir: '',
   sahulat: null, sahLoaded: false,
+  serviceBrief: null, svcLastClass: null,
+  memory: null, memoryLoaded: false,
 };
 
 async function api(path, opts = {}) {
@@ -79,6 +82,7 @@ function nav(view, updateHash = true) {
   if (view === 'packages' && !state.packages.length) loadPackages();
   if (view === 'jobs') loadJobs();
   if (view === 'sahulat') loadSahulat();
+  if (view === 'memory') loadMemory();
 }
 
 /* ------------------------------------------------------------------ dashboard */
@@ -282,7 +286,7 @@ async function fetchResearch(force) {
 function resCard(i) {
   const catColors = { huawei:'', mtk:'green', qcom:'green', apple:'amber', security:'red', tools:'', firmware:'' };
   const href = safe_url(i.url);
-  return `<div class="res-card ${i.saved ? 'saved' : ''}" data-g="${esc(i.guid)}">
+  return `<div class="res-card ${i.saved ? 'saved' : ''}" data-g="${esc(i.guid)}" data-src="${esc(i.source || '')}">
     <div class="rc-top">
       <span class="tag ${catColors[i.category] || ''}">${esc(i.category_label)}</span>
       <span class="score">score ${i.score}</span>
@@ -296,6 +300,8 @@ function resCard(i) {
       <span class="src">${esc(i.source)}${i.age_days !== null && i.age_days !== undefined ? ' · ' + i.age_days + ' days ago' : ''}</span>
       <button class="btn ghost sm" data-act="save">${i.saved ? '✓ Saved' : 'Save'}</button>
       <button class="btn ghost sm" data-act="read">${i.is_read ? 'Read ✓' : 'Mark read'}</button>
+      <button class="btn ghost sm" data-act="useful" title="Memory: is source ki usefulness barhao">Useful</button>
+      <button class="btn ghost sm" data-act="bad" title="Memory: is source ki usefulness kam karo">Not useful</button>
       ${href ? linkHtml(i.url, 'Open ↗', 'btn ghost sm') : ''}
     </div>
   </div>`;
@@ -327,6 +333,182 @@ async function showSaved() {
       })).join('')}</div>` : '<div class="card"><div class="empty-state" lang="ur-PK-Latn">Abhi kuch save nahi kiya. Research cards par "Save" dabayein.</div></div>');
     $('#backLive').onclick = () => { state.savedMode = false; renderResearch({ ...state.lastResult, items: state.lastItems }); };
   } catch (e) { toast(e.message, true); }
+}
+
+/* ------------------------------------------------------------------ memory */
+function memDate(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+function memItem(html) { return `<div class="mem-item">${html}</div>`; }
+
+async function loadMemory(force) {
+  if (state.memoryLoaded && !force) return;
+  try {
+    const o = await api('/api/memory/overview');
+    state.memory = o; state.memoryLoaded = true;
+    renderMemory(o);
+  } catch (e) {
+    ['#memSourceList', '#memTgList', '#memQueries', '#memProbList', '#memFeedback'].forEach(sel => {
+      const el = $(sel); if (el) el.innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`;
+    });
+  }
+}
+
+function renderMemory(o) {
+  const c = o.counts || {};
+  $('#memStats').innerHTML = [
+    ['Active sources', c.sources || 0], ['Archived', c.archived_sources || 0],
+    ['Telegram groups', c.telegram || 0], ['Queries', c.queries || 0],
+    ['Problems', c.problems || 0], ['Reports', c.reports || 0],
+    ['Feedback', c.feedback || 0], ['Entities', c.entities || 0],
+  ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${esc(l)}</div></div>`).join('');
+  $('#memSrcCount').textContent = (o.sources || []).length + ' active';
+  $('#memTgCount').textContent = (o.telegram || []).length + ' saved';
+  $('#memFbCount').textContent = (o.feedback || []).length;
+
+  $('#memSourceList').innerHTML = (o.sources || []).map(s => memItem(
+    `<div class="mem-top"><strong>${esc(s.name)}</strong>
+       <span class="tag ${s.status === 'active' ? 'green' : 'amber'}">${esc(s.status)}</span>
+       <span class="tag">u${s.usefulness} · p${s.priority}</span></div>
+     <div class="small muted">${esc(s.type)} · ${esc(s.category)} · trust ${s.trust} · ok ${s.ok_count} / fail ${s.fail_count}${s.last_ok ? ' · last ' + memDate(s.last_ok) : ''}</div>
+     ${s.url ? `<div class="small">${linkHtml(s.url, s.url)}</div>` : ''}
+     ${s.notes ? `<div class="small muted">${esc(s.notes)}</div>` : ''}
+     <div class="row-actions">
+       <button class="btn ghost sm" data-promote="${s.id}">+ Priority</button>
+       <button class="btn ghost sm" data-demote="${s.id}">− Priority</button>
+       <button class="btn ghost sm" data-archive="${s.id}" style="color:var(--red)">Archive</button>
+     </div>`)).join('') || '<p class="muted small" lang="ur-PK-Latn">Koi source nahi.</p>';
+
+  $('#memTgList').innerHTML = (o.telegram || []).map(t => memItem(
+    `<div class="mem-top"><strong>@${esc(t.channel)}</strong>
+       <span class="tag ${t.enabled ? 'green' : 'amber'}">${t.enabled ? 'active' : 'archived'}</span>
+       <span class="tag">${esc(t.category)}</span></div>
+     <div class="small muted">${esc(t.title)} · ok ${t.ok_count} / fail ${t.fail_count}${t.last_ok ? ' · last ' + memDate(t.last_ok) : ''}</div>
+     ${t.last_error ? `<div class="small" style="color:var(--red)">${esc(t.last_error)}</div>` : ''}
+     <div class="row-actions">
+       <button class="btn ghost sm" data-tgsearch="${esc(t.channel)}">Search</button>
+       <button class="btn ghost sm" data-tgarchive="${t.id}" style="color:var(--red)">Archive</button>
+     </div>`)).join('') || '<p class="muted small" lang="ur-PK-Latn">Abhi koi channel save nahi. Apne GSM / OSINT / AI groups add karain.</p>';
+
+  $('#memQueries').innerHTML = (o.queries || []).map(q => memItem(
+    `<div class="mem-top"><strong>${esc(q.query)}</strong><span class="tag">${esc(q.category)}</span></div>
+     <div class="small muted">${q.returned}/${q.result_count} items · sources ok ${q.sources_ok} / fail ${q.sources_failed} · ${q.hits} run(s) · ${memDate(q.updated_at)}</div>
+     <div class="row-actions"><button class="btn ghost sm" data-recall="${esc(q.query)}">Recall &amp; research</button></div>`)).join('')
+    || '<p class="muted small" lang="ur-PK-Latn">Research karne par query yahan khud save hogi.</p>';
+
+  $('#memProbList').innerHTML = (o.problems || []).map(p => memItem(
+    `<div class="mem-top"><strong>P-${p.id} ${esc(p.title)}</strong><span class="tag ${p.status === 'resolved' ? 'green' : 'amber'}">${esc(p.status)}</span></div>
+     <div class="small muted">${esc(p.model || 'model —')} · ${memDate(p.updated_at)}</div>
+     ${p.symptoms ? `<div class="small">${esc(p.symptoms)}</div>` : ''}`)).join('')
+    || '<p class="muted small" lang="ur-PK-Latn">Masla save karne par next time instant recall hoga.</p>';
+
+  $('#memFeedback').innerHTML = (o.feedback || []).map(f => memItem(
+    `<div class="mem-top"><strong>${esc(f.rating)}</strong><span class="tag">${esc(f.target_type)}</span></div>
+     <div class="small muted">${esc(f.source || '—')} · ${memDate(f.created_at)}</div>
+     ${f.target_key ? `<div class="small">${esc(f.target_key)}</div>` : ''}`)).join('')
+    || '<p class="muted small" lang="ur-PK-Latn">Research cards par “Useful / Not useful” dabayein — agent isi se seekhta hai.</p>';
+}
+
+function renderRecall(r) {
+  const out = $('#memRecallOut');
+  const qs = (r.queries || []).map(q =>
+    `<div class="mem-item"><div class="mem-top"><strong>${esc(q.query)}</strong><span class="tag">${esc(q.category)}</span></div>
+      <div class="small muted">${q.hits} run(s) · last ${memDate(q.updated_at)}</div></div>`).join('');
+  const ps = (r.problems || []).map(p =>
+    `<div class="mem-item"><div class="mem-top"><strong>P-${p.id} ${esc(p.title)}</strong><span class="tag">${esc(p.status)}</span></div>
+      <div class="small muted">${esc(p.model || '')} · last ${memDate(p.updated_at)}</div></div>`).join('');
+  const ss = (r.sources || []).slice(0, 6).map(s =>
+    `<div class="small">${linkHtml(s.url, s.name)} <span class="muted">· p${s.priority} · u${s.usefulness}</span></div>`).join('');
+  out.innerHTML = `<div class="issue ${r.known ? 'info' : 'warn'}">
+      <div class="it">${r.known ? 'Memory recall — pehle ka record mila' : 'Memory mein pehla record nahi mila'}</div>
+      <div class="id">${esc(r.message || 'Naya topic — research ke baad ye khud save ho jayega.')}</div></div>
+    ${qs ? `<h3 class="sah-h3">Past queries</h3>${qs}` : ''}
+    ${ps ? `<h3 class="sah-h3">Known problems</h3>${ps}` : ''}
+    ${ss ? `<h3 class="sah-h3">Priority sources</h3>${ss}` : ''}`;
+}
+
+async function memAddSource() {
+  const name = $('#memSourceName').value.trim();
+  const url = $('#memSourceUrl').value.trim();
+  if (!name) { toast('Source ka naam likhein', true); return; }
+  try {
+    await post('/api/memory/sources', {
+      name, url, type: $('#memSourceType').value,
+      category: $('#memSourceCat').value.trim() || 'general',
+      usefulness: +$('#memSourceUse').value,
+    });
+    ['#memSourceName', '#memSourceUrl', '#memSourceCat'].forEach(s => $(s).value = '');
+    toast('Source memory mein save ho gaya');
+    await loadMemory(true); refreshCounts();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function memAddTelegram() {
+  const channel = $('#memTgChannel').value.trim();
+  if (!channel) { toast('Channel username likhein', true); return; }
+  try {
+    await post('/api/memory/telegram', {
+      channel, category: $('#memTgCat').value.trim() || 'gsm',
+      title: channel,
+    });
+    $('#memTgChannel').value = ''; $('#memTgCat').value = '';
+    toast('Telegram channel memory mein save ho gaya');
+    await loadMemory(true); refreshCounts();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function memSearchTelegram(channel, q) {
+  const ch = (channel || $('#memTgSearchChannel').value || '').trim();
+  if (!ch) { toast('Channel username likhein', true); return; }
+  const query = q !== undefined ? q : $('#memTgSearchQ').value.trim();
+  const out = $('#memTgResults');
+  out.innerHTML = '<div class="skeleton"></div>';
+  try {
+    const r = await api('/api/memory/telegram/search?channel=' + encodeURIComponent(ch) +
+      '&q=' + encodeURIComponent(query) + '&limit=' + ($('#memTgSearchLimit').value || '20'));
+    if (!r.ok) {
+      out.innerHTML = `<div class="issue error"><div class="it">Telegram preview fetch nahi hua</div><div class="id">${esc(r.error || '')}</div></div>`;
+    } else {
+      out.innerHTML = `<div class="small muted">@${esc(r.channel)} · ${r.count} public messages · ${esc(r.fetched_at)} · ${linkHtml(r.url, 'open preview ↗')}</div>` +
+        (r.items.length ? r.items.map(m => `<div class="mem-item">
+          <div class="small muted">${esc(m.published || 'no date')}${m.views ? ' · ' + esc(m.views) + ' views' : ''}</div>
+          <div class="mem-text">${esc(m.text)}</div>
+          ${m.url ? `<div class="small">${linkHtml(m.url, 'message link ↗')}</div>` : ''}</div>`).join('')
+          : '<p class="muted small" lang="ur-PK-Latn">Is query par koi public message nahi mila.</p>');
+    }
+    state.memoryLoaded = false; refreshCounts();
+  } catch (e) {
+    out.innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`;
+  }
+}
+
+async function memRecall() {
+  const q = $('#memRecallQ').value.trim();
+  try {
+    const r = await api('/api/memory/recall?q=' + encodeURIComponent(q));
+    renderRecall(r);
+  } catch (e) { $('#memRecallOut').innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`; }
+}
+
+async function memAddProblem() {
+  const title = $('#memProbTitle').value.trim();
+  if (!title) { toast('Problem likhein', true); return; }
+  try {
+    await post('/api/memory/problems', { title, model: $('#memProbModel').value.trim() });
+    $('#memProbTitle').value = ''; $('#memProbModel').value = '';
+    toast('Problem memory mein save ho gayi');
+    await loadMemory(true); refreshCounts();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function memExport() {
+  try {
+    const r = await post('/api/memory/export', {});
+    $('#memExportMsg').textContent = '✓ ' + r.file + ' regenerate ho gayi (' + r.bytes + ' bytes) · ' + r.generated_at;
+    toast('agent_memory.md update ho gayi');
+  } catch (e) { $('#memExportMsg').textContent = '✕ ' + e.message; toast(e.message, true); }
 }
 
 /* ------------------------------------------------------------------ models */
@@ -565,6 +747,144 @@ async function loadSahCases() {
   } catch (e) { box.innerHTML = `<div class="issue error"><div class="it">${esc(e.message)}</div></div>`; }
 }
 
+/* -------------------------------------------------- service brief (P12) */
+function renderSvcChecks() {
+  const o = state.serviceBrief; if (!o) return;
+  const list = (o.checks && (o.checks[$('#svcBrand').value] || o.checks.other)) || [];
+  $('#svcChecks').innerHTML = list.map(c =>
+    `<label class="sah-check"><input type="checkbox" value="${esc(c.id)}" checked>
+      <span><b>${esc(c.label)}</b><em>${esc(c.where)}</em></span></label>`).join('') ||
+    '<p class="muted small" lang="ur-PK-Latn">Is brand ke liye koi check maujood nahi.</p>';
+}
+
+function renderServiceBrief() {
+  const o = state.serviceBrief; if (!o) return;
+  $('#svcVersion').textContent = 'v' + o.version + ' · worksheet only';
+  $('#svcDisclaimer').textContent = (o.disclaimer || '') + ' ' + (o.privacy_note || '');
+  $('#svcSources').innerHTML =
+    '<h3 class="sah-h3">Verified sources (URL + date checked)</h3>' +
+    (o.sources || []).map(s =>
+      `<div class="svc-src">${linkHtml(s.url, s.label + ' ↗')}
+        <span class="small muted">[${esc(s.id)}] · checked ${esc(s.date_checked)} · ${esc(s.purpose)}</span></div>`).join('') +
+    ((o.excluded_sources || []).length
+      ? `<p class="small muted" lang="ur-PK-Latn">Excluded (checked but unavailable): ${o.excluded_sources.map(x => esc(x.url) + ' — ' + esc(x.reason)).join('; ')}</p>` : '');
+  renderSvcChecks();
+  $('#svcProof').innerHTML = (o.checklist || []).map(c =>
+    `<label class="sah-check"><input type="checkbox" value="${esc(c.id)}">
+      <span><b>${esc(c.label)}</b>${c.required ? ' <span class="tag amber">required</span>' : ''}
+      <em>${esc(c.hint)}</em></span></label>`).join('');
+}
+
+function svcFormData() {
+  const q = $('#svcAsk').value.trim();
+  return {
+    q, issue: q,
+    customer: $('#svcCustomer').value.trim(), contact: $('#svcContact').value.trim(),
+    model: $('#svcModel').value.trim(), brand: $('#svcBrand').value,
+    device_id: $('#svcId').value.trim(),
+    consent: $('#svcConsentChk').checked, live: $('#svcLive').checked,
+    proof: $$('#svcProof input:checked').map(i => i.value),
+    checks: $$('#svcChecks input:checked').map(i => i.value),
+  };
+}
+
+function svcMsg(msg, bad = false) {
+  const el = $('#svcMsg');
+  el.textContent = msg; el.style.color = bad ? 'var(--red)' : 'var(--muted)';
+}
+
+function svcRefusalHtml(r) {
+  return `<div class="issue warn"><div class="it">Boundary request — official route only</div>
+      <div class="id">${esc(r.reason || '')}</div></div>
+    <div class="rl">${(r.official_links || []).map(([t, u]) => linkHtml(u, t + ' ↗')).join('')}</div>
+    <ol class="sr-steps">${(r.safe_next_steps || []).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+    ${r.refusal_line ? `<p class="small muted" lang="ur-PK-Latn">${esc(r.refusal_line)}</p>` : ''}`;
+}
+
+function svcShowResult(r) {
+  const text = r.report || r.worksheet || r.brief || '';
+  $('#svcOutput').textContent = text || '(koi text nahi)';
+  const facts = r.facts || [], recs = r.recommendations || [];
+  let h = '';
+  if (r.blocked) {
+    h += svcRefusalHtml(r);
+  } else if (facts.length || recs.length || r.offline) {
+    h += `<div class="two-col" style="margin-top:14px">
+      <div class="card"><div class="card-head"><h2>Facts — verified feeds</h2><span class="tag green">${facts.length}</span></div>
+        ${facts.length ? facts.map(f => `<div class="mn"><div class="mt">${linkHtml(f.url, f.title)}</div>
+          <div class="mk" lang="ur-PK-Latn">${esc(f.khulasa)}</div>
+          <div class="small muted">${esc(f.source)} · checked ${esc(f.date_checked)}</div></div>`).join('')
+          : '<p class="muted small" lang="ur-PK-Latn">Koi feed item nahi mila — koi banawati khabar nahi likhi gayi.</p>'}</div>
+      <div class="card"><div class="card-head"><h2>Recommendations — official routes</h2><span class="tag">${recs.length}</span></div>
+        ${recs.length ? recs.map(x => `<div class="mn"><div class="mt">${linkHtml(x.url, x.label)}</div>
+          <div class="mk" lang="ur-PK-Latn">${esc(x.reason || '')}</div></div>`).join('')
+          : '<p class="muted small" lang="ur-PK-Latn">Is masle ke liye koi specific official route map nahi hua.</p>'}</div></div>`;
+    if (r.offline) h += '<p class="small muted" lang="ur-PK-Latn">OFFLINE MODE: feeds se koi natija nahi mila, is liye koi khabar ka dawa nahi kiya gaya — sirf verified official links hain.</p>';
+  }
+  if (r.kind === 'gsx') {
+    h += `<div class="notice" style="margin-top:14px"><div class="notice-icon" aria-hidden="true">!</div>
+      <div><strong>Ye Apple GSX report nahi hai</strong><p lang="ur-PK-Latn">${esc(r.disclaimer || '')}</p></div></div>`;
+  }
+  if (!r.blocked && (r.official_links || []).length && r.kind !== 'brief') {
+    h += `<div class="svc-links"><h3 class="sah-h3">Official links</h3>
+      ${r.official_links.map(([t, u]) => linkHtml(u, t + ' ↗')).join('')}</div>`;
+  }
+  $('#svcFacts').innerHTML = h;
+}
+
+async function svcAnalyze() {
+  const q = $('#svcAsk').value.trim();
+  const out = $('#svcAskOut');
+  if (!q) { out.innerHTML = '<p class="muted small">Pehle apna sawaal / masla likhein.</p>'; return; }
+  out.innerHTML = '<div class="skeleton"></div>';
+  try {
+    const r = await api('/api/service-brief/classify?q=' + encodeURIComponent(q));
+    state.svcLastClass = r;
+    if (r.blocked) { out.innerHTML = svcRefusalHtml(r); return; }
+    $('#svcMode').value = r.suggested_mode || 'status';
+    $('#svcBrand').value = r.suggested_brand || 'other';
+    renderSvcChecks();
+    const labels = { status: 'Status check worksheet', gsx: 'GSX request worksheet', brief: 'Problem / research brief' };
+    out.innerHTML = `<div class="issue info"><div class="it">Safe request — ${esc(labels[r.suggested_mode] || 'worksheet')}</div>
+      <div class="id">${esc(r.reason)}</div></div>
+      <p class="small muted" lang="ur-PK-Latn">Mode aur brand auto-select ho gaye. Ab neeche form bhar kar "Generate report / worksheet" dabayein. Ye app khud koi status query ya GSX access nahi karta.</p>`;
+  } catch (e) {
+    out.innerHTML = `<div class="issue error"><div class="it">Analyze fail</div><div class="id">${esc(e.message)}</div></div>`;
+  }
+}
+
+async function svcRun() {
+  const btn = $('#svcRunBtn'); busy(btn, true, 'Generating…');
+  let d = svcFormData();
+  try {
+    let mode = $('#svcMode').value;
+    if (mode === 'auto') {
+      const c = await api('/api/service-brief/classify?q=' + encodeURIComponent(d.q));
+      if (c.blocked) {
+        $('#svcOutput').textContent = c.reason;
+        $('#svcFacts').innerHTML = svcRefusalHtml(c);
+        svcMsg('Boundary request — sirf official raasta diya gaya.', true);
+        return;
+      }
+      mode = c.suggested_mode || 'status';
+      $('#svcMode').value = mode;
+      $('#svcBrand').value = c.suggested_brand || 'other';
+      renderSvcChecks();
+      d = svcFormData();
+      state.svcLastClass = c;
+    }
+    if (mode !== 'brief' && !d.customer) { svcMsg('Customer ka naam zaroori hai', true); return; }
+    let r;
+    if (mode === 'status') r = await post('/api/service-brief/status', d);
+    else if (mode === 'gsx') r = await post('/api/service-brief/gsx', d);
+    else r = await post('/api/service-brief/problem', d);
+    svcShowResult(r);
+    svcMsg(r.blocked ? 'Boundary request — official routes dikhaye gaye.'
+                     : '✓ ' + (r.kind || mode) + ' tayyar. Koi live status query, GSX access ya fabricated finding nahi.', false);
+  } catch (e) { svcMsg(e.message, true); toast(e.message, true); }
+  finally { busy(btn, false); }
+}
+
 /* ------------------------------------------------------------------ knowledge */
 function renderKnowledge() {
   const k = state.knowledge; if (!k) return;
@@ -668,6 +988,19 @@ function bind() {
     const btn = e.target.closest('button[data-act]'); if (!btn) return;
     const card = btn.closest('.res-card'); const guid = card?.dataset.g; if (!guid) return;
     const act = btn.dataset.act;
+    if (act === 'useful' || act === 'bad') {
+      try {
+        await post('/api/memory/feedback', {
+          target_type: 'item', target_key: guid, source: card.dataset.src || '',
+          rating: act === 'useful' ? 'useful' : 'not_useful',
+        });
+        state.memoryLoaded = false;
+        toast(act === 'useful' ? 'Memory: source ki usefulness barha di'
+                               : 'Memory: source demote ho gaya (archive nahi)');
+        refreshCounts();
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     let action = act === 'save' ? (btn.textContent.includes('Saved') ? 'unsave' : 'save')
                                : (btn.textContent.includes('Read ✓') ? 'unread' : 'read');
     try {
@@ -702,6 +1035,57 @@ function bind() {
   $('#sahLetterCopy').onclick = () => copyText($('#sahLetter').textContent, 'Letter copied');
   $('#sahConsentCopy').onclick = () => copyText($('#sahConsent').textContent, 'Consent form copied');
 
+  // ---- Agent memory ----
+  $('#memSourceAdd').onclick = memAddSource;
+  $('#memSourceName').addEventListener('keydown', e => { if (e.key === 'Enter') memAddSource(); });
+  $('#memTgAdd').onclick = memAddTelegram;
+  $('#memTgChannel').addEventListener('keydown', e => { if (e.key === 'Enter') memAddTelegram(); });
+  $('#memTgSearchBtn').onclick = () => memSearchTelegram();
+  $('#memTgSearchQ').addEventListener('keydown', e => { if (e.key === 'Enter') memSearchTelegram(); });
+  $('#memRecallBtn').onclick = memRecall;
+  $('#memRecallQ').addEventListener('keydown', e => { if (e.key === 'Enter') memRecall(); });
+  $('#memProbAdd').onclick = memAddProblem;
+  $('#memExportBtn').onclick = memExport;
+  $('#memReloadBtn').onclick = () => loadMemory(true);
+  $('#memSourceList').addEventListener('click', async e => {
+    const p = e.target.closest('[data-promote]');
+    const d = e.target.closest('[data-demote]');
+    const a = e.target.closest('[data-archive]');
+    try {
+      if (p) { await post('/api/memory/sources/promote', { id: +p.dataset.promote, useful: true }); toast('Priority barha di'); }
+      if (d) { await post('/api/memory/sources/promote', { id: +d.dataset.demote, useful: false }); toast('Priority kam kar di'); }
+      if (a) { await api('/api/memory/sources/' + a.dataset.archive, { method: 'DELETE' }); toast('Source archive ho gaya'); }
+      if (p || d || a) { await loadMemory(true); refreshCounts(); }
+    } catch (err) { toast(err.message, true); }
+  });
+  $('#memTgList').addEventListener('click', async e => {
+    const s = e.target.closest('[data-tgsearch]');
+    const a = e.target.closest('[data-tgarchive]');
+    try {
+      if (s) {
+        $('#memTgSearchChannel').value = s.dataset.tgsearch;
+        memSearchTelegram(s.dataset.tgsearch, '');
+      }
+      if (a) {
+        await api('/api/memory/telegram/' + a.dataset.tgarchive, { method: 'DELETE' });
+        toast('Channel archive ho gaya'); await loadMemory(true); refreshCounts();
+      }
+    } catch (err) { toast(err.message, true); }
+  });
+  $('#memQueries').addEventListener('click', e => {
+    const b = e.target.closest('[data-recall]'); if (!b) return;
+    $('#resQ').value = b.dataset.recall;
+    state.memoryLoaded = false;
+    nav('research');
+    fetchResearch(false);
+  });
+
+  $('#svcAskBtn').onclick = svcAnalyze;
+  $('#svcAsk').addEventListener('keydown', e => { if (e.key === 'Enter') svcAnalyze(); });
+  $('#svcBrand').onchange = renderSvcChecks;
+  $('#svcRunBtn').onclick = svcRun;
+  $('#svcCopyBtn').onclick = () => copyText($('#svcOutput').textContent, 'Report copied');
+
   $('#setSave').onclick = async () => {
     try {
       await post('/api/settings', { technician:$('#setTech').value, shop:$('#setShop').value,
@@ -719,15 +1103,18 @@ async function init() {
   bind();
   renderFocus();
   try {
-    const [status, sources, knowledge, sahulat] = await Promise.all([
+    const [status, sources, knowledge, sahulat, serviceBrief] = await Promise.all([
       api('/api/status'), api('/api/sources'), api('/api/knowledge'), api('/api/sahulat/overview'),
+      api('/api/service-brief/overview'),
     ]);
     state.status = status; state.sources = sources.sources;
     state.presets = sources.presets; state.categories = sources.categories;
     state.knowledge = knowledge;
     state.sahulat = sahulat; state.sahLoaded = true;
+    state.serviceBrief = serviceBrief;
     state.sampleDir = status.sample_dir || 'samples\\MTK_Demo_MT6899_UFS';
-    renderStats(); renderPresets(); renderCategories(); renderJobRoutes(); renderKnowledge(); renderSahulat();
+    renderStats(); renderPresets(); renderCategories(); renderJobRoutes(); renderKnowledge();
+    renderSahulat(); renderServiceBrief();
   } catch (e) { toast('Init fail: ' + e.message, true); }
   nav((location.hash || '').replace('#', '') || 'dashboard', false);
   loadPackages(); loadDashNews(); loadJobs(); loadSettings();
