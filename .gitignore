@@ -1,5 +1,6 @@
-# ---- MobileLab local runtime (kabhi commit na ho) ----
+# ---- Local runtime (kabhi commit na ho) ----
 MobileLab/data/
+jin_agent/data/
 *.db
 *.db-wal
 *.db-shm

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JIN Agent — Local Research Console</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">JA</span>
+    <div>
+      <h1>JIN Agent</h1>
+      <p class="muted small">Local research &amp; intelligence · stdlib only · loopback</p>
+    </div>
+  </div>
+  <div class="topmeta">
+    <span class="pill" id="appVersion">v—</span>
+    <span class="pill" id="statusLine">Checking…</span>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Sections" role="tablist">
+  <button class="tab active" data-view="console" role="tab" aria-selected="true">Console</button>
+  <button class="tab" data-view="archive" role="tab" aria-selected="false">Archive</button>
+  <button class="tab" data-view="sources" role="tab" aria-selected="false">Sources</button>
+  <button class="tab" data-view="watchlist" role="tab" aria-selected="false">Watchlist</button>
+  <button class="tab" data-view="reports" role="tab" aria-selected="false">Reports</button>
+  <button class="tab" data-view="eval" role="tab" aria-selected="false">Evaluation</button>
+  <button class="tab" data-view="settings" role="tab" aria-selected="false">Settings</button>
+</nav>
+
+<main>
+  <!-- CONSOLE -->
+  <section class="view" id="view-console" role="tabpanel">
+    <div class="card">
+      <h2>Research Console</h2>
+      <p class="muted">Query likhein. Agent pehle tool plan banata hai, har call validate karta hai, phir allowlisted sources se maloomat la kar Roman Urdu brief banata hai. LLM ko kabhi raw internet nahi milta.</p>
+      <div class="row">
+        <input id="query" type="search" placeholder="e.g. MediaTek preloader scatter DA version" autocomplete="off">
+        <button class="btn primary" id="runBtn" type="button">Run research</button>
+      </div>
+      <label class="check"><input type="checkbox" id="liveMode"> Live public sources (unchecked = offline deterministic)</label>
+      <p class="muted small" id="runState" aria-live="polite">Ready.</p>
+      <div id="planTools" class="chips"></div>
+      <div id="metricStrip" class="metrics"></div>
+    </div>
+    <div class="split">
+      <div class="card">
+        <h3>Results</h3>
+        <div id="resultList" class="list"><p class="muted">Abhi koi run nahi hua.</p></div>
+      </div>
+      <div class="card">
+        <h3>Brief <span class="muted small">Markdown</span></h3>
+        <div class="row tight">
+          <button class="btn ghost" id="downloadMd" type="button">Download .md</button>
+        </div>
+        <pre id="reportText" class="report">Report yahan aayegi.</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHIVE -->
+  <section class="view hidden" id="view-archive" role="tabpanel">
+    <div class="card">
+      <h2>Archive — SQLite FTS5</h2>
+      <p class="muted">Har run ki maloomat local archive mein jati hai. Full-text search, provenance aur confidence yahin se milti hai.</p>
+      <div class="row">
+        <input id="archiveQ" type="search" placeholder="Search archive…" autocomplete="off">
+        <button class="btn primary" id="archiveBtn" type="button">Search</button>
+      </div>
+      <div id="archiveList" class="list"></div>
+    </div>
+  </section>
+
+  <!-- SOURCES -->
+  <section class="view hidden" id="view-sources" role="tabpanel">
+    <div class="card">
+      <h2>Legal Source Register</h2>
+      <p class="muted">Sirf legal, public ya authorized sources. Dark web sirf links-only; koi onion fetch ya crawl nahi. Har entry ke sath URL aur date checked darj hai.</p>
+      <div class="table-wrap"><table id="sourceTable"><thead><tr><th>Source</th><th>Tier</th><th>Category</th><th>Trust</th><th>Auto</th><th>Health</th><th>Notes</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- WATCHLIST -->
+  <section class="view hidden" id="view-watchlist" role="tabpanel">
+    <div class="card">
+      <h2>Watchlist</h2>
+      <p class="muted">In keywords par naya item aaye to scheduler local alert aur (agar token set ho) Telegram alert bhejta hai.</p>
+      <div class="row">
+        <input id="watchTerm" type="text" placeholder="Keyword / model / CVE" autocomplete="off">
+        <input id="watchCat" type="text" placeholder="Category" value="Custom Watchlist">
+        <button class="btn primary" id="watchAdd" type="button">Add</button>
+      </div>
+      <div id="watchList" class="list"></div>
+    </div>
+  </section>
+
+  <!-- REPORTS -->
+  <section class="view hidden" id="view-reports" role="tabpanel">
+    <div class="split">
+      <div class="card">
+        <h2>Reports</h2>
+        <p class="muted">Har brief Markdown, CSV aur JSON mein local disk par save hota hai.</p>
+        <button class="btn ghost" id="reportRefresh" type="button">Refresh</button>
+        <div id="reportList" class="list"></div>
+      </div>
+      <div class="card">
+        <h3>Viewer</h3>
+        <pre id="reportView" class="report">Koi report select karein.</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- EVALUATION -->
+  <section class="view hidden" id="view-eval" role="tabpanel">
+    <div class="card">
+      <h2>Evaluation Harness — 25 queries</h2>
+      <p class="muted">Offline mode pipeline ki correctness naapta hai (fixture corpus). Live mode asli source availability. Dono ko aik hi natija samajhna galat hai.</p>
+      <div class="row">
+        <button class="btn primary" id="evalBtn" type="button">Run evaluation</button>
+        <label class="check"><input type="checkbox" id="evalLive"> Live internet</label>
+      </div>
+      <p class="muted small" id="evalState" aria-live="polite">Not run yet.</p>
+      <div id="evalMetrics" class="table-wrap"></div>
+      <h3>Safety Checks</h3>
+      <div id="evalSafety" class="list"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view hidden" id="view-settings" role="tabpanel">
+    <div class="card">
+      <h2>Settings</h2>
+      <p class="muted">Sab kuch local. Token aur API key kabhi UI par ya logs mein zahir nahi hote. Config <code>data/config.json</code> mein rehti hai — isay private rakhein.</p>
+      <div class="grid">
+        <label>Model source
+          <select id="setProvider">
+            <option value="off">Off — rule-based Roman Urdu (default)</option>
+            <option value="ollama">Ollama (local 127.0.0.1:11434)</option>
+            <option value="lmstudio">LM Studio (local 127.0.0.1:1234)</option>
+            <option value="custom">Custom OpenAI-compatible (https)</option>
+          </select>
+        </label>
+        <label>Model name<input id="setModel" type="text" placeholder="e.g. qwen2.5:7b"></label>
+        <label>Custom endpoint<input id="setEndpoint" type="text" placeholder="https://…/v1"></label>
+        <label>API key<input id="setKey" type="password" placeholder="sirf custom ke liye"></label>
+        <label>Telegram public channels (comma separated)<input id="setChannels" type="text" placeholder="channel1, channel2"></label>
+        <label>Bot token<input id="setToken" type="password" placeholder="optional"></label>
+        <label>Chat id<input id="setChat" type="text" placeholder="optional"></label>
+        <label>Tor mode
+          <select id="setTor"><option value="links_only">Links only (recommended)</option><option value="off">Off</option></select>
+        </label>
+        <label>Retention days<input id="setRetention" type="number" min="1" max="3650" value="90"></label>
+      </div>
+      <div class="row tight">
+        <button class="btn primary" id="setSave" type="button">Save settings</button>
+        <button class="btn ghost" id="llmTestBtn" type="button">Test model</button>
+        <button class="btn ghost" id="setBackup" type="button">Backup DB</button>
+        <button class="btn ghost" id="setDigest" type="button">Daily digest</button>
+        <button class="btn ghost" id="setAlert" type="button">Test alert</button>
+        <button class="btn ghost" id="tickBtn" type="button">Run scheduler tick</button>
+      </div>
+      <p class="muted small" id="setState" aria-live="polite">Ready.</p>
+      <p class="muted small" id="llmTestMsg" aria-live="polite"></p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>JIN Agent · local only · no cloud · no device write · Sahulat &amp; Safe Service Policy</span>
+  <span id="footerStatus"></span>
+</footer>
+<div id="toast" class="toast hidden" role="status"></div>
+<script src="/app.js"></script>
+</body>
+</html>
