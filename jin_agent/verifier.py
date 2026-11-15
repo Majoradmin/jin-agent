@@ -64,26 +64,76 @@ def verify(item: dict) -> dict:
     return out
 
 
+def _independent(item: dict) -> bool:
+    """Only a real, citation-bearing adapter result can corroborate an event.
+
+    Offline fixtures are ONE synthetic story replayed by every adapter, and
+    links-only onion records were never fetched. Counting either of those as
+    independent corroboration would manufacture trust out of duplicated text.
+    """
+    meta = item.get("meta") or {}
+    if not isinstance(meta, dict):
+        return False
+    if meta.get("offline") or item.get("link_only"):
+        return False
+    prov = item.get("provenance") or {}
+    return bool(prov.get("citation_ok", item.get("verified", False)))
+
+
 def cross_check(items: list[dict]) -> list[dict]:
-    """Same event from >=2 independent sources -> cross-verified boost."""
+    """Same event from >=2 independent ADAPTER sources -> cross-verified boost."""
     groups: dict[str, list[dict]] = defaultdict(list)
     for item in items:
         groups[item.get("fingerprint", "")].append(item)
     out = []
     for group in groups.values():
-        sources = {i.get("source_key", "") for i in group}
+        sources = {i.get("source_key", "") for i in group if _independent(i)}
         multi = len(sources) >= 2
         for item in group:
             rec = dict(item)
-            if multi:
+            if multi and _independent(rec):
                 rec["cross_verified"] = True
                 rec["confidence"] = round(min(0.98, float(rec.get("confidence", 0)) + 0.15), 2)
                 rec["reasons"] = list(rec.get("reasons") or []) + ["cross-verified"]
                 prov = dict(rec.get("provenance") or {})
                 prov["cross_verified_with"] = sorted(sources)
                 rec["provenance"] = prov
+            else:
+                rec["cross_verified"] = False
+                if len(group) > 1:
+                    prov = dict(rec.get("provenance") or {})
+                    prov["cross_check_note"] = (
+                        "Repeated record is not independent corroboration "
+                        "(offline fixture, link-only, or missing citation)."
+                    )
+                    rec["provenance"] = prov
             out.append(rec)
     return out
+
+
+def collapse(items: list[dict]) -> list[dict]:
+    """One row per story for reporting. The archive keeps every source record.
+
+    ``items`` must already be ranked: the highest-scored record survives and
+    the others are listed as ``also_sources`` instead of being printed again.
+    """
+    best: dict[str, dict] = {}
+    for item in items:
+        key = item.get("fingerprint") or item.get("guid") or item.get("title", "")
+        current = best.get(key)
+        if current is None:
+            rec = dict(item)
+            rec["also_sources"] = []
+            rec["duplicate_count"] = 1
+            best[key] = rec
+            continue
+        name = str(item.get("source") or "")
+        if name and name != current.get("source") and name not in current["also_sources"]:
+            current["also_sources"].append(name)
+        current["duplicate_count"] += 1
+        if item.get("cross_verified"):
+            current["cross_verified"] = True
+    return list(best.values())
 
 
 def citation_audit(items: list[dict]) -> dict:

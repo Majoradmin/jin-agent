@@ -1,4 +1,4 @@
-# JIN Agent 2.0.0
+# JIN Agent 2.1.0
 
 Local, stdlib-only research and intelligence agent. `MobileLab` se alag, khud ka
 package, khud ka SQLite archive aur khud ka loopback console. Koi cloud, koi pip
@@ -62,7 +62,7 @@ by-design fallback hai.
 - Sahulat & Safe Service Policy (`SAHULAT-SAFE-SERVICE-v1`) barqarar: koi Huawei ID / Google FRP / Samsung Knox / MDM / carrier / iCloud bypass automation ya step-by-step tareeqa nahi; koi device write / erase / flash / IMEI operation nahi.
 - Deep / dark web sirf legal, public ya authorized. Onion links **sirf display** ke liye; kabhi fetch ya crawl nahi.
 - Telegram sirf public `t.me/s/` preview aur official Bot API (opt-in token). Koi MTProto / userbot / private data / historical channel scrape nahi.
-- Har fact ke sath `URL + date checked`. Facts aur recommendations alag. Koi banawati citation nahi. Offline fixtures ko report mein wazeh taur par "NOT a real citation" likha jata hai.
+- Har fact ke sath `URL + date checked`. Facts aur recommendations alag. Koi banawati citation nahi. Offline fixtures ko report mein wazeh taur par "NOT a real citation" likha jata hai. **2.1.0:** offline fixtures ko kabhi `cross-verified` nahi kaha jata; duplicate source records aik story mein merge hote hain; zero-relevance records brief se nikaale jaate hain.
 - Token aur API key local `data/config.json` mein rehte hain, kabhi log ya API response mein nahi aate. Is file ko private rakhein (open question O-TOKEN).
 
 ## Layout
@@ -78,7 +78,7 @@ by-design fallback hai.
 | `scheduler.py`, `alerts.py` | Job queue, firehose, watchlist, Bot API alerts |
 | `orchestrator.py` | End-to-end pipeline |
 | `server.py`, `web/` | Loopback Agent Console |
-| `tests/` | 116 offline tests |
+| `tests/` | 120 offline tests |
 | `PHASES.md` | P13–P22 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.

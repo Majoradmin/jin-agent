@@ -8,14 +8,19 @@ WEIGHTS = {"relevance": 1.0, "trust": 3.0, "freshness": 2.0,
            "cross": 2.5, "feedback": 1.5}
 
 
+def matched_terms(item: dict, query_terms: list[str]) -> list[str]:
+    """Query terms actually present in the item. Used as a relevance floor."""
+    blob = (str(item.get("title") or "") + " " +
+            str(item.get("excerpt") or "")).lower()
+    return [t for t in query_terms if t in blob]
+
+
 def score(item: dict, query_terms: list[str], weights: dict | None = None,
           feedback=None) -> tuple[float, list[str]]:
     w = {**WEIGHTS, **(weights or {})}
     title = str(item.get("title") or "").lower()
-    excerpt = str(item.get("excerpt") or "").lower()
-    blob = title + " " + excerpt
     reasons: list[str] = []
-    matched = [t for t in query_terms if t in blob]
+    matched = matched_terms(item, query_terms)
     relevance = len(matched) * (2.0 if any(t in title for t in matched) else 1.0)
     if matched:
         reasons.append("keywords: " + ", ".join(matched[:6]))

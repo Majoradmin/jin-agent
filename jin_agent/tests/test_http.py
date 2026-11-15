@@ -69,7 +69,7 @@ class TestConsole(unittest.TestCase):
     def test_03_status(self):
         code, body, _ = get_json("/api/status")
         self.assertEqual(code, 200)
-        self.assertEqual(body["version"], "2.0.0")
+        self.assertEqual(body["version"], "2.1.0")
         self.assertTrue(body["fts5"])
 
     def test_04_settings_masked(self):

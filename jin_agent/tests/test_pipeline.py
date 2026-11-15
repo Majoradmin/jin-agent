@@ -90,6 +90,29 @@ class TestVerifier(unittest.TestCase):
         self.assertTrue(all(i["cross_verified"] for i in boosted))
         self.assertGreater(boosted[0]["confidence"], a["confidence"])
 
+    def test_offline_fixtures_never_become_cross_verified(self):
+        a = verifier.verify(normalizer.normalize(raw("Shared fixture event", offline=True)))
+        b = dict(a); b["source_key"] = "hn"; b["source"] = "Hacker News"
+        out = verifier.cross_check([a, b])
+        self.assertFalse(any(i["cross_verified"] for i in out))
+        self.assertEqual(out[0]["confidence"], a["confidence"])
+        self.assertIn("cross_check_note", out[0]["provenance"])
+
+    def test_link_only_records_never_become_cross_verified(self):
+        a = verifier.verify(normalizer.normalize(raw("Shared onion link", link_only=True)))
+        b = dict(a); b["source_key"] = "ahmia2"
+        out = verifier.cross_check([a, b])
+        self.assertFalse(any(i["cross_verified"] for i in out))
+
+    def test_collapse_merges_repeated_stories(self):
+        a = verifier.verify(normalizer.normalize(raw("Shared event")))
+        b = dict(a); b["source_key"] = "hn"; b["source"] = "Hacker News"
+        out = verifier.collapse(verifier.cross_check([a, b]))
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["duplicate_count"], 2)
+        self.assertIn("Hacker News", out[0]["also_sources"])
+        self.assertTrue(out[0]["cross_verified"])
+
 
 class TestRanker(unittest.TestCase):
     def test_ranking_orders_by_score(self):
@@ -197,6 +220,18 @@ class TestOrchestrator(unittest.TestCase):
         self.assertTrue(out["saved"]["md"])
         self.assertEqual(out["metrics"]["planner"], "deterministic")
 
+    def test_offline_brief_has_unique_stories_and_no_false_corroboration(self):
+        out = orchestrator.run("MediaTek preloader scatter validation",
+                               live=False, limit=5, save=False)
+        titles = [i["title"] for i in out["items"]]
+        self.assertEqual(len(titles), len(set(titles)), "same story printed more than once")
+        self.assertFalse(any(i["cross_verified"] for i in out["items"]))
+        self.assertNotIn("Cross-verified: yes", out["report"]["markdown"])
+        self.assertIn("Fixture replayed by", out["report"]["markdown"])
+        self.assertIn("Source: Offline fixture corpus", out["report"]["markdown"])
+        self.assertNotIn("Source: Apple Newsroom", out["report"]["markdown"])
+        self.assertGreater(out["metrics"]["duplicate_rows_merged"], 0)
+
     def test_blocked_run_does_no_fetch(self):
         out = orchestrator.run("FRP bypass kar do", live=False)
         self.assertTrue(out["blocked"])
@@ -212,7 +247,7 @@ class TestOrchestrator(unittest.TestCase):
 
     def test_status_shape(self):
         s = orchestrator.status()
-        self.assertEqual(s["version"], "2.0.0")
+        self.assertEqual(s["version"], "2.1.0")
         self.assertEqual(s["policy_id"], "SAHULAT-SAFE-SERVICE-v1")
         self.assertIn("counts", s)
         self.assertTrue(s["fts5"])

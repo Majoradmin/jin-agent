@@ -1,6 +1,6 @@
 # PHASES — JIN Agent P13–P22
 
-**Status:** ALL PHASES READY · **Date:** 2026-11-14 · **Version:** 2.0.0
+**Status:** ALL PHASES READY · **Date:** 2026-11-15 · **Version:** 2.1.0
 **Plan source:** `C:\Users\Rohaani\.local\share\opencode\opencode.db` → `session_message` text part `msg_1c0750351001e5quVqIgT43TAH` = `JIN Agent — Final Plan (plan only)`, 13 sections, phases P13–P22.
 
 ## 1. Approval & Scope
@@ -158,9 +158,32 @@ Ye assumptions `config.DEFAULT["assumptions"]` aur `GET /api/status` mein zinda 
 | Secrets | `config.public()` + `store.add_event()` redact; token/API key koi response mein nahi |
 | Loopback / CSP | `127.0.0.1` only, CSP har response |
 
-**RESULT:** `VERSION = "2.0.0"`, 10/10 `PHASE REVIEW READY`, koi phase skip nahi.
+**RESULT:** `VERSION = "2.1.0"`, 10/10 `PHASE REVIEW READY`, koi phase skip nahi. **2.1.0 honesty fix:** offline fixtures ko kabhi `cross-verified` nahi kaha jata; duplicate source records aik story mein merge hote hain (`verifier.collapse()`); zero-keyword-relevance records brief se nikaale jaate hain (ranker relevance floor); brief mein "Fixture replayed by: …" attribution instead of fake per-source headlines; 120/120 tests green; eval `passed: true` (precision@10 = 0.875, coverage 100%, 0 fabricated, 100% provenance).
 
 **PHASE REVIEW — PHASE 22: READY**
+
+---
+
+## 14A. Post-Release Honesty Fix (2.1.0, 2026-11-15)
+
+**Problem:** `verifier.cross_check()` same fingerprint + ≥2 source keys par `cross_verified = True` de raha tha — goya offline fixture (synthetic data) ko 2 "independent sources" ne tasdeeq kiya ho. Brief mein wohi ek headline 5 dafa alag source naam se aa rahi thi, aur har ek par `Cross-verified: yes` likha tha. Ye agent ke bharosemand-report maqsad ke bilkul khilaf tha.
+
+**Fix (5 files, +161 lines):**
+
+| File | Change |
+|---|---|
+| `verifier.py` | `cross_check()` ab sirf `meta.offline == False` aur `meta.kind != "onion-link"` records par boost deta hai. `collapse()` naya function: same fingerprint wale records ko merge karta hai, `also_sources` / `duplicate_count` add karta hai, confidence max() leta hai. |
+| `ranker.py` | Relevance floor: agar koi query keyword title/excerpt mein match na ho to score mein `relevance = 0` + penalty `-3.0`; zero-relevance items brief se nikalte hain par archive mein rehte hain. |
+| `orchestrator.py` | `verifier.collapse(pool)` call add; `unique_stories` / `duplicate_rows_merged` / `zero_relevance_dropped` metrics; digest function mein bhi collapse. |
+| `briefer.py` | "Fixture replayed by: …" instead of fake per-source attribution; `Cross-verified: no (offline fixture / link-only)` label; `Also reported by` merged sources line; duplicate-merge summary in Executive Summary. |
+| `tests/test_pipeline.py` | `test_cross_check_real_only` replaces old `test_cross_check_boosts`; new `test_offline_run_honesty` asserts no fake cross-verified, no duplicate headlines, `Also reported by` present, `duplicate_rows_merged > 0`. |
+
+**Verification:**
+- `python -m unittest discover -s jin_agent/tests -t . -q` → **Ran 120 tests — OK**
+- `python -m jin_agent eval` → `passed: true`, precision@10 = 0.875, coverage 100%, 0 fabricated, 100% provenance
+- `python -m jin_agent run "MediaTek preloader scatter validation"` → 2 unique stories (13 duplicates merged), 0 cross-verified (honest), 0 zero-relevance dropped, fixture attribution correct
+
+**RESULT:** Offline fixtures ko kabhi "cross-verified" nahi kaha jata. Duplicate stories merge hoti hain. Brief mein attribution honest hai. Ye regression nahi — pehli dafa sahi naap hai (pehle wohi headline 5 dafa "relevant" ginī ja rahi thi).
 
 ---
 
@@ -191,4 +214,4 @@ Ye assumptions `config.DEFAULT["assumptions"]` aur `GET /api/status` mein zinda 
 
 ## 16. Final Result
 
-**ALL 10 PHASES (P13–P22) READY.** `JIN Agent 2.0.0` ab L1.5 feed aggregator nahi: tool-mediated LLM layer, 16 adapters, FTS5 firehose archive, provenance + trust + cross-verification, scheduler + alerts, 25-query evaluation harness, professional Roman Urdu brief aur apna loopback console sab kaam kar rahe hain. Sahulat & Safe Service Policy, local-only constraint aur Python stdlib-only stack bilkul barqarar hain.
+**ALL 10 PHASES (P13–P22) READY.** `JIN Agent 2.1.0` ab L1.5 feed aggregator nahi: tool-mediated LLM layer, 16 adapters, FTS5 firehose archive, provenance + trust + cross-verification, scheduler + alerts, 25-query evaluation harness, professional Roman Urdu brief aur apna loopback console sab kaam kar rahe hain. Sahulat & Safe Service Policy, local-only constraint aur Python stdlib-only stack bilkul barqarar hain. **2.1.0 honesty fix:** offline fixtures ko cross-verified nahi kaha jata, duplicate stories merge hoti hain, attribution honest hai, 120/120 tests green.

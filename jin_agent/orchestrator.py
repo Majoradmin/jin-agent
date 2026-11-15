@@ -53,7 +53,15 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     ingest = store.upsert_items(normalized)             # firehose: store everything
 
     items = verifier.cross_check([verifier.verify(rec) for rec in normalized])
-    ranked = ranker.rank(items, query, limit)
+    # "sab kuch store, best kuch report": archive keeps every source record,
+    # but the brief prints one row per story instead of the same headline N times.
+    pool = ranker.rank(items, query, max(limit * 3, limit))
+    collapsed = verifier.collapse(pool)
+    merged_away = len(pool) - len(collapsed)
+    words = util.terms(query, 20)
+    on_topic = [r for r in collapsed if ranker.matched_terms(r, words)] if words else collapsed
+    off_topic_dropped = len(collapsed) - len(on_topic)
+    ranked = on_topic[:limit]
     if ranked:
         store.upsert_items(ranked)                       # persist scores / confidence
 
@@ -71,6 +79,8 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     duration_ms = round((time.monotonic() - started) * 1000)
     metrics = {
         "items": len(ranked), "raw_items": len(executed["items"]),
+        "unique_stories": len(ranked), "duplicate_rows_merged": merged_away,
+        "off_topic_dropped": off_topic_dropped,
         "dedupe_rate_pct": round(100.0 * (1 - len(normalized) / len(executed["items"])), 1)
         if executed["items"] else 0.0,
         "sources_ok": sources_ok, "sources_failed": sources_failed,
@@ -110,9 +120,13 @@ def digest(cfg: dict | None = None, limit_per_category: int = 3) -> dict:
         picked.extend(rows[:limit_per_category])
     # Archive rows do not store the derived provenance dict; rebuild it so the
     # citation audit measures real fields instead of an empty dict.
-    picked = verifier.cross_check([verifier.verify(r) for r in picked])
+    checked = verifier.cross_check([verifier.verify(r) for r in picked])
+    merged_away = len(checked)
+    picked = verifier.collapse(checked)
+    merged_away -= len(picked)
     audit = verifier.citation_audit(picked)
-    metrics = {"items": len(picked), "categories": len(buckets), "source": "archive"}
+    metrics = {"items": len(picked), "categories": len(buckets), "source": "archive",
+               "unique_stories": len(picked), "duplicate_rows_merged": merged_away}
     built = briefer.build("Daily digest (local archive)", picked, [], cfg, None,
                           audit, metrics, 0, "archive")
     return {"ok": True, "report": built,

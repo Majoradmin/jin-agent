@@ -44,10 +44,18 @@ RECOMMENDATIONS = {
 }
 
 
+def display_source(item: dict) -> str:
+    """A synthetic fixture is never presented as a real publisher attribution."""
+    meta = item.get("meta") or {}
+    if isinstance(meta, dict) and meta.get("offline"):
+        return "Offline fixture corpus"
+    return item.get("source", "source")
+
+
 def khulasa(item: dict) -> str:
     """Rule-based Roman Urdu one-liner. Never invents facts."""
     title = item.get("title", "")
-    source = item.get("source", "source")
+    source = display_source(item)
     date = item.get("published") or "date nahi mili"
     cat = item.get("category", "Custom Watchlist")
     return (f"{source} ki ye maloomat {date} par aayi hai. "
@@ -85,10 +93,12 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
             "",
         ]
     else:
-        top_sources = sorted({i.get("source", "") for i in items})[:6]
+        top_sources = sorted({display_source(i) for i in items})[:6]
+        merged = int((metrics or {}).get("duplicate_rows_merged", 0) or 0)
+        dropped = int((metrics or {}).get("off_topic_dropped", 0) or 0)
         lines += [
-            (f"Is run mein **{len(items)}** items mile, jin mein **{len(verified)}** "
-             f"citation ke sath aur **{len(unverified)}** abhi verify nahi hue. "
+            (f"Is run mein **{len(items)}** unique stories mile, jin mein **{len(verified)}** "
+             f"verified citation ke sath aur **{len(unverified)}** abhi verify nahi hue. "
              f"Kaam karne wale sources: {', '.join(top_sources) if top_sources else 'koi nahi'}. "
              f"Zyada tar maloomat {len(categories)} categories mein aayi."),
             "",
@@ -98,6 +108,14 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
              "ko haqiqat ke tor par na batayein."),
             "",
         ]
+        if merged or dropped:
+            lines += [
+                (f"**{merged}** duplicate source records ko aik hi story mein jorr kar dikhaya "
+                 f"gaya hai aur **{dropped}** zero-relevance records brief se nikaale gaye; "
+                 "archive mein har record apne source ke sath maujood hai. Offline fixtures "
+                 "ya link-only records ko kabhi 'cross-verified' nahi kaha jata."),
+                "",
+            ]
     lines += ["## Scope & Method", "",
               ("Agent ne pehle tool plan banaya, har tool call ko validate kiya, phir "
                "allowlisted public adapters se maloomat la kar plain text mein badli. "
@@ -123,10 +141,16 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
             rows = categories[category][:5]
             lines += [f"### {category}", ""]
             for item in rows:
-                prov = item.get("provenance") or {}
+                meta = item.get("meta") or {}
+                if item.get("cross_verified"):
+                    cross = "yes"
+                elif meta.get("offline") or item.get("link_only"):
+                    cross = "no (offline fixture / link-only: independent corroboration nahi)"
+                else:
+                    cross = "no"
                 lines += [
                     f"- **{item.get('title', '')}**",
-                    (f"  - Source: {item.get('source', '')} | Tier: {item.get('tier', '')} | "
+                    (f"  - Source: {display_source(item)} | Tier: {item.get('tier', '')} | "
                      f"Date checked: {item.get('date_checked', '')} | "
                      f"Published: {item.get('published') or 'n/a'} | "
                      f"Confidence: {item.get('confidence', 0)} | "
@@ -134,9 +158,17 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                     f"  - URL: {item.get('url', '')}",
                     f"  - Khulasa: {khulasa(item)}",
                     (f"  - Why it matters: {HINTS.get(category, HINTS['Custom Watchlist'])}"),
-                    ("  - Cross-verified: " + ("yes" if item.get("cross_verified") else "no")),
+                    (f"  - Cross-verified: {cross}"),
                     "",
                 ]
+                if item.get("also_sources"):
+                    label = ("Fixture replayed by" if meta.get("offline")
+                             else "Also reported by")
+                    lines.insert(
+                        len(lines) - 1,
+                        f"  - {label}: {', '.join(item['also_sources'])} "
+                        f"({item.get('duplicate_count', 1)} source records merged)",
+                    )
             if len(categories[category]) > 5:
                 lines += [f"_Is category mein mazid {len(categories[category]) - 5} items archive mein hain._", ""]
         lines += ["## Recommendations", ""]
@@ -191,12 +223,16 @@ def _csv(items: list[dict]) -> str:
     writer = csv.writer(buf)
     writer.writerow(["title", "url", "source", "source_key", "tier", "trust_label",
                      "category", "published", "date_checked", "confidence",
-                     "score", "verified", "cross_verified", "link_only"])
+                     "score", "verified", "cross_verified", "link_only",
+                     "also_sources", "duplicate_count"])
     for item in items:
-        writer.writerow([item.get(k, "") for k in
-                         ("title", "url", "source", "source_key", "tier", "trust_label",
-                          "category", "published", "date_checked", "confidence",
-                          "score", "verified", "cross_verified", "link_only")])
+        row = [item.get(k, "") for k in
+               ("title", "url", "source", "source_key", "tier", "trust_label",
+                "category", "published", "date_checked", "confidence",
+                "score", "verified", "cross_verified", "link_only")]
+        row += [" | ".join(item.get("also_sources") or []),
+                item.get("duplicate_count", 1)]
+        writer.writerow(row)
     return buf.getvalue()
 
 
