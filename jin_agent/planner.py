@@ -9,6 +9,7 @@ output is scrubbed for prompt-injection text and size-capped.
 
 from __future__ import annotations
 
+import json
 import re
 
 from . import adapters, config, llm, policy, snapshots, store, util, verifier
@@ -280,10 +281,50 @@ def dispatch(call: dict, ctx: dict) -> dict:
     return result
 
 
+def _multilang_queries(query: str, cfg: dict) -> list[str]:
+    """
+    LLM se query ko duniya ki zaroori languages mein translate karo.
+    Agar LLM off hai ya fail ho to sirf original query wapas aati hai.
+    Returns a deduplicated list (original first, translations after).
+    """
+    if not llm.resolve(cfg).get("enabled"):
+        return [query]
+    prompt = (
+        "Translate the following search query into these languages: "
+        "Arabic, Urdu, Farsi, Russian, Chinese (Simplified), French, Spanish, Turkish, Hindi. "
+        "Return ONLY a JSON array of strings (the translations), no explanation.\n"
+        f"Query: {query[:300]}"
+    )
+    try:
+        result = llm.chat(cfg, "You are a professional translator.", prompt, timeout=20)
+        raw = str(result.get("text") or "").strip()
+        m = re.search(r'\[.*?\]', raw, re.S)
+        if m:
+            translations = json.loads(m.group(0))
+            if isinstance(translations, list):
+                seen, out = {query.lower()}, [query]
+                for t in translations:
+                    t = str(t).strip()
+                    if t and t.lower() not in seen and len(t) < 500:
+                        seen.add(t.lower())
+                        out.append(t)
+                return out[:6]
+    except Exception:
+        pass
+    return [query]
+
+
 def _deterministic_calls(query: str, cfg: dict) -> list[dict]:
     low = str(query or "").lower()
+
+    # Multi-language: get translated queries and merge into search_public
+    lang_queries = _multilang_queries(query, cfg)
+    # Join all language variants as comma-separated for a broader search
+    combined_query = " OR ".join(f'"{q}"' if " " in q else q for q in lang_queries[:3])
+    search_query = combined_query[:600] if len(lang_queries) > 1 else str(query)[:600]
+
     calls = [
-        {"tool": "search_public", "args": {"query": str(query)[:600], "days": 7, "limit": 25}},
+        {"tool": "search_public", "args": {"query": search_query, "days": 7, "limit": 25}},
         {"tool": "search_archive", "args": {"query": str(query)[:300], "limit": 10}},
     ]
     if re.search(r"\b(paper|research|study|arxiv|doi|academic|patent)\b", low):
