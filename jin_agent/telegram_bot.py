@@ -154,7 +154,7 @@ def _api(token: str, cfg: dict | None = None):
 # --------------------------------------------------------------------------
 
 def research_markdown(query: str, cfg: dict | None = None, save: bool = True,
-                      live: bool = False) -> str:
+                      live: bool = True) -> str:
     """Agent run karo, Roman Urdu markdown brief return karo (error -> text)."""
     cfg = cfg or config.load()
     try:
@@ -228,6 +228,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
                 api.send(chat_id, "🛑 Report rok di gayi.")
                 break
             api.send(chat_id, c)
+        # Report mukammal — bot khud ruk jata hai
+        _stop_research = True
         return {"ok": True, "action": "research", "query": arg, "chunks": len(chunks)}
     api.send(chat_id, "Maaf kijiye, yeh command samajh nahi aaya. /help use kijiye.")
     return {"ok": False, "action": "unknown", "error": "unknown command"}
