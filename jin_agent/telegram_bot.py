@@ -193,7 +193,22 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         if not arg:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
             return {"ok": False, "action": "research", "error": "query required"}
-        md = (research or research_markdown)(arg, cfg)
+        # Typing indicator bhejo taake user janay bot kaam kar raha hai
+        try:
+            api.send(chat_id, "🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)")
+        except Exception:
+            pass
+        import threading
+        result_box = [None]
+        def _do_research():
+            result_box[0] = (research or research_markdown)(arg, cfg)
+        t = threading.Thread(target=_do_research, daemon=True)
+        t.start()
+        t.join(timeout=120)  # max 2 minute wait
+        if result_box[0] is None:
+            api.send(chat_id, "⏱️ Research timeout ho gaya. Dobara try karein ya chota sawal likhein.")
+            return {"ok": False, "action": "research", "error": "timeout"}
+        md = result_box[0]
         chunks = split_text(md)
         for c in chunks:
             api.send(chat_id, c)
@@ -232,7 +247,15 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
             if not is_owner(chat_id, cfg):
                 continue
             try:
-                dispatch(chat_id, text, cfg, api=api)
+                import threading
+                done = threading.Event()
+                def _dispatch():
+                    try:
+                        dispatch(chat_id, text, cfg, api=api)
+                    finally:
+                        done.set()
+                threading.Thread(target=_dispatch, daemon=True).start()
+                done.wait(timeout=150)  # max 2.5 min per message
             except Exception:
                 time.sleep(2)
         offset = last_id + 1
