@@ -219,6 +219,7 @@ class TestOrchestrator(unittest.TestCase):
         self.assertIn("## Facts by Category", out["report"]["markdown"])
         self.assertTrue(out["saved"]["md"])
         self.assertEqual(out["metrics"]["planner"], "deterministic")
+        self.assertIn("changes", out)
 
     def test_offline_brief_has_unique_stories_and_no_false_corroboration(self):
         out = orchestrator.run("MediaTek preloader scatter validation",
@@ -244,13 +245,28 @@ class TestOrchestrator(unittest.TestCase):
         out = orchestrator.digest()
         self.assertTrue(out["ok"])
         self.assertIn("Daily digest", out["report"]["title"])
+        self.assertIn("changes", out)
+
+    def test_run_many_parallel_runs(self):
+        out = orchestrator.run_many(["mediatek preloader scatter DA", "mtk brom config version"],
+                                    live=False, limit=4, save=False, max_concurrent=2)
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["count"], 2)
+        self.assertEqual(len(out["runs"]), 2)
+        for r in out["runs"]:
+            self.assertTrue(r["ok"])
+            self.assertTrue(r["items"])
+            self.assertIn("## Facts by Category", r["report"]["markdown"])
 
     def test_status_shape(self):
         s = orchestrator.status()
-        self.assertEqual(s["version"], "2.1.0")
+        self.assertEqual(s["version"], "2.6.0")
         self.assertEqual(s["policy_id"], "SAHULAT-SAFE-SERVICE-v1")
         self.assertIn("counts", s)
+        self.assertIn("changes", s)
         self.assertTrue(s["fts5"])
+        self.assertIn("metrics", s)
+        self.assertIn("counters", s["metrics"])
 
 
 if __name__ == "__main__":

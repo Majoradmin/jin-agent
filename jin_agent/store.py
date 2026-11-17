@@ -12,7 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from . import config, policy, util
+from . import canonical, config, policy, util
 
 FTS_ENABLED = True
 FTS_ERROR = ""
@@ -128,6 +128,24 @@ CREATE TABLE IF NOT EXISTS events (
   kind TEXT NOT NULL DEFAULT '',
   detail TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS page_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_key TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  canonical TEXT NOT NULL DEFAULT '',
+  ts TEXT NOT NULL DEFAULT '',
+  first_seen TEXT NOT NULL DEFAULT '',
+  content_hash TEXT NOT NULL DEFAULT '',
+  size INTEGER NOT NULL DEFAULT 0,
+  text TEXT NOT NULL DEFAULT '',
+  changed INTEGER NOT NULL DEFAULT 0,
+  added_lines INTEGER NOT NULL DEFAULT 0,
+  removed_lines INTEGER NOT NULL DEFAULT 0,
+  diff TEXT NOT NULL DEFAULT '[]',
+  UNIQUE(source_key, canonical)
+);
+CREATE INDEX IF NOT EXISTS idx_page_snapshots_ts ON page_snapshots(ts);
+CREATE INDEX IF NOT EXISTS idx_page_snapshots_source ON page_snapshots(source_key);
 """
 
 SCHEMA_FTS = """
@@ -228,17 +246,18 @@ def upsert_items(items: list[dict]) -> dict:
         for raw in items or []:
             stats["seen"] += 1
             item = dict(raw)
-            canonical = item.get("canonical") or util.canonical_url(item.get("url", ""))
-            item["canonical"] = canonical
+            canonical_url = (item.get("canonical")
+                             or canonical.canonicalize(item.get("url", "")))
+            item["canonical"] = canonical_url
             item["guid"] = item.get("guid") or (
                 item.get("source_key", "src") + ":" +
-                util.fingerprint(item.get("title", ""), canonical))
+                util.fingerprint(item.get("title", ""), canonical_url))
             item["date_checked"] = item.get("date_checked") or util.now_iso()
             item["fetched_at"] = item.get("fetched_at") or util.now_iso()
             item["fingerprint"] = item.get("fingerprint") or util.fingerprint(
-                item.get("title", ""), canonical)
-            item["content_hash"] = item.get("content_hash") or util.sha256(
-                (item.get("title", "") + item.get("excerpt", "") + item.get("body", ""))[:4000])
+                item.get("title", ""), canonical_url)
+            item["content_hash"] = item.get("content_hash") or canonical.content_hash(
+                item.get("title", ""), item.get("excerpt", ""), item.get("body", ""))
             for key in ("entities", "reasons", "meta"):
                 if not isinstance(item.get(key), str):
                     item[key] = _json(item.get(key, [] if key != "meta" else {}))
@@ -326,7 +345,8 @@ def get_item(guid: str):
 
 
 def counts() -> dict:
-    tables = ("items", "runs", "sources", "watchlist", "jobs", "reports", "feedback", "events", "entities")
+    tables = ("items", "runs", "sources", "watchlist", "jobs", "reports", "feedback", "events", "entities",
+              "page_snapshots")
     out = {}
     with session() as con:
         for table in tables:

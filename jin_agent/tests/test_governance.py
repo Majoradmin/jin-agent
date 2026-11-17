@@ -24,23 +24,25 @@ def setUpModule():
 
 class TestRelease(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(VERSION, "2.1.0")
+        self.assertEqual(VERSION, "2.6.0")
 
     def test_required_files_exist(self):
         for rel in ("README.md", "PHASES.md", "run.bat", "__init__.py", "__main__.py",
-                    "config.py", "util.py", "policy.py", "store.py", "adapters.py",
+                    "channels.py", "telegram_bot.py", "watchdog.py", "config.py", "util.py", "policy.py", "store.py", "adapters.py",
                     "normalizer.py", "verifier.py", "ranker.py", "planner.py", "llm.py",
                     "briefer.py", "evaluator.py", "scheduler.py", "alerts.py",
+                    "logging_setup.py", "metrics.py", "ci_gate.py",
+                    "canonical.py", "snapshots.py", "ratelimit.py",
                     "orchestrator.py", "server.py", "web/index.html", "web/app.js",
                     "web/style.css", "web/favicon.svg"):
             self.assertTrue((PKG / rel).is_file(), rel)
 
-    def test_ten_phase_reviews_all_ready(self):
+    def test_phase_reviews_all_ready(self):
         text = (PKG / "PHASES.md").read_text(encoding="utf-8")
         reviews = re.findall(r"\*\*PHASE REVIEW — PHASE (\d+): (READY|NOT READY)\*\*", text)
-        self.assertEqual(len(reviews), 10)
+        self.assertEqual(len(reviews), 15)
         self.assertEqual([n for n, _ in reviews],
-                         [str(n) for n in range(13, 23)])
+                         [str(n) for n in range(13, 28)])
         self.assertTrue(all(status == "READY" for _, status in reviews))
         self.assertIn("N/A Register", text)
 
@@ -106,8 +108,8 @@ class TestBoundaries(unittest.TestCase):
         self.assertNotIn('"0.0.0.0"', src)
 
     def test_adapter_and_register_counts(self):
-        self.assertEqual(len(adapters.ADAPTERS), 16)
-        self.assertEqual(len(policy.register()), 22)
+        self.assertEqual(len(adapters.ADAPTERS), 26)
+        self.assertEqual(len(policy.register()), 32)
 
     def test_onion_fetch_prohibited_in_code(self):
         self.assertFalse(policy.check_url("http://abcdefghijklmnop.onion/x")[0])

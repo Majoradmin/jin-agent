@@ -69,8 +69,9 @@ class TestConsole(unittest.TestCase):
     def test_03_status(self):
         code, body, _ = get_json("/api/status")
         self.assertEqual(code, 200)
-        self.assertEqual(body["version"], "2.1.0")
+        self.assertEqual(body["version"], "2.6.0")
         self.assertTrue(body["fts5"])
+        self.assertIn("changes", body)
 
     def test_04_settings_masked(self):
         code, body, _ = get_json("/api/settings")
@@ -153,6 +154,30 @@ class TestConsole(unittest.TestCase):
         src = (BASE / "jin_agent" / "server.py").read_text(encoding="utf-8")
         self.assertIn('("127.0.0.1", int(port))', src)
         self.assertNotIn('("0.0.0.0"', src)
+
+    def test_20_health(self):
+        code, body, headers = get_json("/api/health")
+        self.assertEqual(code, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["version"], "2.6.0")
+        self.assertTrue(body["db"]["ok"])
+        self.assertTrue(body["data_writable"])
+        self.assertIsInstance(body["llm_enabled"], bool)
+        self.assertGreaterEqual(body["uptime_seconds"], 0)
+        self.assertNotIn("sk-", json.dumps(body))
+        self.assertIn("Content-Security-Policy", headers)
+
+    def test_21_metrics(self):
+        code, body, _ = get_json("/api/metrics")
+        self.assertEqual(code, 200)
+        snap = body["metrics"]
+        for key in ("counters", "gauges", "latency"):
+            self.assertIn(key, snap)
+        self.assertIn("queries_total", snap["counters"])
+        self.assertGreaterEqual(snap["counters"]["queries_total"], 1)
+        self.assertIn("run", snap["latency"])
+        self.assertNotIn("sk-", json.dumps(body))
+        self.assertNotIn("telegram_bot_token", json.dumps(body))
 
 
 if __name__ == "__main__":

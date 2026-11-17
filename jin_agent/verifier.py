@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from . import policy, util
+from . import canonical, policy, util
 
 
 def verify(item: dict) -> dict:
@@ -116,11 +116,15 @@ def collapse(items: list[dict]) -> list[dict]:
 
     ``items`` must already be ranked: the highest-scored record survives and
     the others are listed as ``also_sources`` instead of being printed again.
+    P27 adds canonical-URL and near-duplicate-title clustering on top of the
+    exact fingerprint match (same story, slightly different headline).
     """
     best: dict[str, dict] = {}
     for item in items:
-        key = item.get("fingerprint") or item.get("guid") or item.get("title", "")
-        current = best.get(key)
+        key = (item.get("fingerprint") or item.get("guid") or
+               canonical.dedupe_key(item) or item.get("title", ""))
+        target = key if key in best else _cluster_match(item, best)
+        current = best.get(target) if target else None
         if current is None:
             rec = dict(item)
             rec["also_sources"] = []
@@ -134,6 +138,20 @@ def collapse(items: list[dict]) -> list[dict]:
         if item.get("cross_verified"):
             current["cross_verified"] = True
     return list(best.values())
+
+
+def _cluster_match(item: dict, best: dict[str, dict]):
+    """Find an existing cluster with the same canonical URL or a near-dup title."""
+    item_url = canonical.canonicalize(item.get("canonical") or item.get("url") or "")
+    item_title = str(item.get("title") or "")
+    for key, rec in best.items():
+        if item_url:
+            rec_url = canonical.canonicalize(rec.get("canonical") or rec.get("url") or "")
+            if rec_url and rec_url == item_url:
+                return key
+        if canonical.near_duplicate_titles(item_title, str(rec.get("title") or "")):
+            return key
+    return None
 
 
 def citation_audit(items: list[dict]) -> dict:

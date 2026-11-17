@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 import time
 
-from . import adapters, alerts, config, normalizer, orchestrator, store, util
+from . import adapters, alerts, channels, config, normalizer, orchestrator, store, util
 
 JOB_MINUTES = {
     "feeds": "feeds_minutes",
@@ -19,6 +19,7 @@ JOB_MINUTES = {
     "digest": "digest_minutes",
     "watchlist": "watchlist_minutes",
     "retention": "retention_minutes",
+    "discovery": "discovery_minutes",
 }
 
 
@@ -71,6 +72,8 @@ def run_job(kind: str, payload: dict | None = None, cfg: dict | None = None,
             alerts.notify("Watchlist alert:\n" + "\n".join(
                 f"- {h['term']}: {h['count']} hits | {h['title'][:100]}" for h in hits), cfg)
         return {"hits": hits}
+    if kind == "discovery":
+        return channels.run_discovery(cfg, offline)
     if kind == "retention":
         kept = store.retention(int(cfg.get("retention_days") or 90))
         try:

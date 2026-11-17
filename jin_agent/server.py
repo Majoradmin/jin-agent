@@ -2,6 +2,9 @@
 
 No CORS, no external assets, no authentication surface: the server binds to
 127.0.0.1 only. Secrets are never returned by any endpoint.
+
+P26: ``GET /api/health`` (DB + data dir + uptime + ``llm_enabled`` flag) aur
+``GET /api/metrics`` (in-memory counters / gauges / latency p50-p95) add hue.
 """
 
 from __future__ import annotations
@@ -9,15 +12,17 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import (alerts, config, evaluator, llm, orchestrator, policy,
-               scheduler, store, util)
+from . import (VERSION, alerts, config, evaluator, llm, metrics, orchestrator,
+               policy, scheduler, snapshots, store, util)
 
 WEB = Path(__file__).resolve().parent / "web"
 MAX_BODY = 1024 * 1024
+STARTED = time.monotonic()
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
        "img-src 'self' data:; connect-src 'self'; form-action 'self'; "
        "base-uri 'self'; frame-ancestors 'none'")
@@ -25,8 +30,47 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
 _SCHEDULER: scheduler.Scheduler | None = None
 
 
+def data_writable() -> tuple[bool, str]:
+    """Data dir writable hai? Probe file likh kar foran delete."""
+    try:
+        probe = config.ensure_dirs() / ".health-probe"
+        probe.write_text(util.now_iso(), encoding="utf-8")
+        probe.unlink()
+        return True, ""
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {util.truncate(str(exc), 120)}"
+
+
+def health() -> dict:
+    """Health payload - version, uptime, DB, data dir, LLM flag. Koi secret nahi."""
+    db_ok, db_error, items = False, "", 0
+    try:
+        store.init_db()
+        with store.session() as con:
+            con.execute("SELECT 1").fetchone()
+            items = con.execute("SELECT COUNT(*) FROM items").fetchone()[0]
+        db_ok = True
+    except Exception as exc:
+        db_error = f"{type(exc).__name__}: {util.truncate(str(exc), 120)}"
+    writable, write_error = data_writable()
+    try:
+        llm_enabled = bool(llm.resolve(config.load())["enabled"])
+    except Exception:
+        llm_enabled = False
+    out = {"ok": bool(db_ok and writable), "version": VERSION,
+           "uptime_seconds": round(time.monotonic() - STARTED, 1),
+           "db": {"ok": db_ok, "items": items},
+           "data_writable": bool(writable),
+           "llm_enabled": llm_enabled, "fts5": bool(store.FTS_ENABLED)}
+    if db_error:
+        out["db"]["error"] = db_error
+    if write_error:
+        out["data_error"] = write_error
+    return out
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "JINAgent/2.0"
+    server_version = "JINAgent/2.6.0"
 
     def log_message(self, fmt, *args):
         if os.environ.get("JIN_AGENT_VERBOSE"):
@@ -95,6 +139,15 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/status":
                 store.init_db()
                 return self._json(orchestrator.status())
+            if path == "/api/health":
+                payload = health()
+                return self._json(payload, 200 if payload["ok"] else 503)
+            if path == "/api/metrics":
+                return self._json({"ok": True, "metrics": metrics.snapshot()})
+            if path == "/api/changes":
+                return self._json({"ok": True, "changes": snapshots.recent_changes(
+                    util.clamp(q.get("limit", [20])[0], 1, 200, 20)),
+                    "counts": snapshots.counts()})
             if path == "/api/sources":
                 store.init_db()
                 return self._json({"ok": True, "sources": store.list_sources(),
@@ -128,6 +181,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/runs":
                 store.init_db()
                 return self._json({"ok": True, "items": store.list_runs()})
+            if path == "/api/channels":
+                from . import channels as ch
+                qs = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                return self._json({"ok": True,
+                                   "items": ch.list_channels(qs.get("status", [None])[0]),
+                                   "counts": ch.counts()})
             if path == "/api/settings":
                 return self._json({"ok": True, "settings": config.public()})
             if path == "/api/scheduler":
@@ -184,7 +243,12 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/settings":
                 allowed = {"topics", "telegram_channels", "telegram_bot_token",
                            "telegram_chat_id", "tor_mode", "llm", "schedule",
-                           "retention_days", "default_days", "default_limit"}
+                           "retention_days", "default_days", "default_limit",
+                           "source_enabled", "brave_key", "bing_key", "github_token",
+                           "host_min_interval", "host_backoff_base", "host_backoff_max",
+                           "sitemap_max_depth", "sitemap_max_urls", "sitemap_seed",
+                           "reddit_subreddits", "near_dup_threshold",
+                           "snapshot_max_chars", "change_max_lines"}
                 patch = {k: v for k, v in data.items() if k in allowed}
                 if patch.get("tor_mode") and patch["tor_mode"] not in policy.TOR_MODES:
                     return self._err("tor_mode sirf links_only / off ho sakta hai")
@@ -224,6 +288,27 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/backup":
                 store.init_db()
                 return self._json({"ok": True, "result": store.backup()})
+            if path == "/api/channels":
+                from . import channels as ch
+                action = str(data.get("action") or "list").lower()
+                if action == "add":
+                    row = ch.add_channel(str(data.get("channel") or ""), "manual")
+                    return self._json({"ok": True, "item": row})
+                if action == "remove":
+                    return self._json({"ok": True, "result": ch.remove_channel(
+                        str(data.get("channel") or ""))})
+                if action == "check":
+                    res = ch.check_channel(str(data.get("channel") or ""),
+                                           config.load())
+                    return self._json({"ok": True, "result": res})
+                if action == "discover":
+                    res = ch.run_discovery(config.load(),
+                                           offline=bool(data.get("offline", True)),
+                                           max_add=util.clamp(
+                                               data.get("max_add"), 1, 40, 8))
+                    return self._json({"ok": True, "result": res})
+                return self._json({"ok": True, "items": ch.list_channels(),
+                                   "counts": ch.counts()})
             if path == "/api/classify":
                 return self._json({"ok": True, "gate": policy.classify(data.get("text", ""))})
             return self._err("Not found", 404)

@@ -1,4 +1,4 @@
-# JIN Agent 2.1.0
+# JIN Agent 2.6.0
 
 Local, stdlib-only research and intelligence agent. `MobileLab` se alag, khud ka
 package, khud ka SQLite archive aur khud ka loopback console. Koi cloud, koi pip
@@ -18,6 +18,9 @@ python -m jin_agent run "MediaTek preloader scatter DA" --live
 python -m jin_agent eval
 python -m jin_agent serve --open
 python -m jin_agent selftest
+python -m jin_agent ci-gate
+python -m jin_agent channels --discover
+python -m jin_agent channels --check *
 ```
 
 Console default `http://127.0.0.1:8766` par khulta hai (light theme). MobileLab
@@ -33,11 +36,29 @@ ka server `8765` par alag rehta hai; dono aik saath chal sakte hain.
 | `sources` | Legal source register (URL + date checked) |
 | `digest` | Archive se daily brief |
 | `eval [--live]` | 25-query harness + report |
+| `batch <q...> [--live] [--limit]` | Parallel agents: N simultaneous research runs |
 | `schedule [--live]` | Background job scheduler (Ctrl+C se band) |
 | `serve [--port] [--open]` | Agent Console |
 | `selftest` | Offline `unittest` suite |
+| `ci-gate [--queries N] [--skip-tests]` | Offline release gate: compile/import + poora suite + evaluator quick check; exit 0 sirf all-pass |
+| `changes [--limit N]` | Snapshot change-detection: recent "naya kya aaya" + counts |
 | `classify <text>` | Safe-service gate ka natija |
 | `llm` | Local model probe |
+| `channels` | Telegram channel registry: list / `--add <handle>` / `--remove <handle>` (archive, delete nahi) / `--check *` (liveness) / `--discover` (ek cycle) |
+
+### Channel Auto-Discovery (P23)
+
+Agent khud informative Telegram channels dhoondta hai — user ke channel naam
+nai zaroori. Sources: public search engine (`site:t.me/s <topic>`) + preview
+harvest (`t.me/<handle>` mentions) + archive harvest. Har candidate ko liveness
+probe se tasdeeq hota hai; informative wale (`score >= channel_min_score`,
+default 4) khud `auto` add hote hain, dead channels `status='dead'` archive
+hote hain (delete nahi). Daily discovery job scheduler me hai
+(`channel_discovery_minutes`, default 720). `--offline` me sirf harvest hota hai.
+Koi private group / userbot / MTProto / login scrape — koi wohi (P13 policy).
+
+`mobile & firmware | gsm repair | osint | ai tools | tech news` jaise topics
+se `site:t.me/s` discovery rotate hoti hai; koi bhi language channel add allowed.
 
 `--live` na lagane par sab kuch offline deterministic fixture corpus par chalta
 hai — tests aur demos mein kabhi live internet zaroori nahi.
@@ -57,6 +78,17 @@ tool output se prompt-injection hata kar plain text deta hai. Model OFF ho to
 deterministic rule-based plan aur Roman Urdu khulasa chalata hai — ye bug nahi,
 by-design fallback hai.
 
+## Observability (P26)
+
+- **Logs:** `data/logs/agent.log` — aik line = aik JSON object; `RotatingFileHandler`
+  (2 MB × 3 backups, stdlib). Telegram bot token aur LLM key `logging_setup.redact()`
+  se `***` ho jate hain, disk par kabhi nahi jate. Level: `JIN_AGENT_LOG_LEVEL`.
+- **Metrics:** in-memory counters (`queries_total`, `runs_ok`, `runs_blocked`,
+  `fetch_errors`, `reports_total`) + gauges + latency p50/p95. `GET /api/metrics`
+  se JSON snapshot; summary `data/metrics.json` mein best-effort likhi jati hai.
+- **Health:** `GET /api/health` — DB connectivity, data dir writable, version,
+  uptime seconds aur `llm_enabled` (key kabhi return nahi hoti).
+
 ## Boundaries
 
 - Sahulat & Safe Service Policy (`SAHULAT-SAFE-SERVICE-v1`) barqarar: koi Huawei ID / Google FRP / Samsung Knox / MDM / carrier / iCloud bypass automation ya step-by-step tareeqa nahi; koi device write / erase / flash / IMEI operation nahi.
@@ -71,14 +103,29 @@ by-design fallback hai.
 |---|---|
 | `config.py`, `util.py`, `policy.py` | Config, helpers, legal source register, SSRF guard |
 | `store.py` | SQLite WAL + FTS5, dedupe, jobs, watchlist, retention, backup |
-| `adapters.py` | 16 adapters, one fetch contract, parallel diagnostics |
+| `adapters.py` | 19 adapters + RSS feeds, one fetch contract, parallel diagnostics |
 | `normalizer.py`, `verifier.py`, `ranker.py` | Canonical record, provenance, smart ranking |
 | `planner.py`, `llm.py` | Tool layer + optional local LLM |
 | `briefer.py`, `evaluator.py` | Roman Urdu report, 25-query harness |
 | `scheduler.py`, `alerts.py` | Job queue, firehose, watchlist, Bot API alerts |
 | `orchestrator.py` | End-to-end pipeline |
+| `logging_setup.py`, `metrics.py`, `ci_gate.py` | JSON-lines logs (redacted), in-memory metrics, offline CI gate |
 | `server.py`, `web/` | Loopback Agent Console |
-| `tests/` | 120 offline tests |
-| `PHASES.md` | P13–P22 `PHASE REVIEW` record |
+| `canonical.py`, `snapshots.py`, `ratelimit.py` | URL canonical dedup, page change detection, per-host rate limits |
+| `tests/` | 225 offline tests |
+| `PHASES.md` | P13–P27 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.
+
+## Boundaries (2.2.0)
+
+- **Telegram channel auto-discovery:** public `t.me/s/` preview se only
+  (`t.me` / `telegram.me` allowlist, timeout, 2 MB cap, SSRF guard). Koi
+  private group / userbot / MTProto / login scrape. Dead channel archive
+  (`status='dead'`), hard delete nahi. Any language allowed; discovery scoring
+  content + health based (score 0-10, `channel_min_score` 4, cap
+  `channel_discovery_max_auto` 60 channels per cycle budget).
+- **Deep / dark web:** links-only (`Ahmia`), kabhi fetch/crawl nahi.
+- **LLM:** OFF until local model install; `custom` OpenAI-compatible endpoint
+  (e.g. Groq free tier) supported via settings — cloud LLM layer ready for the
+  anywhere-access Telegram bot plan.

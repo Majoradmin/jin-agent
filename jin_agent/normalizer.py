@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from . import config, util
+from . import canonical, config, util
 
 TOPIC_RULES = [
     ("Security", ["security", "bulletin", "cve-", "vulnerability", "patch", "exploit",
@@ -67,15 +67,15 @@ def normalize(raw: dict, date_checked: str = "", cfg: dict | None = None) -> dic
     body = util.clean_text(raw.get("body") or excerpt, 8000)
     source = str(raw.get("source") or "Unknown")[:120]
     source_key = str(raw.get("source_key") or "unknown")[:60]
-    canonical = util.canonical_url(url)
-    fp = util.fingerprint(title, canonical or url)
+    canonical_url = canonical.canonicalize(url)
+    fp = util.fingerprint(title, canonical_url or url)
     blob = title + " " + excerpt
     category = infer_category(blob, str(raw.get("category") or "Custom Watchlist"))
     link_only = bool(raw.get("link_only"))
     offline = bool(raw.get("offline"))
     return {
         "guid": source_key + ":" + fp,
-        "url": url, "canonical": canonical or url, "title": title,
+        "url": url, "canonical": canonical_url or url, "title": title,
         "source": source, "source_key": source_key,
         "tier": str(raw.get("tier") or "T0")[:4],
         "trust": util.clamp(raw.get("trust"), 0.0, 1.0, 0.5),
@@ -86,7 +86,7 @@ def normalize(raw: dict, date_checked: str = "", cfg: dict | None = None) -> dic
         "fetched_at": util.now_iso(),
         "excerpt": excerpt, "body": body,
         "fingerprint": fp,
-        "content_hash": util.sha256((title + excerpt + body)[:4000]),
+        "content_hash": canonical.content_hash(title, excerpt, body),
         "entities": extract_entities(blob),
         "score": 0.0, "reasons": [], "confidence": 0.0,
         "verified": False, "cross_verified": False,

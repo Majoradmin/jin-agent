@@ -7,9 +7,9 @@ The agent is intentionally standalone: it does not import or modify MobileLab.
 All data stays under ``J:\\Ai Agent\\jin_agent\\data``.
 """
 
-VERSION = "2.1.0"
+VERSION = "2.6.0"
 POLICY_ID = "SAHULAT-SAFE-SERVICE-v1"
-DATE_CHECKED = "2026-11-15"
+DATE_CHECKED = "2026-11-16"
 PLAN_ID = "JIN-AGENT-FINAL-PLAN-P13-P22"
 
 __all__ = ["VERSION", "POLICY_ID", "DATE_CHECKED", "PLAN_ID"]

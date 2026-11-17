@@ -994,6 +994,7 @@ function bind() {
   $('#pkgSampleBtn').onclick = () => { $('#pkgPath').value = samplePath(); };
   $('#pkgScanBtn').onclick = () => runScan($('#pkgPath'), $('#pkgScanOut'), {
     name: $('#pkgName').value.trim(), tags: $('#pkgTags').value.trim(),
+    allow_outside: $('#pkgAllowOutside').checked,
   });
   $('#pkgReload').onclick = loadPackages;
 

@@ -7,15 +7,25 @@ crashes a run and never produces a fabricated news item.
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import (VERSION, adapters, briefer, config, llm, normalizer, planner,
-               policy, ranker, store, util, verifier)
+from . import (VERSION, adapters, briefer, config, llm, logging_setup,
+               normalizer, planner, policy, ranker, snapshots, store, util,
+               verifier)
+# Local ``metrics`` dict (run naap) module ko shadow karta hai - is liye alias.
+from . import metrics as metrics_lib
+
+
+def _log():
+    """Logger current data dir par bind karo (tests data dir badalte hain)."""
+    return logging_setup.get_logger("orchestrator")
 
 
 def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         keys: list[str] | None = None, cfg: dict | None = None,
         save: bool = True) -> dict:
     """Execute one research run. Default is OFFLINE (deterministic, no network)."""
+    log = _log()
     cfg = cfg or config.load()
     query = str(query or "").strip()[: util.clamp(cfg.get("max_query_chars"), 100, 8000, 4000)]
     started = time.monotonic()
@@ -26,16 +36,28 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     if gate["verdict"] == "blocked":
         audit = verifier.citation_audit([])
         metrics = {"blocked": True, "sources_ok": 0, "sources_failed": 0,
-                   "items": 0, "duration_ms": round((time.monotonic() - started) * 1000)}
+                   "items": 0, "changes_sources": 0,
+                   "duration_ms": round((time.monotonic() - started) * 1000)}
+        empty_changes = {"since": None, "generated_at": util.now_iso(),
+                         "sources": [], "total": 0,
+                         "added_lines": 0, "removed_lines": 0}
         built = briefer.build(query, [], [], cfg, None, audit, metrics,
                               metrics["duration_ms"], "offline", blocked=gate)
         saved = briefer.save(built, query, metrics) if save else {}
         store.finish_run(run_id, metrics, 0, 0, 0)
         store.add_event("blocked", "Request blocked by " + policy.POLICY_ID)
+        metrics_lib.inc("queries_total")
+        metrics_lib.inc("runs_blocked")
+        metrics_lib.observe("run", metrics["duration_ms"])
+        if saved:
+            metrics_lib.inc("reports_total")
+        log.info("run blocked", extra={"fields": {"query": util.truncate(query, 80),
+                                                 "policy": policy.POLICY_ID}})
+        metrics_lib.persist()      # summary ko final state par likho
         return {"ok": True, "blocked": True, "gate": gate, "items": [],
                 "diagnostics": [], "plan": {"calls": [], "source": "none"},
                 "audit": audit, "metrics": metrics, "report": built,
-                "saved": saved, "run_id": run_id}
+                "saved": saved, "run_id": run_id, "changes": empty_changes}
 
     plan_result = planner.plan(query, cfg)
     ctx = {"cfg": cfg, "offline": not live, "query": query}
@@ -70,6 +92,11 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         store.touch_source(diag.get("key", ""),
                            bool(diag.get("ok") and diag.get("count", 0)),
                            diag.get("error", ""))
+    changes = snapshots.changes_since_last_run(limit=20)
+    try:
+        snapshots.mark_seen()
+    except Exception:
+        pass
 
     audit = verifier.citation_audit(ranked)
     ages = [a for a in (util.days_since(i.get("published", "")) for i in ranked) if a is not None]
@@ -91,6 +118,9 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         "cross_verified": sum(1 for i in ranked if i.get("cross_verified")),
         "tools_used": len(plan_result["calls"]), "tools_rejected": len(plan_result["rejected"]),
         "planner": plan_result["source"], "llm_mode": llm.resolve(cfg)["mode"],
+        "changes_sources": changes["total"],
+        "change_lines_added": changes["added_lines"],
+        "change_lines_removed": changes["removed_lines"],
         "duration_ms": duration_ms, "live": bool(live), "ingest": ingest,
     }
     built = briefer.build(query, ranked, diagnostics, cfg, plan_result, audit,
@@ -99,12 +129,52 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     store.finish_run(run_id, metrics, len(ranked), sources_ok, sources_failed)
     store.add_event("research", f"query={util.truncate(query, 80)} items={len(ranked)} "
                                 f"sources_ok={sources_ok}")
+    metrics_lib.inc("queries_total")
+    metrics_lib.inc("runs_ok")
+    metrics_lib.inc("fetch_errors", sources_failed)
+    metrics_lib.observe("run", duration_ms)
+    metrics_lib.set_gauge("items_last_run", len(ranked))
+    if saved:
+        metrics_lib.inc("reports_total")
+    log.info("run done", extra={"fields": {
+        "mode": "live" if live else "offline", "items": len(ranked),
+        "sources_ok": sources_ok, "sources_failed": sources_failed,
+        "duration_ms": duration_ms, "query": util.truncate(query, 80)}})
+    metrics_lib.persist()          # throttled auto-persist ke baad final summary
     return {
         "ok": True, "blocked": False, "gate": gate, "query": query,
         "items": ranked, "diagnostics": diagnostics, "plan": plan_result,
         "tool_text": executed["tool_text"], "audit": audit, "metrics": metrics,
-        "report": built, "saved": saved, "run_id": run_id,
+        "report": built, "saved": saved, "run_id": run_id, "changes": changes,
     }
+
+
+def run_many(queries: list[str], live: bool = False, days: int = 7, limit: int = 25,
+             keys: list[str] | None = None, cfg: dict | None = None,
+             save: bool = True, max_concurrent: int = 3) -> dict:
+    """Parallel "agents": same pipeline per query, bounded concurrency.
+
+    User-facing "many agents" entry: N independent research runs chaltay hain
+    ek saath (ThreadPoolExecutor), har ek apni brief generate karta hai.
+    """
+    clean = [str(q).strip() for q in (queries or []) if str(q).strip()]
+    if not clean:
+        return {"ok": False, "error": "Koi query nahi hai", "runs": []}
+    if len(clean) > 20:
+        return {"ok": False, "error": "Zid 20 query tak allow", "runs": []}
+    runs: list[dict] = []
+    with ThreadPoolExecutor(max_workers=max(1, int(max_concurrent))) as ex:
+        futures = {ex.submit(run, q, live=live, days=days, limit=limit, keys=keys,
+                              cfg=cfg, save=save): q for q in clean}
+        for fut in as_completed(futures):
+            q = futures[fut]
+            try:
+                r = fut.result()
+                runs.append({"query": q, **r})
+            except Exception as exc:  # ek bad agent doosre ko rok na de
+                runs.append({"query": q, "ok": False, "error": type(exc).__name__,
+                             "items": [], "metrics": {}})
+    return {"ok": True, "runs": runs, "count": len(runs)}
 
 
 def digest(cfg: dict | None = None, limit_per_category: int = 3) -> dict:
@@ -125,12 +195,17 @@ def digest(cfg: dict | None = None, limit_per_category: int = 3) -> dict:
     picked = verifier.collapse(checked)
     merged_away -= len(picked)
     audit = verifier.citation_audit(picked)
+    changes = snapshots.recent_changes(limit=12)
     metrics = {"items": len(picked), "categories": len(buckets), "source": "archive",
-               "unique_stories": len(picked), "duplicate_rows_merged": merged_away}
+               "unique_stories": len(picked), "duplicate_rows_merged": merged_away,
+               "changes_sources": changes["total"]}
     built = briefer.build("Daily digest (local archive)", picked, [], cfg, None,
                           audit, metrics, 0, "archive")
-    return {"ok": True, "report": built,
-            "saved": briefer.save(built, "Daily digest", metrics)}
+    saved = briefer.save(built, "Daily digest", metrics)
+    if saved:
+        metrics_lib.inc("reports_total")
+    metrics_lib.persist()
+    return {"ok": True, "report": built, "saved": saved, "changes": changes}
 
 
 def status(cfg: dict | None = None) -> dict:
@@ -142,9 +217,12 @@ def status(cfg: dict | None = None) -> dict:
         "llm": llm.status(cfg), "tor_mode": cfg.get("tor_mode"),
         "fts5": ov.get("fts5"), "fts_error": ov.get("fts_error"),
         "counts": {k: ov.get(k) for k in ("items", "runs", "sources", "watchlist",
-                                          "jobs", "reports", "feedback", "events")},
+                                          "jobs", "reports", "feedback", "events",
+                                          "page_snapshots")},
         "cross_verified": ov.get("cross_verified"),
         "source_register": len(policy.register()),
         "adapters": len(adapters.ADAPTERS),
         "assumptions": cfg.get("assumptions", {}),
+        "changes": snapshots.recent_changes(limit=5),
+        "metrics": metrics_lib.compact(),
     }

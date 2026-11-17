@@ -94,6 +94,82 @@ def cmd_llm(args):
     return 0
 
 
+def cmd_ci_gate(args):
+    from . import ci_gate
+    out = ci_gate.run(include_unittests=not args.skip_tests, queries=args.queries)
+    print(json.dumps(out, ensure_ascii=False))
+    return 0 if out["ok"] else 1
+
+
+def cmd_changes(args):
+    from . import snapshots
+    print(json.dumps({"ok": True, "changes": snapshots.recent_changes(args.limit),
+                      "counts": snapshots.counts()},
+                     ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_channels(args):
+    from . import channels as ch
+    if args.add:
+        row = ch.add_channel(args.add, origin="manual")
+        print(json.dumps(row, ensure_ascii=False, indent=2))
+    if args.remove:
+        print(json.dumps(ch.remove_channel(args.remove), ensure_ascii=False, indent=2))
+    if args.check:
+        for c in (args.check.split(",") if args.check != "*" else
+                  [r["channel"] for r in ch.list_channels()]):
+            res = ch.check_channel(c, config.load())
+            print(json.dumps(res, ensure_ascii=False)[:300])
+    if args.discover:
+        out = ch.run_discovery(config.load(), offline=args.offline)
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    rows = ch.list_channels(args.status or None)
+    print(f"\nRegistry ({len(rows)} channels):")
+    for r in rows:
+        print(f"{r['status']:<9} {r['origin']:<7} score={r['score']:<3} "
+              f"subs={r['subscribers'] or '-':<10} @{r['channel']:<28} "
+              f"last={r['last_post_at'] or '-'}")
+    print(json.dumps(ch.counts(), ensure_ascii=False))
+    return 0
+
+
+def cmd_batch(args):
+    queries = [str(q) for q in args.query if str(q).strip()]
+    out = orchestrator.run_many(queries, live=args.live, limit=args.limit)
+    for r in out.get("runs") or []:
+        print(f"\n===== QUERY: {r.get('query')} (ok={r.get('ok')} blocked={r.get('blocked')}) =====")
+        print(r.get("report", {}).get("markdown") or f"REPORT FAILED: {r.get('error')}")
+    print("\n--- BATCH SUMMARY ---")
+    print(json.dumps({"ok": out.get("ok"), "count": out.get("count"),
+                      "errors": [r.get("error") for r in out.get("runs") or []
+                                  if not r.get("ok")]}, ensure_ascii=False))
+    return 0 if out.get("ok") else 1
+
+
+def cmd_bot(args):
+    from . import telegram_bot as tb
+    cfg = config.load()
+    token = str(cfg.get("telegram_bot_token") or "")
+    if not token:
+        print("Bot token config me nahi hai. /api/settings ya data/config.json me daayein.")
+        return 1
+    print("Telegram bot chal raha hai (long polling). Rokne ke liye Ctrl+C.")
+    import threading
+    stop = threading.Event()
+    try:
+        tb.run(token, cfg=cfg, stop=stop)
+    except KeyboardInterrupt:
+        stop.set()
+    return 0
+
+
+def cmd_watchdog(args):
+    from . import watchdog
+    return watchdog.main(interval=getattr(args, "interval", 10),
+                         max_backoff=getattr(args, "max_backoff", 300))
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="jin_agent", description="JIN Agent local CLI")
     sub = p.add_subparsers(dest="command")
@@ -115,6 +191,33 @@ def build_parser():
     sub.add_parser("selftest").set_defaults(fn=cmd_selftest)
     c = sub.add_parser("classify"); c.add_argument("text"); c.set_defaults(fn=cmd_classify)
     sub.add_parser("llm").set_defaults(fn=cmd_llm)
+    cg = sub.add_parser("ci-gate", help="Offline CI gate: compile + tests + eval")
+    cg.add_argument("--queries", type=int, default=3, help="evaluator quick check size")
+    cg.add_argument("--skip-tests", action="store_true",
+                    help="debug only: unittest suite skip (release gate me na lagayein)")
+    cg.set_defaults(fn=cmd_ci_gate)
+    b = sub.add_parser("batch", help="Parallel agents: multiple queries ek saath")
+    b.add_argument("query", nargs="+")
+    b.add_argument("--live", action="store_true")
+    b.add_argument("--limit", type=int, default=25)
+    b.set_defaults(fn=cmd_batch)
+    cg2 = sub.add_parser("changes", help="Per-source change detection (snapshots)")
+    cg2.add_argument("--limit", type=int, default=20)
+    cg2.set_defaults(fn=cmd_changes)
+    bt = sub.add_parser("bot", help="Telegram bot long-polling front-end")
+    bt.set_defaults(fn=cmd_bot)
+    wd = sub.add_parser("watchdog", help="Bot supervisor: crash par auto-restart")
+    wd.add_argument("--interval", type=int, default=10)
+    wd.add_argument("--max-backoff", type=int, default=300)
+    wd.set_defaults(fn=cmd_watchdog)
+    chp = sub.add_parser("channels", help="Telegram channel registry (auto-discovery)")
+    chp.add_argument("--add", help="manual channel add (@handle ya URL)")
+    chp.add_argument("--remove", help="channel archive karo (delete nahi)")
+    chp.add_argument("--check", help="liveness probe: '*' ya comma-separated handles")
+    chp.add_argument("--discover", action="store_true", help="ek discovery cycle chalao")
+    chp.add_argument("--offline", action="store_true", help="discovery offline (sirf harvest)")
+    chp.add_argument("--status", help="sirf ye status dikhao (active/dead/archived)")
+    chp.set_defaults(fn=cmd_channels)
     return p
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from . import adapters, config, llm, policy, store, util, verifier
+from . import adapters, config, llm, policy, snapshots, store, util, verifier
 
 MAX_CALLS = 6
 MAX_TOOL_TEXT = 6500
@@ -36,6 +36,34 @@ TOOLS = {
     "search_papers": {
         "args": {"query": "str", "limit": "int"},
         "desc": "Legal scholarly indexes: OpenAlex / Crossref / arXiv.",
+    },
+    "search_social": {
+        "args": {"query": "str", "limit": "int"},
+        "desc": "Public Reddit search JSON (read-only subreddit search).",
+    },
+    "search_reference": {
+        "args": {"query": "str", "limit": "int"},
+        "desc": "Wikipedia / Wikidata reference search.",
+    },
+    "search_security": {
+        "args": {"query": "str", "limit": "int"},
+        "desc": "Official NVD CVE 2.0 feed (keyword search).",
+    },
+    "search_code": {
+        "args": {"query": "str", "limit": "int"},
+        "desc": "GitHub repository search (unauthenticated, rate-limit aware).",
+    },
+    "search_web_archive": {
+        "args": {"query": "str", "limit": "int"},
+        "desc": "Wayback availability / CDX snapshots - links only.",
+    },
+    "search_sitemap": {
+        "args": {"query": "str", "limit": "int"},
+        "desc": "robots.txt + sitemap.xml discovery on allowlisted hosts (bounded).",
+    },
+    "search_web": {
+        "args": {"query": "str", "limit": "int"},
+        "desc": "Optional keyed Brave / Bing web search; disabled without a key.",
     },
     "verify_source": {
         "args": {"url": "str"},
@@ -131,8 +159,8 @@ def dispatch(call: dict, ctx: dict) -> dict:
     try:
         if name == "search_public":
             keys = ["gsmarena", "xda", "androidauthority", "androidpolice",
-                    "9to5google", "sammobile", "apple-newsroom", "gnews", "hn",
-                    "github", "gdelt"]
+                    "9to5google", "sammobile", "apple-newsroom", "gnews",
+                    "gnews-topic", "hn", "github", "gdelt"]
             items, diag = adapters.run(args.get("query", ctx.get("query", "")),
                                        keys=keys, days=int(args.get("days", 7)),
                                        limit=int(args.get("limit", 20)),
@@ -141,7 +169,14 @@ def dispatch(call: dict, ctx: dict) -> dict:
             result["text"] = _lines(items)
             result["diagnostics"] = diag
         elif name == "fetch_url":
-            text = adapters.fetch(args["url"], cfg) if not offline else ""
+            if offline:
+                text = ""
+            else:
+                text = adapters.fetch(args["url"], cfg)
+                try:
+                    snapshots.record("fetch-url", args["url"], text, cfg)
+                except Exception:
+                    pass
             result["text"] = scrub(text)
         elif name == "search_telegram":
             items, diag = adapters.run(args.get("query", ctx.get("query", "")),
@@ -161,6 +196,62 @@ def dispatch(call: dict, ctx: dict) -> dict:
         elif name == "search_papers":
             items, diag = adapters.run(args.get("query", ctx.get("query", "")),
                                        keys=["openalex", "crossref", "arxiv"],
+                                       limit=int(args.get("limit", 20)),
+                                       cfg=cfg, offline=offline)
+            result["items"] = items
+            result["text"] = _lines(items)
+            result["diagnostics"] = diag
+        elif name == "search_social":
+            items, diag = adapters.run(args.get("query", ctx.get("query", "")),
+                                       keys=["reddit"],
+                                       limit=int(args.get("limit", 20)),
+                                       cfg=cfg, offline=offline)
+            result["items"] = items
+            result["text"] = _lines(items)
+            result["diagnostics"] = diag
+        elif name == "search_reference":
+            items, diag = adapters.run(args.get("query", ctx.get("query", "")),
+                                       keys=["wikipedia", "wikidata"],
+                                       limit=int(args.get("limit", 20)),
+                                       cfg=cfg, offline=offline)
+            result["items"] = items
+            result["text"] = _lines(items)
+            result["diagnostics"] = diag
+        elif name == "search_security":
+            items, diag = adapters.run(args.get("query", ctx.get("query", "")),
+                                       keys=["nvd"],
+                                       limit=int(args.get("limit", 20)),
+                                       cfg=cfg, offline=offline)
+            result["items"] = items
+            result["text"] = _lines(items)
+            result["diagnostics"] = diag
+        elif name == "search_code":
+            items, diag = adapters.run(args.get("query", ctx.get("query", "")),
+                                       keys=["github-search"],
+                                       limit=int(args.get("limit", 20)),
+                                       cfg=cfg, offline=offline)
+            result["items"] = items
+            result["text"] = _lines(items)
+            result["diagnostics"] = diag
+        elif name == "search_web_archive":
+            items, diag = adapters.run(args.get("query", ctx.get("query", "")),
+                                       keys=["wayback"],
+                                       limit=int(args.get("limit", 20)),
+                                       cfg=cfg, offline=offline)
+            result["items"] = items
+            result["text"] = _lines(items)
+            result["diagnostics"] = diag
+        elif name == "search_sitemap":
+            items, diag = adapters.run(args.get("query", ctx.get("query", "")),
+                                       keys=["sitemap"],
+                                       limit=int(args.get("limit", 20)),
+                                       cfg=cfg, offline=offline)
+            result["items"] = items
+            result["text"] = _lines(items)
+            result["diagnostics"] = diag
+        elif name == "search_web":
+            items, diag = adapters.run(args.get("query", ctx.get("query", "")),
+                                       keys=["brave-search", "bing-search"],
                                        limit=int(args.get("limit", 20)),
                                        cfg=cfg, offline=offline)
             result["items"] = items
@@ -197,6 +288,20 @@ def _deterministic_calls(query: str, cfg: dict) -> list[dict]:
     ]
     if re.search(r"\b(paper|research|study|arxiv|doi|academic|patent)\b", low):
         calls.append({"tool": "search_papers", "args": {"query": str(query)[:400], "limit": 15}})
+    if re.search(r"\b(reddit|forum|community|discussion|social)\b", low):
+        calls.append({"tool": "search_social", "args": {"query": str(query)[:400], "limit": 15}})
+    if re.search(r"\b(wikipedia|wikidata|encyclopedia|reference|what is|who is|definition)\b", low):
+        calls.append({"tool": "search_reference", "args": {"query": str(query)[:400], "limit": 15}})
+    if re.search(r"\b(cve|nvd|vulnerability|exploit|security advisory|patch tuesday)\b", low):
+        calls.append({"tool": "search_security", "args": {"query": str(query)[:400], "limit": 15}})
+    if re.search(r"\b(github|repo|repository|source code|open source|sdk)\b", low):
+        calls.append({"tool": "search_code", "args": {"query": str(query)[:400], "limit": 15}})
+    if re.search(r"\b(wayback|archive\.org|archived|old version|snapshot|deleted page)\b", low):
+        calls.append({"tool": "search_web_archive", "args": {"query": str(query)[:500], "limit": 15}})
+    if re.search(r"\b(sitemap|robots\.txt|crawl|site index)\b", low):
+        calls.append({"tool": "search_sitemap", "args": {"query": str(query)[:500], "limit": 15}})
+    if str(cfg.get("brave_key") or "").strip() or str(cfg.get("bing_key") or "").strip():
+        calls.append({"tool": "search_web", "args": {"query": str(query)[:400], "limit": 15}})
     if cfg.get("telegram_channels") or re.search(r"\btelegram|channel|t\.me\b", low):
         calls.append({"tool": "search_telegram", "args": {"query": str(query)[:400], "limit": 15}})
     if re.search(r"\b(dark web|deep web|onion|tor|ahmia)\b", low) and cfg.get("tor_mode") != "off":

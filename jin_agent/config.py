@@ -37,7 +37,32 @@ DEFAULT = {
     "telegram_channels": [],
     "telegram_bot_token": "",
     "telegram_chat_id": "",
+    "channel_discovery_web": True,
+    "channel_discovery_max_auto": 60,
+    "channel_discovery_probe_per_run": 8,
+    "channel_min_score": 4,
     "tor_mode": "links_only",
+    # P27 retrieval++: per-source switches (explicit flags override adapter defaults)
+    "source_enabled": {
+        "reddit": True, "wikipedia": True, "wikidata": True,
+        "gnews-topic": True, "wayback": True, "github-search": True,
+        "nvd": True, "sitemap": True,
+        "brave-search": False, "bing-search": False,
+    },
+    # Optional free-tier keys. Empty = adapter disabled, never an error.
+    "brave_key": "",
+    "bing_key": "",
+    "github_token": "",
+    "host_min_interval": 1.0,
+    "host_backoff_base": 5.0,
+    "host_backoff_max": 300.0,
+    "sitemap_max_depth": 2,
+    "sitemap_max_urls": 40,
+    "sitemap_seed": "https://source.android.com/sitemap.xml",
+    "reddit_subreddits": ["android", "AndroidQuestions", "firmware"],
+    "snapshot_max_chars": 8000,
+    "change_max_lines": 5,
+    "near_dup_threshold": 0.72,
     "llm": {"provider": "off", "endpoint": "", "model": "", "key": "", "timeout": 30},
     "schedule": {
         "feeds_minutes": 15,
@@ -46,6 +71,7 @@ DEFAULT = {
         "digest_minutes": 1440,
         "watchlist_minutes": 5,
         "retention_minutes": 1440,
+        "discovery_minutes": 720,
     },
     "retention_days": 90,
     "max_fetch_bytes": 2_000_000,
@@ -99,7 +125,7 @@ def load() -> dict:
     if not isinstance(raw, dict):
         return cfg
     for key, value in raw.items():
-        if key in ("llm", "schedule", "assumptions") and isinstance(value, dict):
+        if key in ("llm", "schedule", "assumptions", "source_enabled") and isinstance(value, dict):
             cfg[key].update(value)
         else:
             cfg[key] = value
@@ -111,6 +137,8 @@ def public(cfg: dict | None = None) -> dict:
     c = copy.deepcopy(cfg or load())
     c.setdefault("llm", {})["key"] = "***" if c["llm"].get("key") else ""
     c["telegram_bot_token"] = "***" if c.get("telegram_bot_token") else ""
+    for key in ("brave_key", "bing_key", "github_token"):
+        c[key] = "***" if c.get(key) else ""
     return c
 
 
@@ -121,7 +149,7 @@ def save(patch: dict) -> dict:
     for key, value in patch.items():
         if value == "***":
             continue
-        if key in ("llm", "schedule", "assumptions") and isinstance(value, dict):
+        if key in ("llm", "schedule", "assumptions", "source_enabled") and isinstance(value, dict):
             # Masked sentinels must not be persisted inside nested sections either.
             cfg[key].update({k: v for k, v in value.items() if v != "***"})
         elif key in DEFAULT:
