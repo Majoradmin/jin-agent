@@ -20,6 +20,12 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
+try:
+    import socks  # PySocks
+    _SOCKS_AVAILABLE = True
+except ImportError:
+    _SOCKS_AVAILABLE = False
 
 from . import VERSION, config, orchestrator, util
 
@@ -82,8 +88,38 @@ def is_owner(chat_id: int | None, cfg: dict | None = None) -> bool:
         return False
 
 
-def _api(token: str):
-    """Tiny Bot API client (stdlib urllib)."""
+def _make_opener(cfg: dict | None = None):
+    """
+    Build a urllib opener with SOCKS5 proxy if configured.
+    cfg keys: proxy_type (socks5/http), proxy_host, proxy_port, proxy_user, proxy_pass
+    Falls back to direct if PySocks not installed or proxy not configured.
+    """
+    cfg = cfg or config.load()
+    ptype = str(cfg.get("proxy_type") or "").strip().lower()
+    phost = str(cfg.get("proxy_host") or "").strip()
+    pport = int(cfg.get("proxy_port") or 0)
+
+    if phost and pport and ptype == "socks5" and _SOCKS_AVAILABLE:
+        puser = cfg.get("proxy_user") or None
+        ppass = cfg.get("proxy_pass") or None
+        socks.set_default_proxy(socks.SOCKS5, phost, pport, True, puser, ppass)
+        import socket
+        socket.socket = socks.socksocket
+        return urllib.request.build_opener()
+
+    if phost and pport and ptype == "http":
+        proxy_url = f"http://{phost}:{pport}"
+        proxy_handler = urllib.request.ProxyHandler({
+            "http": proxy_url, "https": proxy_url
+        })
+        return urllib.request.build_opener(proxy_handler)
+
+    return urllib.request.build_opener()
+
+
+def _api(token: str, cfg: dict | None = None):
+    """Tiny Bot API client (stdlib urllib) with optional proxy support."""
+    opener = _make_opener(cfg)
 
     class _API:
         base = "https://api.telegram.org/bot" + str(token)
@@ -95,7 +131,7 @@ def _api(token: str):
             req = urllib.request.Request(
                 self.base + "/sendMessage", data=body,
                 headers={"Content-Type": "application/json"}, method="POST")
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with opener.open(req, timeout=60) as r:
                 return json.loads(r.read().decode())
 
         def get_updates(self, offset: int, timeout: int = POLL_TIMEOUT) -> list[dict]:
@@ -103,7 +139,7 @@ def _api(token: str):
             req = urllib.request.Request(
                 self.base + "/getUpdates", data=body,
                 headers={"Content-Type": "application/json"}, method="POST")
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with opener.open(req, timeout=timeout + 10) as r:
                 return json.loads(r.read().decode()).get("result") or []
 
     return _API()
@@ -136,7 +172,7 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             research=None) -> dict:
     """Handle one private chat command. Returns {'ok':.., 'action':..}."""
     cfg = cfg or config.load()
-    api = api or _api(str(cfg.get("telegram_bot_token") or ""))
+    api = api or _api(str(cfg.get("telegram_bot_token") or ""), cfg)
     cmd, arg = parse_command(text)
     if cmd == "start":
         api.send(chat_id, HELP_TEXT)
@@ -173,7 +209,7 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
 def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
     """Long polling (getUpdates offset+timeout). Stop via threading.Event."""
     cfg = cfg or config.load()
-    api = api or _api(token)
+    api = api or _api(token, cfg)
     stop = stop or type("S", (), {"is_set": lambda self: False})()
     offset = int(POLL_OFFSET)
     while not stop.is_set():

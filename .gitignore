@@ -1,35 +1,11 @@
-# ---- Local runtime (kabhi commit na ho) ----
-MobileLab/data/
-jin_agent/data/
-*.db
-*.db-wal
-*.db-shm
-*.sqlite
-*.sqlite3
-*.log
-
-# ---- Python ----
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
-.pytest_cache/
-.mypy_cache/
-.venv/
-venv/
-
-# ---- Secrets / local config ----
+*.db
+*.sqlite
+jin_agent/data/config.json
+jin_agent/data/reports/
+jin_agent/data/backups/
+jin_agent/data/jin_agent.db
+*.log
 .env
-.env.*
-!.env.example
-*.key
-*.pem
-secrets.*
-
-# ---- WorkBuddy app-managed internal data ----
-# Project ka source of truth J:\Ai Agent\agent.md + MobileLab\docs\ hain (C10).
-.workbuddy-ai/
-
-# ---- OS ----
-Thumbs.db
-Desktop.ini
-.DS_Store

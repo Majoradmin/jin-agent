@@ -79,6 +79,14 @@ DEFAULT = {
     "max_query_chars": 4000,
     "default_days": 7,
     "default_limit": 25,
+    # Proxy settings (for regions where api.telegram.org is blocked)
+    # proxy_type: "socks5" | "http" | "" (empty = no proxy)
+    # For socks5: install PySocks first: pip install PySocks
+    "proxy_type": "",
+    "proxy_host": "",
+    "proxy_port": 0,
+    "proxy_user": "",
+    "proxy_pass": "",
 }
 
 
@@ -121,14 +129,34 @@ def load() -> dict:
     try:
         raw = json.loads(config_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return cfg
-    if not isinstance(raw, dict):
-        return cfg
-    for key, value in raw.items():
-        if key in ("llm", "schedule", "assumptions", "source_enabled") and isinstance(value, dict):
-            cfg[key].update(value)
+        raw = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            if key in ("llm", "schedule", "assumptions", "source_enabled") and isinstance(value, dict):
+                cfg[key].update(value)
+            else:
+                cfg[key] = value
+
+    # Environment variable overrides (for cloud/Railway deploy)
+    # Set these in Railway dashboard: Settings -> Variables
+    env_map = {
+        "TELEGRAM_BOT_TOKEN": "telegram_bot_token",
+        "TELEGRAM_CHAT_ID": "telegram_chat_id",
+        "GROQ_API_KEY": "llm.key",
+        "LLM_PROVIDER": "llm.provider",
+        "LLM_ENDPOINT": "llm.endpoint",
+        "LLM_MODEL": "llm.model",
+    }
+    for env_key, cfg_key in env_map.items():
+        val = os.environ.get(env_key, "").strip()
+        if not val:
+            continue
+        if "." in cfg_key:
+            section, field = cfg_key.split(".", 1)
+            cfg.setdefault(section, {})[field] = val
         else:
-            cfg[key] = value
+            cfg[cfg_key] = val
+
     return cfg
 
 
