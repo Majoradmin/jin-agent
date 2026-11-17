@@ -37,6 +37,7 @@ HELP_TEXT = (
     "Salam! Main aap ka JIN Agent hoon.\n\n"
     "/start - shuru\n"
     "/research <sawal> - agent research karo aur Roman Urdu report bhej do\n"
+    "/stop - chal rahi research rok do\n"
     "/status - agent status\n"
     "/sources - legal source register\n"
     "/channels - telegram channel registry\n"
@@ -46,6 +47,9 @@ HELP_TEXT = (
 )
 
 CMD_RE = re.compile(r"^/([A-Za-z0-9_]{1,20})(?:@[\w_]{1,20})?\s*(.*)$", re.S)
+
+# Global stop flag — /stop command set karta hai, research thread check karta hai
+_stop_research = False
 
 
 # --------------------------------------------------------------------------
@@ -171,6 +175,7 @@ def research_markdown(query: str, cfg: dict | None = None, save: bool = True,
 def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             research=None) -> dict:
     """Handle one private chat command. Returns {'ok':.., 'action':..}."""
+    global _stop_research
     cfg = cfg or config.load()
     api = api or _api(str(cfg.get("telegram_bot_token") or ""), cfg)
     cmd, arg = parse_command(text)
@@ -180,6 +185,10 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
     if cmd == "help":
         api.send(chat_id, HELP_TEXT)
         return {"ok": True, "action": "help"}
+    if cmd == "stop":
+        _stop_research = True
+        api.send(chat_id, "🛑 Research rok di gayi. Naya /research karne se phir shuru hoga.")
+        return {"ok": True, "action": "stop"}
     if cmd == "status":
         api.send(chat_id, "Status: JIN Agent chal raha hai (policy " + str(cfg.get("policy_id") or "SAHULAT-SAFE-SERVICE-v1") + ").")
         return {"ok": True, "action": "status"}
@@ -193,24 +202,31 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         if not arg:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
             return {"ok": False, "action": "research", "error": "query required"}
-        # Typing indicator bhejo taake user janay bot kaam kar raha hai
+        global _stop_research
+        _stop_research = False  # naya research shuru, flag reset
         try:
-            api.send(chat_id, "🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)")
+            api.send(chat_id, "🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)\n\n🛑 Rokne ke liye /stop likhein")
         except Exception:
             pass
         import threading
         result_box = [None]
         def _do_research():
-            result_box[0] = (research or research_markdown)(arg, cfg)
+            if not _stop_research:
+                result_box[0] = (research or research_markdown)(arg, cfg)
         t = threading.Thread(target=_do_research, daemon=True)
         t.start()
-        t.join(timeout=120)  # max 2 minute wait
+        t.join(timeout=120)
+        if _stop_research:
+            return {"ok": False, "action": "research", "error": "stopped by user"}
         if result_box[0] is None:
             api.send(chat_id, "⏱️ Research timeout ho gaya. Dobara try karein ya chota sawal likhein.")
             return {"ok": False, "action": "research", "error": "timeout"}
         md = result_box[0]
         chunks = split_text(md)
         for c in chunks:
+            if _stop_research:
+                api.send(chat_id, "🛑 Report rok di gayi.")
+                break
             api.send(chat_id, c)
         return {"ok": True, "action": "research", "query": arg, "chunks": len(chunks)}
     api.send(chat_id, "Maaf kijiye, yeh command samajh nahi aaya. /help use kijiye.")
