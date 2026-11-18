@@ -1,3 +1,9 @@
 @echo off
-cd /d "%~dp0.."
-"C:\Users\Rohaani\AppData\Local\Python\pythoncore-3.14-64\pythonw.exe" -X utf8 -u -m jin_agent watchdog
+echo.
+echo WARNING: Watchdog PC par nahi chalana chahiye.
+echo Bot sirf cloud (FadeHost) par chale -- warna loop ban jata hai.
+echo.
+echo Agar sirf test karna ho:
+echo   python -m jin_agent bot
+echo.
+pause

@@ -687,10 +687,24 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
 
 def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
     """Long polling (getUpdates offset+timeout). Stop via threading.Event."""
+    import threading as _threading
     cfg = cfg or config.load()
     api = api or _api(token, cfg)
     stop = stop or type("S", (), {"is_set": lambda self: False})()
-    offset = int(POLL_OFFSET)
+
+    # --- STARTUP: purani queue clear karo (restart ke baad loop band) ---
+    # Telegram ki pending queue ko skip karo: timeout=0 se sab pending updates
+    # ek baar fetch karo aur unka offset aage le jao, process mat karo.
+    try:
+        _drain = api.get_updates(0, 0) or []
+        if _drain:
+            offset = int((_drain[-1].get("update_id") or 0)) + 1
+        else:
+            offset = int(POLL_OFFSET)
+    except Exception:
+        offset = int(POLL_OFFSET)
+    # --- END STARTUP DRAIN ---
+
     while not stop.is_set():
         try:
             updates = api.get_updates(offset, POLL_TIMEOUT) or []
@@ -717,16 +731,15 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 continue
             if not is_owner(chat_id, cfg):
                 continue
+            # Fire-and-forget: dispatch thread ko block mat karo.
+            # done.wait(timeout=150) hata diya -- yahi loop ka sabab tha.
             try:
-                import threading
-                done = threading.Event()
-                def _dispatch():
-                    try:
-                        dispatch(chat_id, text, cfg, api=api)
-                    finally:
-                        done.set()
-                threading.Thread(target=_dispatch, daemon=True).start()
-                done.wait(timeout=150)  # max 2.5 min per message
+                _threading.Thread(
+                    target=dispatch,
+                    args=(chat_id, text),
+                    kwargs={"cfg": cfg, "api": api},
+                    daemon=True,
+                ).start()
             except Exception:
                 time.sleep(2)
         offset = last_id + 1
