@@ -324,15 +324,26 @@ def _scheduler_state() -> dict:
     return _SCHEDULER.state()
 
 
-def make_server(port: int = 8766) -> ThreadingHTTPServer:
+def make_server(port: int = 8766, host: str | None = None) -> ThreadingHTTPServer:
     store.init_db()
-    return ThreadingHTTPServer(("127.0.0.1", int(port)), Handler)
+    # Default secure: loopback only. Hosted platforms (FadeHost/Railway/Render)
+    # ke paas reverse proxy hota hai — agar proxy backend tak pahunchna hai to
+    # JIN_AGENT_HOST set karo. Code ka default hamesha loopback hi rehta hai;
+    # khula bind sirf deploy env ke explicit opt-in par hota hai.
+    bind = (host or os.environ.get("JIN_AGENT_HOST") or "").strip()
+    if not bind:
+        return ThreadingHTTPServer(("127.0.0.1", int(port)), Handler)
+    return ThreadingHTTPServer((bind, int(port)), Handler)
 
 
-def serve(port: int = 8766, open_browser: bool = False):
-    httpd = make_server(port)
-    url = f"http://127.0.0.1:{port}"
+def serve(port: int = 8766, open_browser: bool = False, host: str | None = None):
+    httpd = make_server(port, host)
+    bind = (host or os.environ.get("JIN_AGENT_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+    shown = "127.0.0.1" if bind == "::" else bind
+    url = f"http://{shown}:{port}"
     print(f"JIN Agent console: {url}")
+    if bind != "127.0.0.1":
+        print(f"[server] bind host {bind!r} — sirf trusted network par kholna.")
     if open_browser:
         import webbrowser
         webbrowser.open(url)

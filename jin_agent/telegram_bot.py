@@ -16,6 +16,7 @@ Boundary (Sahulat & Safe Service Policy / C12 / C13 / C27):
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import urllib.parse
@@ -728,13 +729,34 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
         offset = int(POLL_OFFSET)
     # --- END STARTUP DRAIN ---
 
+    # Network failure par exponential backoff + visible log. Purana code har
+    # failure par 5s sleep karta tha bina log ke — region-block (api.telegram.org
+    # unreachable) par bot hamesha "down" lagta tha magar crash nahi hota tha.
+    # Ab: backoff, counter, aur JIN_AGENT_MAX_POLL_FAILURES (0 = unlimited, purana
+    # behaviour) ke baad process exit -> watchdog restart karega.
+    fail_count = 0
+    try:
+        max_fail = int(os.environ.get("JIN_AGENT_MAX_POLL_FAILURES", "0") or "0")
+    except (TypeError, ValueError):
+        max_fail = 0
+
     while not stop.is_set():
         try:
             updates = api.get_updates(offset, POLL_TIMEOUT) or []
-        except Exception:
-            # Network hiccup -> bot crash na ho, retry next cycle
-            time.sleep(5)
+        except Exception as exc:
+            fail_count += 1
+            delay = min(5 * (2 ** min(fail_count - 1, 4)), 60)  # 5, 10, 20, 40, 60s
+            print(f"[bot] get_updates fail #{fail_count} "
+                  f"({type(exc).__name__}: {exc}); {delay}s baad retry", flush=True)
+            if max_fail and fail_count >= max_fail:
+                print(f"[bot] {max_fail} lagataar failures — process exit "
+                      f"(watchdog restart karega)", flush=True)
+                raise
+            time.sleep(delay)
             continue
+        if fail_count:
+            print(f"[bot] get_updates wapas chal gaya (failures: {fail_count})", flush=True)
+            fail_count = 0
         last_id = offset
         for u in updates:
             mid = int((u.get("update_id") or 0))

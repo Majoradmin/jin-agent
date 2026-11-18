@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import urllib.parse
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
@@ -156,6 +157,29 @@ def load() -> dict:
             cfg.setdefault(section, {})[field] = val
         else:
             cfg[cfg_key] = val
+
+    # Proxy fallback: hosted platforms (FadeHost/Railway/Render) aksar
+    # HTTPS_PROXY / ALL_PROXY set karte hain. Agar config me proxy khali hai
+    # to ye standard env vars apna lo — warna api.telegram.org blocked regions
+    # me bot hamesha fail karta rahega (silent).
+    if not str(cfg.get("proxy_type") or "").strip() and not str(cfg.get("proxy_host") or "").strip():
+        raw = (os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
+               or os.environ.get("HTTP_PROXY") or os.environ.get("all_proxy")
+               or os.environ.get("https_proxy") or "").strip()
+        if raw:
+            u = urllib.parse.urlparse(raw if "://" in raw else "http://" + raw)
+            scheme = (u.scheme or "http").lower()
+            ptype = "socks5" if "socks" in scheme else "http"
+            cfg["proxy_type"] = ptype
+            cfg["proxy_host"] = u.hostname or ""
+            try:
+                cfg["proxy_port"] = int(u.port or (1080 if ptype == "socks5" else 8080))
+            except (TypeError, ValueError):
+                cfg["proxy_port"] = 1080 if ptype == "socks5" else 8080
+            if u.username:
+                cfg["proxy_user"] = urllib.parse.unquote(u.username)
+            if u.password:
+                cfg["proxy_pass"] = urllib.parse.unquote(u.password)
 
     return cfg
 
