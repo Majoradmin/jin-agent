@@ -184,5 +184,58 @@ class TestSchedulerJob(unittest.TestCase):
         self.assertIn("counts", res)
 
 
+class TestSavedChannelSearch(unittest.TestCase):
+    """P28: saved channels ke andar public preview ?q= search (mock only)."""
+
+    def test_search_url_encodes_query(self):
+        url = channels.search_url("https://t.me/gsmlab", "firmware update")
+        self.assertEqual(url, "https://t.me/s/gsmlab?q=firmware%20update")
+
+    def test_search_url_rejects_bad_handle(self):
+        with self.assertRaises(ValueError):
+            channels.search_url("", "x")
+
+    def test_search_posts_tags_channel_and_dedupes(self):
+        urls = []
+
+        def fake_fetch(url, cfg=None, extra_hosts=()):
+            urls.append(url)
+            return ALIVE_HTML
+
+        res = channels.search_posts("firmware", ["gsmlab", "gsmlab", "bad handle!"],
+                                    config.load(), fetch=fake_fetch)
+        self.assertEqual(res["query"], "firmware")
+        self.assertEqual(res["channels"], ["gsmlab"])  # bad + duplicate hataye
+        self.assertTrue(res["items"])
+        self.assertTrue(all(it["channel"] == "gsmlab" for it in res["items"]))
+        self.assertTrue(all("?q=firmware" in u for u in urls))
+        # same post dobara na aaye
+        self.assertEqual(len({it["url"] for it in res["items"]}), len(res["items"]))
+
+    def test_search_posts_one_channel_failure_does_not_break_others(self):
+        def fake_fetch(url, cfg=None, extra_hosts=()):
+            if "t.me/s/broken" in url:
+                raise ValueError("network down")
+            return ALIVE_HTML
+
+        res = channels.search_posts("x", ["broken", "gsmlab"], config.load(),
+                                    fetch=fake_fetch)
+        self.assertEqual(res["ok"], 1)
+        self.assertEqual(res["failed"][0]["channel"], "broken")
+        self.assertTrue(res["items"])
+
+    def test_search_posts_without_channels(self):
+        res = channels.search_posts("x", [], config.load())
+        self.assertEqual(res["items"], [])
+        self.assertEqual(res["channels"], [])
+
+    def test_search_posts_empty_query_no_network(self):
+        def no_network(*a, **k):
+            raise AssertionError("empty query par network call hui")
+        res = channels.search_posts("   ", ["gsmlab"], config.load(),
+                                    fetch=no_network)
+        self.assertEqual(res["items"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -260,7 +260,7 @@ class TestOrchestrator(unittest.TestCase):
 
     def test_status_shape(self):
         s = orchestrator.status()
-        self.assertEqual(s["version"], "2.6.0")
+        self.assertEqual(s["version"], "2.7.0")
         self.assertEqual(s["policy_id"], "SAHULAT-SAFE-SERVICE-v1")
         self.assertIn("counts", s)
         self.assertIn("changes", s)

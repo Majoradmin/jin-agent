@@ -69,7 +69,7 @@ class TestConsole(unittest.TestCase):
     def test_03_status(self):
         code, body, _ = get_json("/api/status")
         self.assertEqual(code, 200)
-        self.assertEqual(body["version"], "2.6.0")
+        self.assertEqual(body["version"], "2.7.0")
         self.assertTrue(body["fts5"])
         self.assertIn("changes", body)
 
@@ -159,7 +159,7 @@ class TestConsole(unittest.TestCase):
         code, body, headers = get_json("/api/health")
         self.assertEqual(code, 200)
         self.assertTrue(body["ok"])
-        self.assertEqual(body["version"], "2.6.0")
+        self.assertEqual(body["version"], "2.7.0")
         self.assertTrue(body["db"]["ok"])
         self.assertTrue(body["data_writable"])
         self.assertIsInstance(body["llm_enabled"], bool)

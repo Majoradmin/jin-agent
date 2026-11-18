@@ -23,6 +23,7 @@ volume + text richness + subscribers + topic keyword relevance.
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import re
 import time
@@ -486,3 +487,79 @@ def adapter_channels(cfg: dict | None = None) -> list[str]:
         return list(dict.fromkeys(manual + active_channels()))
     except Exception:
         return manual
+
+
+# --------------------------------------------------------------------------
+# P28: Saved-channel post search (public ``t.me/s/<ch>?q=`` only)
+# --------------------------------------------------------------------------
+
+SEARCH_MAX_CHANNELS = 8
+SEARCH_PER_CHANNEL = 6
+SEARCH_WORKERS = 4
+
+
+def search_url(channel: str, query: str) -> str:
+    """Public preview ka server-side search URL.
+
+    ``t.me/s/<channel>?q=<word>`` wohi search hai jo browser mein channel
+    preview kholne par milti hai - koi login, userbot ya history scrape nahi.
+    """
+    clean = clean_handle(channel)
+    if not clean:
+        raise ValueError("Channel handle ghalat hai")
+    return "https://t.me/s/" + clean + "?q=" + urllib.parse.quote(str(query or "")[:150])
+
+
+def _search_one(clean: str, query: str, cfg: dict, per_channel: int, fetch) -> tuple:
+    try:
+        html = fetch(search_url(clean, query), cfg)
+        return clean, adapters.parse_telegram(html, clean)[:per_channel], ""
+    except Exception as exc:
+        return clean, [], f"{type(exc).__name__}: {util.truncate(str(exc), 120)}"
+
+
+def search_posts(query: str, channels_list: list[str] | None = None,
+                 cfg: dict | None = None, limit: int = 10,
+                 per_channel: int = SEARCH_PER_CHANNEL, fetch=None,
+                 workers: int = SEARCH_WORKERS) -> dict:
+    """Saved public channels ke andar keyword search (parallel, fail-safe).
+
+    Returns ``{"query", "items", "channels", "ok", "failed"}``. Har item mein
+    ``channel`` field hoti hai taake report mein "kaunsa channel" dikhe.
+    """
+    cfg = cfg or config.load()
+    query = str(query or "").strip()
+    if not query:
+        return {"query": "", "items": [], "channels": [], "ok": 0, "failed": []}
+    names = ([clean_handle(c) for c in adapter_channels(cfg)]
+             if channels_list is None else
+             [clean_handle(c) for c in channels_list])
+    names = list(dict.fromkeys(n for n in names if n))[:SEARCH_MAX_CHANNELS]
+    if not names:
+        return {"query": query, "items": [], "channels": [], "ok": 0, "failed": []}
+
+    fetch = fetch or adapters.fetch
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max(1, min(int(workers or 1), len(names)))) as pool:
+        futures = [pool.submit(_search_one, n, query, cfg, per_channel, fetch)
+                   for n in names]
+        for fut in futures:
+            results.append(fut.result())
+
+    items, failed, seen = [], [], set()
+    for clean, found, err in results:
+        if err:
+            failed.append({"channel": clean, "error": err})
+        for raw in found:
+            url = str(raw.get("url") or "")
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            item = dict(raw)
+            item["channel"] = clean
+            item["matched_in"] = "channel-search"
+            items.append(item)
+    return {"query": query, "items": items[:max(1, int(limit))],
+            "channels": names, "ok": len(names) - len(failed), "failed": failed}
+

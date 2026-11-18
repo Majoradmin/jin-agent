@@ -27,7 +27,7 @@ try:
 except ImportError:
     _SOCKS_AVAILABLE = False
 
-from . import VERSION, config, orchestrator, util
+from . import VERSION, channels as channels_mod, config, orchestrator, util
 
 SEND_CHUNK_LIMIT = 4096
 POLL_TIMEOUT = 30
@@ -40,13 +40,31 @@ HELP_TEXT = (
     "/stop - chal rahi research rok do\n"
     "/status - agent status\n"
     "/sources - legal source register\n"
-    "/channels - telegram channel registry\n"
+    "/channels - aap ke saved channels (add + 1-click links)\n"
+    "/addchannel <link> - channel save karo (post forward bhi kar sakte hain)\n"
+    "/rmchannel <@handle> - channel archive karo\n"
+    "/tgsearch <keyword> - saved channels ke ANDAR search\n"
+    "/engines - Telegram search engines ke 1-click links\n"
     "/help - yeh menu\n\n"
     "Research me LLM (free tier / local) use hoga; policy SAHULAT-SAFE-SERVICE-v1; "
     "dark web links-only; Telegram public only."
 )
 
+# Sirf public preview (t.me/s + t.me/<handle>) - login/userbot nahi.
+TG_SEARCH_ENGINES = [
+    ("Searchee", "SearcheeBot", "Telegram channel directory (40 categories, inline mode)"),
+    ("MotherSearch", "MotherSearchBot", "8M+ channels / 10B+ posts - channels, topics, content"),
+    ("oSearch", "oSearchBot", "Channels, groups aur content search"),
+]
+TG_ENGINES_NOTE = ("MySearch, Argo Search, JISOU, Kuaisou bhi majood hain - "
+                   "Telegram app ke search box me naam likh kar mil jate hain.")
+
+
 CMD_RE = re.compile(r"^/([A-Za-z0-9_]{1,20})(?:@[\w_]{1,20})?\s*(.*)$", re.S)
+# Sirf akela link/handle -> /addchannel (normal sawal ko hijack na kare)
+_LINK_ONLY_RE = re.compile(
+    r"(?:https?://)?(?:t\.me|telegram\.me)/(?:s/)?@?[A-Za-z0-9_]{3,40}/?", re.I)
+_HANDLE_ONLY_RE = re.compile(r"@[A-Za-z0-9_]{3,40}")
 
 # Global stop flag — /stop command set karta hai, research thread check karta hai
 _stop_research = False
@@ -90,6 +108,86 @@ def is_owner(chat_id: int | None, cfg: dict | None = None) -> bool:
         return int(chat_id or -1) == int(raw)
     except ValueError:
         return False
+
+
+def forwarded_handle(msg: dict) -> str:
+    """Channel post forward se channel handle (sirf asli channel origin).
+
+    Bot API user ki subscriptions nahi padh sakta, is liye registration ka
+    tareeqa: koi post forward karo -> handle yahan se nikalta hai.
+    """
+    if not isinstance(msg, dict):
+        return ""
+    origin = msg.get("forward_origin") or {}
+    if str(origin.get("type") or "") == "channel":
+        return channels_mod.clean_handle(
+            (origin.get("chat") or {}).get("username") or "")
+    old = msg.get("forward_from_chat") or {}
+    if str(old.get("type") or "") == "channel":
+        return channels_mod.clean_handle(old.get("username") or "")
+    return ""
+
+
+def format_channels(rows: list[dict]) -> str:
+    """Saved channels + 1-click links (plain text, Telegram khud link banata hai)."""
+    if not rows:
+        return ("Koi channel save nahi hai.\n\n"
+                "Add karne ke 2 tareeqe:\n"
+                "1) Kisi bhi channel ka post yahan forward karein (khud add ho jayega)\n"
+                "2) /addchannel https://t.me/channelname\n\n"
+                "Sirf PUBLIC channels ke andar search ho sakti hai "
+                "(private/invite-only preview nahi deta).")
+    lines = [f"📡 Aap ke channels ({len(rows)}):", ""]
+    for row in rows[:20]:
+        handle = str(row.get("channel") or "")
+        title = str(row.get("title") or "").strip()
+        subs = str(row.get("subscribers") or "").strip()
+        bits = [b for b in (title, (subs + " subs") if subs else "",
+                            f"{row.get('post_count') or 0} posts") if b]
+        lines.append(f"• @{handle}" + (f" — {' · '.join(bits)}" if bits else ""))
+        lines.append(f"  https://t.me/{handle}")
+    if len(rows) > 20:
+        lines.append(f"... aur {len(rows) - 20} channels")
+    lines.append("")
+    lines.append("Andar search: /tgsearch <keyword>")
+    return "\n".join(lines)
+
+
+def format_tg_results(res: dict) -> str:
+    """Channel-search result -> chhota readable Roman Urdu block."""
+    query = str((res or {}).get("query") or "")
+    items = (res or {}).get("items") or []
+    total = len((res or {}).get("channels") or [])
+    if not items:
+        return (f'🔍 "{query}" aap ke channels ke andar nahi mila '
+                f"({total} channels check kiye).\n\n"
+                "Agla step:\n"
+                "• Chhota keyword try karein (1-2 lafz)\n"
+                "• /research <sawal> se web + Telegram search chala lein\n"
+                "• Naye channels add karein: /addchannel <link>")
+    lines = [f'🔍 Channel search: "{query}" — {len(items)} results', ""]
+    for i, item in enumerate(items, 1):
+        text = util.truncate(str(item.get("excerpt") or item.get("title") or ""),
+                             220).replace("\n", " ").strip()
+        lines.append(f"{i}. @{item.get('channel')} — {text}")
+        lines.append(f"   {item.get('url')}")
+        lines.append("")
+    failed = (res or {}).get("failed") or []
+    if failed:
+        names = ", ".join("@" + str(f.get("channel")) for f in failed[:5])
+        lines.append(f"⚠️ {len(failed)} channel reach nahi hua: {names}")
+    return "\n".join(lines).strip()
+
+
+def format_engines() -> str:
+    lines = ["🔎 Telegram search engines (1-click links):", ""]
+    for name, handle, desc in TG_SEARCH_ENGINES:
+        lines.append(f"• {name} — {desc}")
+        lines.append(f"  https://t.me/{handle}")
+    lines.append("")
+    lines.append(TG_ENGINES_NOTE)
+    return "\n".join(lines)
+
 
 
 def _make_opener(cfg: dict | None = None):
@@ -173,7 +271,7 @@ def research_markdown(query: str, cfg: dict | None = None, save: bool = True,
 # --------------------------------------------------------------------------
 
 def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
-            research=None) -> dict:
+            research=None, probe=None, tg_search=None) -> dict:
     """Handle one private chat command. Returns {'ok':.., 'action':..}."""
     global _stop_research
     cfg = cfg or config.load()
@@ -195,9 +293,77 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
     if cmd == "sources":
         api.send(chat_id, "Sources register open hai (22 official/legal sources). /research <sawal> se detail.")
         return {"ok": True, "action": "sources"}
-    if cmd == "channels":
-        api.send(chat_id, "Channels registry open hai. Agent khud informative channels add karta hai (P23).")
-        return {"ok": True, "action": "channels"}
+    if cmd in ("channels", "tgsearch"):
+        if cmd == "tgsearch" or arg:
+            if not arg:
+                api.send(chat_id, "Keyword likhein: /tgsearch firmware\n"
+                                  "(ya /channels <keyword> - dono ek hi kaam karte hain)")
+                return {"ok": False, "action": "tgsearch", "error": "query required"}
+            try:
+                api.send(chat_id, f'🔍 Channels ke andar search: "{arg}" ...')
+            except Exception:
+                pass
+            try:
+                res = (tg_search or channels_mod.search_posts)(arg, cfg=cfg)
+            except Exception as exc:
+                api.send(chat_id, f"❌ Channel search fail: {type(exc).__name__}: "
+                                  f"{util.truncate(str(exc), 200)}")
+                return {"ok": False, "action": "tgsearch", "error": "search failed"}
+            for chunk in split_text(format_tg_results(res)):
+                api.send(chat_id, chunk)
+            return {"ok": True, "action": "tgsearch", "query": arg,
+                    "count": len(res.get("items") or [])}
+        rows = channels_mod.list_channels("active")
+        for chunk in split_text(format_channels(rows)):
+            api.send(chat_id, chunk)
+        return {"ok": True, "action": "channels", "count": len(rows)}
+    if cmd == "addchannel":
+        handle = channels_mod.clean_handle(arg)
+        if not handle:
+            api.send(chat_id, "Link ya @username dein. Misal:\n"
+                              "/addchannel https://t.me/durov\n"
+                              "ya channel ka koi post yahan forward kar dein.")
+            return {"ok": False, "action": "addchannel", "error": "handle required"}
+        try:
+            channels_mod.add_channel(handle, origin="manual",
+                                     note="user ne bot se add kiya")
+        except Exception as exc:
+            api.send(chat_id, f"❌ Channel add nahi hua: {util.truncate(str(exc), 150)}")
+            return {"ok": False, "action": "addchannel", "error": "add failed"}
+        try:
+            info = (probe or channels_mod.check_channel)(handle, cfg) or {}
+        except Exception:
+            info = {}
+        alive = bool(info.get("alive"))
+        title = str(info.get("title") or "").strip()
+        subs = str(info.get("subscribers") or "").strip()
+        bits = [b for b in (title, (subs + " subs") if subs else "",
+                            f"{info.get('post_count') or 0} recent posts"
+                            if alive else "public preview nahi mila") if b]
+        head = "✅ Channel save ho gaya" if alive else \
+               "⚠️ Channel save hua, magar public preview nahi mila"
+        api.send(chat_id, f"{head}: @{handle}\n"
+                          f"{' · '.join(bits)}\n"
+                          f"🔗 https://t.me/{handle}\n\n"
+                          f"Ab /tgsearch <keyword> se iske andar search karein.")
+        return {"ok": True, "action": "addchannel", "channel": handle,
+                "alive": alive}
+    if cmd == "rmchannel":
+        handle = channels_mod.clean_handle(arg)
+        if not handle:
+            api.send(chat_id, "Handle dein: /rmchannel @channelname")
+            return {"ok": False, "action": "rmchannel", "error": "handle required"}
+        try:
+            channels_mod.remove_channel(handle)
+        except Exception as exc:
+            api.send(chat_id, f"❌ {util.truncate(str(exc), 150)}")
+            return {"ok": False, "action": "rmchannel", "error": "not found"}
+        api.send(chat_id, f"🗄️ @{handle} archive kar diya (delete nahi hua).")
+        return {"ok": True, "action": "rmchannel", "channel": handle}
+    if cmd == "engines":
+        for chunk in split_text(format_engines()):
+            api.send(chat_id, chunk)
+        return {"ok": True, "action": "engines", "count": len(TG_SEARCH_ENGINES)}
     if cmd == "research":
         if not arg:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
@@ -259,7 +425,14 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
             chat = msg.get("chat") or {}
             chat_id = int(chat.get("id") or 0)
             text = str(msg.get("text") or "")
-            if not text:
+            if not text.startswith("/"):
+                handle = forwarded_handle(msg)
+                if handle:
+                    text = "/addchannel @" + handle
+                elif _LINK_ONLY_RE.fullmatch(text.strip()) or \
+                        _HANDLE_ONLY_RE.fullmatch(text.strip()):
+                    text = "/addchannel " + text.strip()
+            if not text or text == "/addchannel ":
                 continue
             if not is_owner(chat_id, cfg):
                 continue
