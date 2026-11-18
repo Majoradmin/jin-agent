@@ -202,7 +202,6 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         if not arg:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
             return {"ok": False, "action": "research", "error": "query required"}
-        global _stop_research
         _stop_research = False  # naya research shuru, flag reset
         try:
             api.send(chat_id, "🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)\n\n🛑 Rokne ke liye /stop likhein")

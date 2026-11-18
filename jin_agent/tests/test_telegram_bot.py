@@ -58,8 +58,10 @@ class TestBotHelpers(unittest.TestCase):
                           api=api, research=fake_research)
         self.assertTrue(res["ok"])
         self.assertEqual(res["action"], "research")
-        self.assertEqual(len(api.sent), 2)
-        self.assertIn("# Research Brief", api.sent[0][1])
+        # 1 progress message + 2 report chunks
+        self.assertEqual(len(api.sent), 3)
+        self.assertIn("Research chal rahi hai", api.sent[0][1])
+        self.assertIn("# Research Brief", api.sent[1][1])
 
     def test_dispatch_research_requires_query(self):
         api = FakeAPI()
