@@ -70,7 +70,7 @@ def health() -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "JINAgent/2.8.0"
+    server_version = "JINAgent/2.9.0"
 
     def log_message(self, fmt, *args):
         if os.environ.get("JIN_AGENT_VERBOSE"):

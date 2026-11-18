@@ -7,7 +7,7 @@ The agent is intentionally standalone: it does not import or modify MobileLab.
 All data stays under ``J:\\Ai Agent\\jin_agent\\data``.
 """
 
-VERSION = "2.8.0"
+VERSION = "2.9.0"
 POLICY_ID = "SAHULAT-SAFE-SERVICE-v1"
 DATE_CHECKED = "2026-11-16"
 PLAN_ID = "JIN-AGENT-FINAL-PLAN-P13-P22"

@@ -24,7 +24,7 @@ def setUpModule():
 
 class TestRelease(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(VERSION, "2.8.0")
+        self.assertEqual(VERSION, "2.9.0")
 
     def test_required_files_exist(self):
         for rel in ("README.md", "PHASES.md", "run.bat", "__init__.py", "__main__.py",
