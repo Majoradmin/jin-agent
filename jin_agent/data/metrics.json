@@ -1,5 +1,5 @@
 {
-  "ts": "2026-11-17T15:58:09Z",
+  "ts": "2026-11-18T10:03:14Z",
   "counters": {
     "queries_total": 1,
     "runs_ok": 1,
@@ -11,7 +11,7 @@
     "rate_limited": 0
   },
   "gauges": {
-    "items_last_run": 5.0
+    "items_last_run": 25.0
   },
   "latency": {
     "eval": {
@@ -30,10 +30,10 @@
     },
     "run": {
       "count": 1,
-      "p50_ms": 25647.0,
-      "p95_ms": 25647.0,
-      "avg_ms": 25647.0,
-      "max_ms": 25647.0
+      "p50_ms": 15257.0,
+      "p95_ms": 15257.0,
+      "avg_ms": 15257.0,
+      "max_ms": 15257.0
     }
   }
 }
