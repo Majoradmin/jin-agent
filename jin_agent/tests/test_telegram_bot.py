@@ -3,6 +3,7 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from jin_agent import config, store, telegram_bot as tb
 
@@ -16,12 +17,15 @@ class FakeAPI:
     def __init__(self):
         self.sent = []
 
-    def send(self, chat_id, text):
-        self.sent.append((int(chat_id), str(text)))
+    def send(self, chat_id, text, buttons=None):
+        self.sent.append((int(chat_id), str(text), buttons))
         return {"ok": True, "result": {"message_id": len(self.sent)}}
 
     def get_updates(self, offset, timeout=None):
         return []
+
+    def answer_callback(self, callback_id, text=""):
+        return {"ok": True}
 
 
 class TestBotHelpers(unittest.TestCase):
@@ -58,10 +62,14 @@ class TestBotHelpers(unittest.TestCase):
                           api=api, research=fake_research)
         self.assertTrue(res["ok"])
         self.assertEqual(res["action"], "research")
-        # 1 progress message + 2 report chunks
-        self.assertEqual(len(api.sent), 3)
+        # 1 progress + 2 report chunks + 1 'mil gaya?' question
+        self.assertEqual(len(api.sent), 4)
         self.assertIn("Research chal rahi hai", api.sent[0][1])
         self.assertIn("# Research Brief", api.sent[1][1])
+        self.assertIn("mil gayi", api.sent[3][1])
+        # inline buttons attach hain
+        self.assertIsNotNone(api.sent[3][2])
+        self.assertIn("done", api.sent[3][2][0][0]["callback_data"])
 
     def test_dispatch_research_requires_query(self):
         api = FakeAPI()
@@ -154,7 +162,7 @@ class TestChannelsAndEngines(unittest.TestCase):
                           tg_search=fake_search)
         self.assertTrue(res["ok"])
         self.assertEqual(res["count"], 1)
-        joined = "\n".join(t for _, t in api.sent)
+        joined = "\n".join(t for _, t, _ in api.sent)
         self.assertIn("https://t.me/s/gsmlab/120", joined)
 
     def test_dispatch_tgsearch_no_results_suggests_next_step(self):
@@ -166,7 +174,7 @@ class TestChannelsAndEngines(unittest.TestCase):
 
         tb.dispatch(42, "/tgsearch zzz", {"telegram_chat_id": "42"}, api=api,
                     tg_search=empty_search)
-        joined = "\n".join(t for _, t in api.sent)
+        joined = "\n".join(t for _, t, _ in api.sent)
         self.assertIn("nahi mila", joined)
         self.assertIn("/research", joined)
 
@@ -176,8 +184,110 @@ class TestChannelsAndEngines(unittest.TestCase):
         api = FakeAPI()
         res = tb.dispatch(42, "/channels", {"telegram_chat_id": "42"}, api=api)
         self.assertTrue(res["ok"])
-        joined = "\n".join(t for _, t in api.sent)
+        joined = "\n".join(t for _, t, _ in api.sent)
         self.assertIn("https://t.me/gsmlabtan", joined)
+
+
+class TestDeepWebAndCallbacks(unittest.TestCase):
+    """P29: dark/deep engines, 'mil gaya?' buttons aur search memory."""
+
+    def setUp(self):
+        tb.memory_mod.ensure_table()
+
+    def test_format_deep_without_query_has_links(self):
+        text = tb.format_deep()
+        self.assertIn("https://ahmia.fi/search/", text)
+        self.assertIn(".onion", text)
+        self.assertIn("Legal onion discovery only", text)
+
+    def test_format_deep_with_query_fills_keyword(self):
+        text = tb.format_deep("firmware unlock")
+        self.assertIn("q=firmware%20unlock", text)
+
+    def test_dispatch_deep(self):
+        api = FakeAPI()
+        res = tb.dispatch(42, "/deep onion markets", {"telegram_chat_id": "42"}, api=api)
+        self.assertTrue(res["ok"])
+        joined = "\n".join(t for _, t, _ in api.sent)
+        self.assertIn("ahmia.fi/search/?q=onion%20markets", joined)
+
+    def test_parse_callback(self):
+        self.assertEqual(tb.parse_callback("mem:17:more"), (17, "more"))
+        self.assertEqual(tb.parse_callback("garbage"), (0, ""))
+        self.assertEqual(tb.parse_callback("mem:1:extra!!"), (0, ""))
+
+    def test_callback_done_marks_memory(self):
+        row = tb.memory_mod.begin(42, "signal leaks")
+        tb.memory_mod.remember(row["id"], ["gsmarena"], ["chA"])
+        api = FakeAPI()
+        res = tb.handle_callback(42, f"mem:{row['id']}:done",
+                                 {"telegram_chat_id": "42"}, api=api)
+        self.assertTrue(res["ok"])
+        self.assertEqual(tb.memory_mod.get(row["id"])["status"], "done")
+
+    def test_callback_more_runs_next_round_and_remembers(self):
+        row = tb.memory_mod.begin(42, "firmware unlock")
+        tb.memory_mod.remember(row["id"], ["gsmarena"], ["chA"])
+        api = FakeAPI()
+        res = tb.handle_callback(42, f"mem:{row['id']}:more",
+                                 {"telegram_chat_id": "42"}, api=api,
+                                 research=lambda q, cfg: "# Round report\n" + "x" * 4500)
+        self.assertTrue(res["ok"])
+        updated = tb.memory_mod.get(row["id"])
+        self.assertGreaterEqual(updated["round_no"], 2)
+        self.assertIn("gsmarena", updated["used_sources"])
+        self.assertIn("Round", api.sent[0][1])  # round-2 header
+
+    def test_callback_unknown_row(self):
+        api = FakeAPI()
+        res = tb.handle_callback(42, "mem:999999:done",
+                                 {"telegram_chat_id": "42"}, api=api)
+        self.assertFalse(res["ok"])
+
+    def test_format_memory_empty_and_rows(self):
+        self.assertIn("Memory khali", tb.format_memory([]))
+        row = tb.memory_mod.begin(42, "firmware")
+        tb.memory_mod.remember(row["id"], ["a"], ["c"], advance=True)
+        out = tb.format_memory([tb.memory_mod.get(row["id"])])
+        self.assertIn("firmware", out)
+        self.assertIn("Round 2", out)
+
+    def test_research_full_appends_channel_section(self):
+        def fake_run(*args, **kwargs):
+            return {"ok": True, "blocked": False, "gate": {},
+                    "diagnostics": [{"key": "gsmarena", "count": 2},
+                                    {"key": "xda", "count": 0}],
+                    "report": {"markdown": "# Brief"}}
+
+        def fake_search(*args, **kwargs):
+            return {"items": [{"channel": "gsmlab",
+                               "url": "https://t.me/s/gsmlab/1",
+                               "excerpt": "firmware news"}],
+                    "channels": ["gsmlab"], "failed": []}
+
+        with mock.patch.object(tb.orchestrator, "run", fake_run), \
+                mock.patch.object(tb.channels_mod, "search_posts", fake_search):
+            out = tb.research_full("firmware", config.load(), save=False, live=False)
+        self.assertTrue(out["ok"])
+        self.assertIn("Telegram Channels", out["markdown"])
+        self.assertIn("https://t.me/s/gsmlab/1", out["markdown"])
+        self.assertEqual(out["sources"], ["gsmarena"])  # sirf count > 0
+
+    def test_research_full_skip_lists_reach_channels(self):
+        seen = {}
+
+        def fake_search(query, channels_list=None, cfg=None, limit=8, **kw):
+            seen["channels"] = channels_list
+            return {"items": [], "channels": channels_list or [], "failed": []}
+
+        with mock.patch.object(tb.orchestrator, "run",
+                               lambda *a, **k: {"ok": True, "blocked": False,
+                                                "gate": {}, "diagnostics": [],
+                                                "report": {"markdown": "x"}}), \
+                mock.patch.object(tb.channels_mod, "search_posts", fake_search):
+            tb.research_full("q", config.load(), skip_channels=["skipme"],
+                             save=False, live=False)
+        self.assertNotIn("skipme", seen["channels"])
 
 
 if __name__ == "__main__":

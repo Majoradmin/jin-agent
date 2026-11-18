@@ -236,7 +236,8 @@ def format_deep(query: str = "") -> str:
         if q:
             link = url.replace("{q}", q)
         else:
-            link = url.split("?")[0].rstrip("/") or url
+            base = url.split("?")[0].replace("{q}", "")
+            link = base if base.endswith("/") else base
         lines.append(f"• {name}")
         lines.append(f"  {link}")
         lines.append(f"  {note}")

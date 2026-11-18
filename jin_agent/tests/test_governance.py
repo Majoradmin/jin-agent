@@ -24,7 +24,7 @@ def setUpModule():
 
 class TestRelease(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(VERSION, "2.7.0")
+        self.assertEqual(VERSION, "2.8.0")
 
     def test_required_files_exist(self):
         for rel in ("README.md", "PHASES.md", "run.bat", "__init__.py", "__main__.py",
@@ -108,8 +108,8 @@ class TestBoundaries(unittest.TestCase):
         self.assertNotIn('"0.0.0.0"', src)
 
     def test_adapter_and_register_counts(self):
-        self.assertEqual(len(adapters.ADAPTERS), 26)
-        self.assertEqual(len(policy.register()), 32)
+        self.assertEqual(len(adapters.ADAPTERS), 27)
+        self.assertEqual(len(policy.register()), 33)
 
     def test_onion_fetch_prohibited_in_code(self):
         self.assertFalse(policy.check_url("http://abcdefghijklmnop.onion/x")[0])

@@ -1,2 +1,2 @@
-requests==2.34.2
+# JIN Agent runtime deps (stdlib-only core; PySocks sirf optional SOCKS proxy)
 PySocks==1.7.1

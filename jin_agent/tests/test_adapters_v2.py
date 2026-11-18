@@ -292,14 +292,15 @@ class TestAdaptersMocked(unittest.TestCase):
 
 class TestRegistryAndSafety(unittest.TestCase):
     def test_adapter_and_register_counts(self):
-        self.assertEqual(len(adapters.ADAPTERS), 26)
-        self.assertEqual(len(policy.register()), 32)
+        self.assertEqual(len(adapters.ADAPTERS), 27)
+        self.assertEqual(len(policy.register()), 33)
 
     def test_new_hosts_allowlisted(self):
         for url in ("https://www.reddit.com/r/android/search.json",
                     "https://en.wikipedia.org/w/api.php",
                     "https://www.wikidata.org/w/api.php",
                     "https://archive.org/wayback/available?url=x",
+                    "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
                     "https://web.archive.org/cdx/search/cdx?url=x",
                     "https://services.nvd.nist.gov/rest/json/cves/2.0",
                     "https://api.search.brave.com/res/v1/web/search?q=x",
@@ -358,6 +359,81 @@ class TestRegistryAndSafety(unittest.TestCase):
         ratelimit.note_success("example.com")
         self.assertEqual(ratelimit.blocked_for("example.com"), 0)
         ratelimit.reset()
+
+
+class TestPubMedAndAhmia(unittest.TestCase):
+    """P29: deep-web database (PubMed) + onion link-only index (Ahmia)."""
+
+    ESEARCH = json.dumps({"esearchresult": {"count": "2", "idlist": ["111", "222"]}})
+    ESUMMARY = json.dumps({"result": {
+        "111": {"title": "Firmware repair in mobile SoCs",
+                "pubdate": "2026/10/01", "fulljournalname": "J. Repair Eng."},
+        "222": {"title": "Chipset security bulletin",
+                "pubdate": "2026/09/15", "fulljournalname": "Security Rev."},
+    }})
+
+    def test_parse_pubmed(self):
+        items = adapters.parse_pubmed(self.ESEARCH, self.ESUMMARY)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["url"], "https://pubmed.ncbi.nlm.nih.gov/111/")
+        self.assertEqual(items[0]["source_key"], "pubmed")
+        self.assertTrue(all(i["trust"] >= 0.8 for i in items))
+
+    def test_parse_pubmed_no_ids(self):
+        self.assertEqual(adapters.parse_pubmed('{"esearchresult":{"idlist":[]}}', "{}"), [])
+        self.assertEqual(adapters.parse_pubmed("not json", "not json"), [])
+
+    def test_pubmed_adapter_uses_fetch(self):
+        def fake_fetch(url, cfg=None, extra_hosts=()):
+            if "esearch" in url:
+                return self.ESEARCH
+            if "esummary" in url:
+                return self.ESUMMARY
+            raise ValueError("unexpected url " + str(url))
+
+        a = adapters.BY_KEY["pubmed"]
+        with mock.patch.object(adapters, "fetch", fake_fetch):
+            items = a.search("firmware repair", cfg=config.load())
+        self.assertEqual(len(items), 2)
+        self.assertIn("eutils.ncbi.nlm.nih.gov", a.last_fetch["url"])
+
+    def test_pubmed_adapter_empty_result_makes_one_call_only(self):
+        calls = []
+
+        def fake_fetch(url, cfg=None, extra_hosts=()):
+            calls.append(url)
+            return '{"esearchresult":{"idlist":[]}}'
+
+        a = adapters.BY_KEY["pubmed"]
+        with mock.patch.object(adapters, "fetch", fake_fetch):
+            self.assertEqual(a.search("qqq zzz", cfg=config.load()), [])
+        self.assertEqual(len(calls), 1)
+
+    def test_ahmia_link_only_dark_query(self):
+        a = adapters.BY_KEY["ahmia"]
+        items = a.search("dark web onion markets", cfg=config.load())
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["link_only"])
+        self.assertIn("ahmia.fi/search/?q=", items[0]["url"])
+        self.assertIn(".onion", items[0]["excerpt"])
+        self.assertIsNone(a.last_fetch)  # koi fetch nahi hua
+
+    def test_ahmia_quiet_for_normal_query(self):
+        self.assertEqual(adapters.BY_KEY["ahmia"].search("firmware update",
+                                                         cfg=config.load()), [])
+
+    def test_ahmia_off_when_tor_disabled(self):
+        cfg = config.load()
+        cfg["tor_mode"] = "off"
+        self.assertEqual(adapters.BY_KEY["ahmia"].search("dark web", cfg=cfg), [])
+
+    def test_run_skip_sources(self):
+        cfg = config.load()
+        with mock.patch.object(adapters, "ADAPTERS", [
+                adapters.BY_KEY["pubmed"], adapters.BY_KEY["arxiv"]]):
+            items, diag = adapters.run("x", keys=["pubmed", "arxiv"], cfg=cfg,
+                                       offline=True, skip=["pubmed"])
+        self.assertEqual([d["key"] for d in diag], ["arxiv"])
 
 
 if __name__ == "__main__":

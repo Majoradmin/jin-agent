@@ -136,5 +136,21 @@ class TestConfig(unittest.TestCase):
         config.save({"tor_mode": "links_only", "llm": {"provider": "off", "model": "", "key": ""}})
 
 
+class TestDarkWebGate(unittest.TestCase):
+    def test_wants_onion_true_for_dark_terms(self):
+        for q in ("dark web markets", "deep web database", "onion links",
+                  "tor hidden service", "ahmia"):
+            self.assertTrue(policy.wants_onion(q), q)
+
+    def test_wants_onion_false_for_normal(self):
+        for q in ("android firmware update", "mediatek scatter file", ""):
+            self.assertFalse(policy.wants_onion(q), q)
+
+    def test_dark_query_gate_note_in_classify(self):
+        gate = policy.classify("dark web onion search")
+        self.assertEqual(gate["verdict"], "allowed")
+        self.assertIn("never fetched", gate["note"])
+
+
 if __name__ == "__main__":
     unittest.main()
