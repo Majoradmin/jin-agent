@@ -151,3 +151,48 @@ def polish(cfg: dict, text: str, timeout: float = 30) -> str | None:
                "Rewrite this research note in professional Roman Urdu, 2 sentences, "
                "adding no facts: " + str(text)[:1500], timeout)
     return out["text"][:600] if out["ok"] else None
+
+
+def related_queries(cfg: dict, query: str, n: int = 3, timeout: float = 30) -> list[str]:
+    """LLM se related research sub-queries generate karo (fallback: []).
+
+    User ka /research flow "related round" isi se banta hai: "nahi mila" →
+    LLM related queries → naye queries engines + channels par search.
+    """
+    if not resolve(cfg)["enabled"]:
+        return []
+    n = max(1, int(n or 3))
+    prompt = ("User research question: " + str(query)[:1200] +
+              "\nGenerate " + str(n) + " closely related research sub-queries "
+              "(different angles/magnitudes of the same topic). "
+              "Return ONLY a JSON array of short strings.")
+    out = chat(cfg, SYSTEM_RESEARCH, prompt, timeout)
+    if not out["ok"]:
+        return []
+    text = out["text"].strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:]
+    start, end = text.find("["), text.rfind("]")
+    if start < 0 or end <= start:
+        return []
+    try:
+        arr = json.loads(text[start:end + 1])
+    except ValueError:
+        return []
+    if not isinstance(arr, list):
+        return []
+    out_q = [str(x).strip() for x in arr if str(x).strip()]
+    return out_q[:n]
+
+
+def translate_text(cfg: dict, text: str, timeout: float = 30) -> str:
+    """Source content ko Roman Urdu me translate karo (facts/URLs mat badlo)."""
+    if not resolve(cfg)["enabled"]:
+        return ""
+    out = chat(cfg, SYSTEM_RESEARCH,
+               "Translate this source content into natural Roman Urdu (Roman Urdu + English "
+               "technical terms), changing NOTHING except language: " + str(text)[:1500],
+               timeout)
+    return out["text"][:1200] if out["ok"] else ""

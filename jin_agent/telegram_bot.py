@@ -28,7 +28,7 @@ try:
 except ImportError:
     _SOCKS_AVAILABLE = False
 
-from . import (VERSION, channels as channels_mod, config, orchestrator,
+from . import (VERSION, channels as channels_mod, config, llm, orchestrator,
                policy, searchmemory as memory_mod, util)
 
 SEND_CHUNK_LIMIT = 4096
@@ -555,7 +555,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
 
 
 def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
-                   row_id: int | None = None, advance: bool = False) -> dict:
+                   row_id: int | None = None, advance: bool = False,
+                   related: bool = False) -> dict:
     """Research chalao -> report chunks -> 'mil gaya?' buttons + memory."""
     global _stop_research
     _stop_research = False
@@ -583,7 +584,20 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
         if _stop_research:
             return
         try:
-            if research is None:
+            if related and research is None:
+                # User ne "Nahi mila" maula -> LLM related queries -> un se
+                # naye sources/channels dhoondho.
+                queries = llm.related_queries(cfg, query, n=3) or [query]
+                final = None
+                for q in queries:
+                    if _stop_research:
+                        return
+                    final = research_full(q, cfg, skip_sources=used_sources,
+                                          skip_channels=used_channels)
+                    if str((final or {}).get("markdown") or "").strip():
+                        break
+                result_box[0] = final
+            elif research is None:
                 result_box[0] = research_full(
                     query, cfg, skip_sources=used_sources,
                     skip_channels=used_channels)
@@ -614,7 +628,14 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
     if not md.strip():
         md = "❌ Report khali rahi. /research dobara try karein."
 
-    chunks = split_text(md)
+    final_md = md
+    try:
+        translated = llm.translate_text(cfg, md)
+        if translated:
+            final_md = translated  # foreign sources -> Roman Urdu report
+    except Exception:
+        final_md = md
+    chunks = split_text(final_md)
     for chunk in chunks:
         if _stop_research:
             api.send(chat_id, "🛑 Report rok di gayi.")
@@ -672,7 +693,8 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
             memory_mod.reset(row_id)
             row = memory_mod.get(row_id) or row
         return _send_research(chat_id, row.get("query") or "", cfg=cfg, api=api,
-                              research=research, row_id=row_id, advance=True)
+                              research=research, row_id=row_id, advance=True,
+                              related=True)
     if action == "reset":
         memory_mod.reset(row_id)
         api.send(chat_id, "♻️ Memory reset - sab sources dobara try honge.")
@@ -717,6 +739,22 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
         for u in updates:
             mid = int((u.get("update_id") or 0))
             last_id = max(last_id, mid)
+            cb = u.get("callback_query") or {}
+            if cb:
+                # Inline button: ✅ Mil gaya / 🔁 Nahi mila - aur dhondo
+                try:
+                    bot_chat = (cb.get("message") or {}).get("chat") or {}
+                    cb_chat_id = int((bot_chat or {}).get("id") or 0)
+                    if is_owner(cb_chat_id, cfg):
+                        _threading.Thread(
+                            target=handle_callback,
+                            args=(cb_chat_id, str(cb.get("data") or "")),
+                            kwargs={"cfg": cfg, "api": api},
+                            daemon=True,
+                        ).start()
+                except Exception:
+                    time.sleep(2)
+                continue
             msg = u.get("message") or {}
             chat = msg.get("chat") or {}
             chat_id = int(chat.get("id") or 0)

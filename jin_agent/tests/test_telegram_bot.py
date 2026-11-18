@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from jin_agent import config, store, telegram_bot as tb
+from jin_agent import config, llm, store, telegram_bot as tb
 
 
 def setUpModule():
@@ -288,6 +288,59 @@ class TestDeepWebAndCallbacks(unittest.TestCase):
             tb.research_full("q", config.load(), skip_channels=["skipme"],
                              save=False, live=False)
         self.assertNotIn("skipme", seen["channels"])
+
+
+class TestRelatedSearchAndTranslation(unittest.TestCase):
+    """P29 phase 2 (user option C): related queries + Roman Urdu translation."""
+
+    def _llm_cfg(self):
+        return {"llm": {"provider": "custom", "model": "llama-3.3-70b-versatile",
+                        "key": "k", "endpoint": "https://api.groq.com/openai/v1"}}
+
+    def test_llm_related_queries_disabled_returns_empty(self):
+        self.assertEqual(llm.related_queries(config.load(), "firmware"), [])
+
+    def test_llm_related_queries_parses_json_array(self):
+        fake_chat = mock.MagicMock(return_value={"ok": True, "text": '["firmware unlock", "kernel panic fix"]'})
+        with mock.patch.object(llm, "chat", fake_chat):
+            qs = llm.related_queries(self._llm_cfg(), "firmware")
+        self.assertEqual(qs, ["firmware unlock", "kernel panic fix"])
+
+    def test_llm_related_queries_bad_json_returns_empty(self):
+        with mock.patch.object(llm, "chat", mock.MagicMock(
+                return_value={"ok": True, "text": "nahi samajh aaya"})):
+            self.assertEqual(llm.related_queries(self._llm_cfg(), "x"), [])
+
+    def test_llm_translate_text_disabled_returns_empty(self):
+        self.assertEqual(llm.translate_text(config.load(), "hello world"), "")
+
+    def test_llm_translate_text_returns_translation(self):
+        with mock.patch.object(llm, "chat", mock.MagicMock(
+                return_value={"ok": True, "text": "Firmware unlock ka solution"})):
+            self.assertEqual(llm.translate_text(self._llm_cfg(), "Firmware unlock ka solution"),
+                             "Firmware unlock ka solution")
+
+    def test_related_callback_more_searches_related_queries(self):
+        row = tb.memory_mod.begin(42, "firmware unlock")
+        calls = []
+
+        def fake_research_full(q, cfg=None, save=True, live=True,
+                                skip_sources=None, skip_channels=None):
+            calls.append(q)
+            return {"ok": True, "markdown": "# Related: " + q,
+                    "sources": ["brave"], "channels": ["chA"]}
+
+        with mock.patch.object(tb.llm, "related_queries",
+                                lambda cfg, query, n=3, timeout=30: ["rel1", "rel2"]), \
+             mock.patch.object(tb, "research_full", fake_research_full):
+            api = FakeAPI()
+            res = tb.handle_callback(42, f"mem:{row['id']}:more",
+                                    {"telegram_chat_id": "42"}, api=api)
+        self.assertTrue(res["ok"])
+        # pehla related query mila -> loop break -> final report = "rel1"
+        self.assertEqual(calls, ["rel1"])
+        joined = "\n".join(t for _, t, _ in api.sent)
+        self.assertIn("Related: rel1", joined)
 
 
 if __name__ == "__main__":
