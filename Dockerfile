@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Project code
 COPY jin_agent/ ./jin_agent/
+# bot.py bhi — kuch hosts (FadeHost) default start command 'python bot.py' chalate hain
+COPY bot.py ./
 
 # Data folder (config will be set via environment variables)
 RUN mkdir -p /app/jin_agent/data/reports /app/jin_agent/data/backups

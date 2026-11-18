@@ -36,7 +36,11 @@ def _log(msg: str) -> None:
         with open(p, "a", encoding="utf-8", newline="\n") as fh:
             fh.write(line)
     except OSError:
-        pass
+        # Log dir na likhne par supervisor bhi anahq na ho.
+        try:
+            sys.stderr.write(line)
+        except Exception:
+            pass
 
 
 def _python() -> str:
@@ -73,31 +77,46 @@ def run(interval: int = 10, max_backoff: int = 300, stop: threading.Event | None
     interval = max(2, int(interval))
     stop = stop or threading.Event()
     delay = interval
+    proc = None
     _log("watchdog: start (interval=%ds, max_backoff=%ds)" % (interval, max_backoff))
-    while not stop.is_set():
-        try:
-            proc = spawn()
-        except Exception as exc:  # spawn failure bhi handle
-            _log("watchdog: spawn failed: %s: %s" % (type(exc).__name__, exc))
-        else:
-            _log("watchdog: bot started pid=%s" % getattr(proc, "pid", "?"))
+    try:
+        while not stop.is_set():
             try:
-                code = proc.wait()
-            except KeyboardInterrupt:
+                proc = spawn()
+            except Exception as exc:  # spawn failure bhi handle
+                _log("watchdog: spawn failed: %s: %s" % (type(exc).__name__, exc))
+                proc = None
+            else:
+                _log("watchdog: bot started pid=%s" % getattr(proc, "pid", "?"))
+                started = time.monotonic()
                 try:
-                    proc.terminate()
-                except Exception:
-                    pass
-                _log("watchdog: interrupted, bot terminated")
-                stop.set()
-                break
-            _log("watchdog: bot exited code=%s" % code)
-        # restart wait (stop-aware)
-        waited = 0
-        while waited < delay and not stop.is_set():
-            time.sleep(1)
-            waited += 1
-        delay = min(max_backoff, max(interval, delay * 2))
+                    code = proc.wait()
+                except KeyboardInterrupt:
+                    _log("watchdog: interrupted, bot terminated")
+                    stop.set()
+                    break
+                ran = time.monotonic() - started
+                _log("watchdog: bot exited code=%s (ran %.0fs)" % (code, ran))
+                # Lambi chali run = healthy; backoff reset karo (warna ek purani
+                # crash ke baad agli crash 300s tak restart nahi hoti).
+                if ran >= 60:
+                    delay = interval
+            # restart wait (stop-aware)
+            waited = 0
+            while waited < delay and not stop.is_set():
+                time.sleep(1)
+                waited += 1
+            delay = min(max_backoff, max(interval, delay * 2))
+    finally:
+        # Ctrl+C / crash par child orphan na rahe.
+        p = proc
+        poll = getattr(p, "poll", None)
+        if p is not None and callable(poll) and poll() is None:
+            try:
+                p.terminate()
+                _log("watchdog: child terminate")
+            except Exception:
+                pass
     _log("watchdog: stop")
     return 0
 

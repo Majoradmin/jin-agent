@@ -32,6 +32,11 @@ except ImportError:
 from . import (VERSION, channels as channels_mod, config, llm, orchestrator,
                policy, searchmemory as memory_mod, util)
 
+
+class BotAPIError(RuntimeError):
+    """Telegram ne ok:false wala jawab bheja (409 conflict, 429 flood, 400)."""
+
+
 SEND_CHUNK_LIMIT = 4096
 POLL_TIMEOUT = 30
 POLL_OFFSET = 0
@@ -276,7 +281,19 @@ def _make_opener(cfg: dict | None = None):
     cfg = cfg or config.load()
     ptype = str(cfg.get("proxy_type") or "").strip().lower()
     phost = str(cfg.get("proxy_host") or "").strip()
-    pport = int(cfg.get("proxy_port") or 0)
+    try:
+        pport = int(cfg.get("proxy_port") or 0)
+    except (TypeError, ValueError):
+        print(f"[bot] proxy_port ghalat ({cfg.get('proxy_port')!r}) — direct connection",
+              flush=True)
+        pport = 0
+
+    if phost and pport and ptype not in ("socks5", "http"):
+        # Unsupported proxy type (socks4/socks5h/typo) — pehle silent direct tha,
+        # region-block me matlab connection bina satarkhuseed direct jati thi.
+        print(f"[bot] proxy_type '{ptype}' supported nahi (socks5/http) — direct connection",
+              flush=True)
+        return urllib.request.build_opener()
 
     if phost and pport and ptype == "socks5" and _SOCKS_AVAILABLE:
         puser = cfg.get("proxy_user") or None
@@ -287,7 +304,15 @@ def _make_opener(cfg: dict | None = None):
         return urllib.request.build_opener()
 
     if phost and pport and ptype == "http":
-        proxy_url = f"http://{phost}:{pport}"
+        puser = cfg.get("proxy_user") or ""
+        ppass = cfg.get("proxy_pass") or ""
+        creds = ""
+        if puser:
+            creds = urllib.parse.quote(str(puser), safe="")
+            if ppass:
+                creds += ":" + urllib.parse.quote(str(ppass), safe="")
+            creds += "@"
+        proxy_url = f"http://{creds}{phost}:{pport}"
         proxy_handler = urllib.request.ProxyHandler({
             "http": proxy_url, "https": proxy_url
         })
@@ -303,35 +328,44 @@ def _api(token: str, cfg: dict | None = None):
     class _API:
         base = "https://api.telegram.org/bot" + str(token)
 
+        def _post(self, path: str, payload: dict, timeout: int) -> dict:
+            body = json.dumps(payload).encode()
+            req = urllib.request.Request(
+                self.base + path, data=body,
+                headers={"Content-Type": "application/json"}, method="POST")
+            with opener.open(req, timeout=timeout) as r:
+                return json.loads(r.read().decode())
+
+        def _checked(self, res: dict, what: str) -> dict:
+            # Telegram ok:false (409 conflict, 429 flood, 400) pehle ignore hota
+            # tha -> generic exception -> backoff. Ab saaf, named error.
+            if not res.get("ok"):
+                code = res.get("error_code")
+                desc = str(res.get("description") or "")
+                raise BotAPIError(f"{what}: {code} {desc}".strip())
+            return res
+
         def send(self, chat_id: int, text: str, buttons=None) -> dict:
             payload = {
                 "chat_id": int(chat_id), "text": str(text),
                 "disable_web_page_preview": True}
             if buttons:
                 payload["reply_markup"] = {"inline_keyboard": buttons}
-            body = json.dumps(payload).encode()
-            req = urllib.request.Request(
-                self.base + "/sendMessage", data=body,
-                headers={"Content-Type": "application/json"}, method="POST")
-            with opener.open(req, timeout=60) as r:
-                return json.loads(r.read().decode())
+            return self._checked(self._post("/sendMessage", payload, 60), "sendMessage")
 
         def answer_callback(self, callback_id: str, text: str = "") -> dict:
-            body = json.dumps({"callback_query_id": str(callback_id),
-                               "text": str(text)[:200]}).encode()
-            req = urllib.request.Request(
-                self.base + "/answerCallbackQuery", data=body,
-                headers={"Content-Type": "application/json"}, method="POST")
-            with opener.open(req, timeout=30) as r:
-                return json.loads(r.read().decode())
+            payload = {"callback_query_id": str(callback_id),
+                       "text": str(text)[:200]}
+            return self._checked(self._post("/answerCallbackQuery", payload, 30),
+                                 "answerCallbackQuery")
 
         def get_updates(self, offset: int, timeout: int = POLL_TIMEOUT) -> list[dict]:
-            body = json.dumps({"offset": int(offset), "timeout": int(timeout)}).encode()
-            req = urllib.request.Request(
-                self.base + "/getUpdates", data=body,
-                headers={"Content-Type": "application/json"}, method="POST")
-            with opener.open(req, timeout=timeout + 10) as r:
-                return json.loads(r.read().decode()).get("result") or []
+            res = self._checked(
+                self._post("/getUpdates",
+                           {"offset": int(offset), "timeout": int(timeout)},
+                           timeout + 10),
+                "getUpdates")
+            return res.get("result") or []
 
     return _API()
 
@@ -355,9 +389,9 @@ def research_markdown(query: str, cfg: dict | None = None, save: bool = True,
         return f"❌ Research error: {type(exc).__name__}: {util.truncate(str(exc), 300)}"
 
 
-def format_channel_section(items: list[dict]) -> str:
+def format_channel_section(items: list[dict], failed: list | None = None) -> str:
     """Channel hits ko report ke aakhir me ek chhota section banao."""
-    if not items:
+    if not items and not failed:
         return ""
     lines = ["## Telegram Channels (aap ke saved)", ""]
     for i, item in enumerate(items[:8], 1):
@@ -365,6 +399,11 @@ def format_channel_section(items: list[dict]) -> str:
                              200).replace("\n", " ").strip()
         lines.append(f"{i}. @{item.get('channel')} — {text}")
         lines.append(f"   {item.get('url')}")
+    if failed:
+        # Pehle errors chhupaye jate the — user ko report ke baghair koi warning
+        # nahi milta tha.
+        lines.append("")
+        lines.append("⚠️ Channel search fail: " + ", ".join(str(c) for c in failed[:5]))
     return "\n".join(lines)
 
 
@@ -390,8 +429,10 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
         out = f_web.result(timeout=180)
         try:
             tg = f_tg.result(timeout=60)
-        except Exception:
-            tg = {"items": [], "channels": saved, "failed": []}
+        except Exception as exc:
+            print(f"[bot] channel search fail ({type(exc).__name__}: {exc})", flush=True)
+            tg = {"items": [], "channels": saved, "failed": list(saved),
+                  "error": f"{type(exc).__name__}: {util.truncate(str(exc), 200)}"}
     except Exception as exc:
         return {"ok": False, "sources": [], "channels": [],
                 "markdown": f"❌ Research error: {type(exc).__name__}: "
@@ -406,7 +447,7 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
     md = str((out.get("report") or {}).get("markdown")
              or (out.get("report") or {}).get("text")
              or "# Report nahi bana pa raha")
-    section = format_channel_section(tg.get("items") or [])
+    section = format_channel_section(tg.get("items") or [], tg.get("failed"))
     if section:
         md = md.rstrip() + "\n\n" + section + "\n"
     sources = [str(d.get("key")) for d in (out.get("diagnostics") or [])
@@ -668,10 +709,17 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
 
 
 def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
-                    research=None) -> dict:
+                    research=None, callback_id: str = "") -> dict:
     """Inline button: ✅ Mil gaya / 🔁 Nahi mila - aur dhondo."""
     cfg = cfg or config.load()
     api = api or _api(str(cfg.get("telegram_bot_token") or ""), cfg)
+    # Telegram spinner rokne ke liye callback ka jawab lazmi bhejo (warna button
+    # hamesha "loading" par atka dikhta hai).
+    if callback_id:
+        try:
+            api.answer_callback(callback_id)
+        except Exception:
+            pass
     row_id, action = parse_callback(data)
     if not row_id:
         api.send(chat_id, "Purana button hai. Naya /research karein.")
@@ -717,17 +765,35 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
     stop = stop or type("S", (), {"is_set": lambda self: False})()
 
     # --- STARTUP: purani queue clear karo (restart ke baad loop band) ---
-    # Telegram ki pending queue ko skip karo: timeout=0 se sab pending updates
-    # ek baar fetch karo aur unka offset aage le jao, process mat karo.
+    # Telegram ki pending queue ko skip karo: offset se shuru kar ke tak update
+    # na aaye, process mat karo. Drain fail hone par bhi offset aage rakhte hain
+    # (warna restart ke baad saari pending updates dobara process hoti thin).
     try:
-        _drain = api.get_updates(0, 0) or []
-        if _drain:
-            offset = int((_drain[-1].get("update_id") or 0)) + 1
-        else:
-            offset = int(POLL_OFFSET)
-    except Exception:
         offset = int(POLL_OFFSET)
+        drained = 0
+        while True:
+            _drain = api.get_updates(offset, 0) or []
+            if not _drain:
+                break
+            drained += len(_drain)
+            offset = int((_drain[-1].get("update_id") or 0)) + 1
+            if drained > 10000:
+                print("[bot] startup drain: 10000+ pending update rok diye", flush=True)
+                break
+        if drained:
+            print(f"[bot] startup drain: {drained} pending update(s) skip", flush=True)
+    except Exception as exc:
+        offset = int(POLL_OFFSET)
+        print(f"[bot] startup drain fail ({type(exc).__name__}: {exc}); "
+              f"offset={offset} se shuru", flush=True)
     # --- END STARTUP DRAIN ---
+
+    # Chat allowlist: unset = allow-all (first-run). Production me ye amnitarian
+    # khatra hai — is liye shuru me lazmi khabar (is_owner ka raw behaviour
+    # allow-all hi rehta hai, tests bhi wahi assert karte hain).
+    if not str(cfg.get("telegram_chat_id") or "").strip():
+        print("[bot] KHABARDAAR: telegram_chat_id unset — allow-all mode. "
+              "Production me TELEGRAM_CHAT_ID set karein.", flush=True)
 
     # Network failure par exponential backoff + visible log. Purana code har
     # failure par 5s sleep karta tha bina log ke — region-block (api.telegram.org
@@ -771,7 +837,8 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                         _threading.Thread(
                             target=handle_callback,
                             args=(cb_chat_id, str(cb.get("data") or "")),
-                            kwargs={"cfg": cfg, "api": api},
+                            kwargs={"cfg": cfg, "api": api,
+                                    "callback_id": str(cb.get("id") or "")},
                             daemon=True,
                         ).start()
                 except Exception:
@@ -803,7 +870,8 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 ).start()
             except Exception:
                 time.sleep(2)
-        offset = last_id + 1
+        if updates:
+            offset = last_id + 1
         if stop.is_set():
             break
 

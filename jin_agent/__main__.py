@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import (VERSION, alerts, config, evaluator, llm, orchestrator,
@@ -71,7 +72,7 @@ def cmd_schedule(args):
 
 def cmd_serve(args):
     from . import server
-    server.serve(args.port, args.open)
+    server.serve(args.port, args.open, host=args.host)
     return 0
 
 
@@ -186,7 +187,9 @@ def build_parser():
     e.set_defaults(fn=cmd_eval)
     sc = sub.add_parser("schedule"); sc.add_argument("--live", action="store_true")
     sc.add_argument("--poll", type=int, default=20); sc.set_defaults(fn=cmd_schedule)
-    sv = sub.add_parser("serve"); sv.add_argument("--port", type=int, default=8766)
+    sv = sub.add_parser("serve"); sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8766")))
+    sv.add_argument("--host", default=None,
+                    help="bind host — default JIN_AGENT_HOST env ya 127.0.0.1 (loopback)")
     sv.add_argument("--open", action="store_true"); sv.set_defaults(fn=cmd_serve)
     sub.add_parser("selftest").set_defaults(fn=cmd_selftest)
     c = sub.add_parser("classify"); c.add_argument("text"); c.set_defaults(fn=cmd_classify)

@@ -187,10 +187,13 @@ def load() -> dict:
 def public(cfg: dict | None = None) -> dict:
     """Key-free view for the UI and API."""
     c = copy.deepcopy(cfg or load())
-    c.setdefault("llm", {})["key"] = "***" if c["llm"].get("key") else ""
+    c.setdefault("llm", {})
+    c["llm"]["key"] = "***" if c["llm"].get("key") else ""
     c["telegram_bot_token"] = "***" if c.get("telegram_bot_token") else ""
     for key in ("brave_key", "bing_key", "github_token"):
         c[key] = "***" if c.get(key) else ""
+    # Proxy credentials bhi secret hain — GET /api/settings pe leak na hon.
+    c["proxy_pass"] = "***" if c.get("proxy_pass") else ""
     return c
 
 
