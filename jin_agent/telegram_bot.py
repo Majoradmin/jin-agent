@@ -56,12 +56,22 @@ HELP_TEXT = (
 
 # Sirf public preview (t.me/s + t.me/<handle>) - login/userbot nahi.
 TG_SEARCH_ENGINES = [
-    ("Searchee", "SearcheeBot", "Telegram channel directory (40 categories, inline mode)"),
-    ("MotherSearch", "MotherSearchBot", "8M+ channels / 10B+ posts - channels, topics, content"),
+    ("MotherSearch", "MotherSearchBot", "8M+ channels / 10B+ posts — sab se bara index"),
+    ("Searchee", "SearcheeBot", "40 categories, inline mode — fast channel dhundne ke liye"),
     ("oSearch", "oSearchBot", "Channels, groups aur content search"),
+    ("GlobalSearch", "GlobalSearchBot", "Multi-language search"),
+    ("TgSearch", "tgsearchrobot", "Fast inline channel lookup"),
 ]
-TG_ENGINES_NOTE = ("MySearch, Argo Search, JISOU, Kuaisou bhi majood hain - "
-                   "Telegram app ke search box me naam likh kar mil jate hain.")
+TG_ENGINES_WEB = [
+    ("TGStat", "https://tgstat.com", "Sab se bada — analytics + keyword + posts"),
+    ("Telemetr.io", "https://telemetr.io", "Channel ranking + competitor analysis"),
+    ("Telegago", "https://telegago.com", "Google operators support — precise search"),
+    ("TelegramChannels.me", "https://telegramchannels.me", "Category browse + keyword"),
+    ("Tlgrm.eu", "https://tlgrm.eu", "EU-based fast channel search"),
+    ("TLG.gr", "https://tlg.gr", "Quick no-frills search"),
+    ("TStat.net", "https://tstat.net", "Advanced filter + spam detection"),
+]
+TG_ENGINES_NOTE = ("Telegram app ke search bar mein: MySearch, Argo Search, JISOU bhi mil jate hain.")
 
 # Deep/dark web: {q} = URL-encoded keyword. Onion kabhi fetch nahi hota.
 DEEP_ENGINES = [
@@ -203,10 +213,16 @@ def format_tg_results(res: dict) -> str:
 
 
 def format_engines() -> str:
-    lines = ["🔎 Telegram search engines (1-click links):", ""]
+    lines = ["🔎 Telegram Search Engines", ""]
+    lines.append("── Telegram Bots (app ke andar) ──")
     for name, handle, desc in TG_SEARCH_ENGINES:
         lines.append(f"• {name} — {desc}")
         lines.append(f"  https://t.me/{handle}")
+    lines.append("")
+    lines.append("── Web Search Engines ──")
+    for name, url, desc in TG_ENGINES_WEB:
+        lines.append(f"• {name} — {desc}")
+        lines.append(f"  {url}")
     lines.append("")
     lines.append(TG_ENGINES_NOTE)
     return "\n".join(lines)
