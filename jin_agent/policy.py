@@ -20,6 +20,16 @@ DARK_WEB_RULE = (
     "they are never fetched, crawled or resolved by this agent."
 )
 
+# Sirf in queries par onion index activate hota hai (warna noise).
+DARK_QUERY_RE = re.compile(
+    r"\b(dark\s?web|deep\s?web|onion|tor|ahmia|hidden\s?service)\b", re.I)
+
+
+def wants_onion(query: str) -> bool:
+    """Query dark/deep web related hai? (Ahmia link-only activation)."""
+    return bool(DARK_QUERY_RE.search(str(query or "")))
+
+
 # Adapter hosts only. LLM loopback endpoints are handled separately in llm.py.
 ALLOWED_HOSTS = frozenset({
     "news.google.com", "hn.algolia.com", "api.github.com", "github.com",
@@ -35,6 +45,8 @@ ALLOWED_HOSTS = frozenset({
     "www.reddit.com", "reddit.com", "en.wikipedia.org", "www.wikidata.org",
     "archive.org", "web.archive.org", "services.nvd.nist.gov",
     "api.search.brave.com", "api.bing.microsoft.com",
+    # P29 deep web (indexed databases, no login)
+    "eutils.ncbi.nlm.nih.gov",
 })
 
 # key, name, url, tier, category, trust, auto_fetch, notes
@@ -67,7 +79,8 @@ SOURCE_REGISTER = [
     {"key": "crossref", "name": "Crossref", "url": "https://api.crossref.org/works", "tier": "T3", "category": "Science", "trust": 0.85, "auto": True, "notes": "Legal DOI metadata, no key."},
     {"key": "arxiv", "name": "arXiv", "url": "https://export.arxiv.org/api/query", "tier": "T3", "category": "Science", "trust": 0.9, "auto": True, "notes": "Legal preprints, Atom API, no key."},
     {"key": "telegram-public", "name": "Telegram Public Preview", "url": "https://t.me/s/", "tier": "T2", "category": "Telecom", "trust": 0.4, "auto": False, "notes": "Only public channels explicitly added in Settings. No login, no userbot, no MTProto, no history scrape."},
-    {"key": "ahmia", "name": "Ahmia onion index", "url": "https://ahmia.fi/search/", "tier": "T4", "category": "Custom Watchlist", "trust": 0.5, "auto": False, "notes": DARK_WEB_RULE + " Clearnet index only, links-only."},
+    {"key": "ahmia", "name": "Ahmia onion index", "url": "https://ahmia.fi/search/", "tier": "T4", "category": "Custom Watchlist", "trust": 0.5, "auto": False, "notes": DARK_WEB_RULE + " Ahmia 2026 me JS-only hai, is liye adapter sirf prefilled search link deta hai (fetch nahi)."},
+    {"key": "pubmed", "name": "PubMed (NLM E-utilities)", "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/", "tier": "T1", "category": "Science", "trust": 0.9, "auto": True, "notes": "P29 deep-web database: esearch + esummary JSON, no key, 3 req/sec limit respected."},
     {"key": "patents", "name": "Google Patents", "url": "https://patents.google.com/", "tier": "T3", "category": "Science", "trust": 0.8, "auto": False, "notes": "N/A adapter: no keyless stable API; JS-heavy page. Link-only registry entry, documented in PHASES.md P17."},
     {"key": "virustotal", "name": "VirusTotal", "url": "https://www.virustotal.com/", "tier": "T3", "category": "Security", "trust": 0.9, "auto": False, "notes": "N/A adapter: API key required; no paid/credential dependency allowed (C20)."},
     {"key": "urlscan", "name": "urlscan.io", "url": "https://urlscan.io/", "tier": "T3", "category": "Security", "trust": 0.8, "auto": False, "notes": "N/A adapter: API key / submission writes out of scope for a read-only agent."},

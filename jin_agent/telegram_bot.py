@@ -21,13 +21,15 @@ import time
 import urllib.parse
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 try:
     import socks  # PySocks
     _SOCKS_AVAILABLE = True
 except ImportError:
     _SOCKS_AVAILABLE = False
 
-from . import VERSION, channels as channels_mod, config, orchestrator, util
+from . import (VERSION, channels as channels_mod, config, orchestrator,
+               policy, searchmemory as memory_mod, util)
 
 SEND_CHUNK_LIMIT = 4096
 POLL_TIMEOUT = 30
@@ -35,7 +37,6 @@ POLL_OFFSET = 0
 MAX_COMMAND_LEN = 64
 HELP_TEXT = (
     "Salam! Main aap ka JIN Agent hoon.\n\n"
-    "/start - shuru\n"
     "/research <sawal> - agent research karo aur Roman Urdu report bhej do\n"
     "/stop - chal rahi research rok do\n"
     "/status - agent status\n"
@@ -45,8 +46,11 @@ HELP_TEXT = (
     "/rmchannel <@handle> - channel archive karo\n"
     "/tgsearch <keyword> - saved channels ke ANDAR search\n"
     "/engines - Telegram search engines ke 1-click links\n"
+    "/deep [keyword] - dark/deep web search engines ke links\n"
+    "/memory - pehle use ho chuke sources (rounds)\n"
     "/help - yeh menu\n\n"
-    "Research me LLM (free tier / local) use hoga; policy SAHULAT-SAFE-SERVICE-v1; "
+    "Har report ke baad bot poochta hai: mil gaya ya nahi. 'Nahi mila' par naye "
+    "sources/channels try hote hain (purane skip). Policy SAHULAT-SAFE-SERVICE-v1; "
     "dark web links-only; Telegram public only."
 )
 
@@ -58,6 +62,25 @@ TG_SEARCH_ENGINES = [
 ]
 TG_ENGINES_NOTE = ("MySearch, Argo Search, JISOU, Kuaisou bhi majood hain - "
                    "Telegram app ke search box me naam likh kar mil jate hain.")
+
+# Deep/dark web: {q} = URL-encoded keyword. Onion kabhi fetch nahi hota.
+DEEP_ENGINES = [
+    ("Ahmia (clearnet index)", "https://ahmia.fi/search/?q={q}",
+     "Tor hidden services ka legal index - sirf links"),
+    ("Ahmia (onion mirror)", "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={q}",
+     "Tor browser zaroori - ahmia.fi ne khud verify kiya"),
+    ("PubMed (NLM)", "https://pubmed.ncbi.nlm.nih.gov/?term={q}",
+     "Medical/scientific database (deep web)"),
+    ("OpenAlex", "https://openalex.org/works?search={q}",
+     "Scholarly works database, no login"),
+    ("Crossref", "https://search.crossref.org/?q={q}",
+     "DOI metadata database"),
+    ("Wayback Machine", "https://web.archive.org/web/*/{q}",
+     "Deleted/archived pages"),
+    ("Shodan (IoT search)", "https://www.shodan.io/search?query={q}",
+     "Devices/services index - account chahiye"),
+]
+
 
 
 CMD_RE = re.compile(r"^/([A-Za-z0-9_]{1,20})(?:@[\w_]{1,20})?\s*(.*)$", re.S)
@@ -189,6 +212,42 @@ def format_engines() -> str:
     return "\n".join(lines)
 
 
+def format_deep(query: str = "") -> str:
+    """Dark/deep web engines ke links (onion fetch NAHI hota)."""
+    q = urllib.parse.quote(str(query or "").strip()[:150])
+    lines = ["🕵️ Dark / Deep web search engines:", ""]
+    for name, url, note in DEEP_ENGINES:
+        if q:
+            link = url.replace("{q}", q)
+        else:
+            link = url.split("?")[0].rstrip("/") or url
+        lines.append(f"• {name}")
+        lines.append(f"  {link}")
+        lines.append(f"  {note}")
+    lines.append("")
+    lines.append("⚠️ " + policy.DARK_WEB_RULE)
+    lines.append("Onion site khud kholne ke liye Tor Browser zaroori hai.")
+    return "\n".join(lines)
+
+
+def format_memory(rows: list[dict]) -> str:
+    if not rows:
+        return ("🧠 Memory khali hai. /research chalao ge to bot yaad rakhega "
+                "kaunse engines aur channels use hue, taake agle round me "
+                "wahi cheez dobara na dhoondhi jaye.")
+    lines = ["🧠 Recent research memory:", ""]
+    for row in rows:
+        status = "✅ done" if row.get("status") == "done" else "🔁 active"
+        lines.append(f"• {util.truncate(str(row.get('query') or ''), 90)}")
+        lines.append(f"  Round {row.get('round_no')} · {status} · "
+                     f"{len(row.get('used_sources') or [])} engines · "
+                     f"{len(row.get('used_channels') or [])} channels")
+    lines.append("")
+    lines.append("Sirf 6 latest dikhte hain (DB me sab save hai).")
+    return "\n".join(lines)
+
+
+
 
 def _make_opener(cfg: dict | None = None):
     """
@@ -226,14 +285,26 @@ def _api(token: str, cfg: dict | None = None):
     class _API:
         base = "https://api.telegram.org/bot" + str(token)
 
-        def send(self, chat_id: int, text: str) -> dict:
-            body = json.dumps({
+        def send(self, chat_id: int, text: str, buttons=None) -> dict:
+            payload = {
                 "chat_id": int(chat_id), "text": str(text),
-                "disable_web_page_preview": True}).encode()
+                "disable_web_page_preview": True}
+            if buttons:
+                payload["reply_markup"] = {"inline_keyboard": buttons}
+            body = json.dumps(payload).encode()
             req = urllib.request.Request(
                 self.base + "/sendMessage", data=body,
                 headers={"Content-Type": "application/json"}, method="POST")
             with opener.open(req, timeout=60) as r:
+                return json.loads(r.read().decode())
+
+        def answer_callback(self, callback_id: str, text: str = "") -> dict:
+            body = json.dumps({"callback_query_id": str(callback_id),
+                               "text": str(text)[:200]}).encode()
+            req = urllib.request.Request(
+                self.base + "/answerCallbackQuery", data=body,
+                headers={"Content-Type": "application/json"}, method="POST")
+            with opener.open(req, timeout=30) as r:
                 return json.loads(r.read().decode())
 
         def get_updates(self, offset: int, timeout: int = POLL_TIMEOUT) -> list[dict]:
@@ -264,6 +335,90 @@ def research_markdown(query: str, cfg: dict | None = None, save: bool = True,
         return str(md.get("markdown") or md.get("text") or "# Report nahi bana pa raha")
     except Exception as exc:  # kabhi crash na ho
         return f"❌ Research error: {type(exc).__name__}: {util.truncate(str(exc), 300)}"
+
+
+def format_channel_section(items: list[dict]) -> str:
+    """Channel hits ko report ke aakhir me ek chhota section banao."""
+    if not items:
+        return ""
+    lines = ["## Telegram Channels (aap ke saved)", ""]
+    for i, item in enumerate(items[:8], 1):
+        text = util.truncate(str(item.get("excerpt") or item.get("title") or ""),
+                             200).replace("\n", " ").strip()
+        lines.append(f"{i}. @{item.get('channel')} — {text}")
+        lines.append(f"   {item.get('url')}")
+    return "\n".join(lines)
+
+
+def research_full(query: str, cfg: dict | None = None, save: bool = True,
+                  live: bool = True, skip_sources=None, skip_channels=None) -> dict:
+    """Web adapters + saved-channel search PARALLEL, ek hi markdown report.
+
+    Returns ``{"ok", "markdown", "sources", "channels", "error"}``.
+    ``skip_*`` = pichle rounds ki memory (wahi cheez dobara nahi dhoondhi jati).
+    """
+    cfg = cfg or config.load()
+    skip_sources = [str(s) for s in (skip_sources or [])]
+    skip_channels = [str(c) for c in (skip_channels or [])]
+    q = str(query)[:4000]
+
+    saved = [c for c in channels_mod.adapter_channels(cfg)
+             if c not in skip_channels]
+    pool = ThreadPoolExecutor(max_workers=2)
+    try:
+        f_web = pool.submit(orchestrator.run, q, live, 7, 25, None, cfg, save,
+                            skip_sources)
+        f_tg = pool.submit(channels_mod.search_posts, q, saved, cfg, 8)
+        out = f_web.result(timeout=180)
+        try:
+            tg = f_tg.result(timeout=60)
+        except Exception:
+            tg = {"items": [], "channels": saved, "failed": []}
+    except Exception as exc:
+        return {"ok": False, "sources": [], "channels": [],
+                "markdown": f"❌ Research error: {type(exc).__name__}: "
+                            f"{util.truncate(str(exc), 300)}"}
+    finally:
+        pool.shutdown(wait=False)
+
+    if out.get("blocked"):
+        return {"ok": False, "sources": [], "channels": [],
+                "markdown": "⛔ Request block hua policy ke hisaab se. Detail: "
+                            + json.dumps(out.get("gate") or {}, ensure_ascii=False)}
+    md = str((out.get("report") or {}).get("markdown")
+             or (out.get("report") or {}).get("text")
+             or "# Report nahi bana pa raha")
+    section = format_channel_section(tg.get("items") or [])
+    if section:
+        md = md.rstrip() + "\n\n" + section + "\n"
+    sources = [str(d.get("key")) for d in (out.get("diagnostics") or [])
+               if int(d.get("count") or 0) > 0]
+    return {"ok": True, "markdown": md, "sources": sources,
+            "channels": list(tg.get("channels") or []), "error": ""}
+
+
+def after_report_buttons(row_id: int) -> list[list[dict]]:
+    return [[
+        {"text": "✅ Mil gaya", "callback_data": f"mem:{int(row_id)}:done"},
+        {"text": "🔁 Nahi mila — aur dhondo", "callback_data": f"mem:{int(row_id)}:more"},
+    ]]
+
+
+def parse_callback(data: str) -> tuple[int, str]:
+    """``mem:<row_id>:<action>`` -> (row_id, action). Ghalat = (0, '')."""
+    m = re.fullmatch(r"mem:(\d{1,12}):([a-z]{2,8})", str(data or "").strip())
+    if not m:
+        return 0, ""
+    return int(m.group(1)), m.group(2)
+
+
+def ask_after_report(row: dict, sources: int, channels: int) -> str:
+    return ("❓ Aapko ye information mil gayi?\n\n"
+            f"Round {row.get('round_no') or 1}: {sources} engines + "
+            f"{channels} channels use hue (memory me save).\n"
+            "Agar 'Nahi mila' dabayen to main naye sources/channels try karunga - "
+            "jo use ho chuke hain wo skip ho jayenge.")
+
 
 
 # --------------------------------------------------------------------------
@@ -364,40 +519,150 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         for chunk in split_text(format_engines()):
             api.send(chat_id, chunk)
         return {"ok": True, "action": "engines", "count": len(TG_SEARCH_ENGINES)}
+    if cmd in ("deep", "darkweb"):
+        for chunk in split_text(format_deep(arg)):
+            api.send(chat_id, chunk)
+        return {"ok": True, "action": "deep", "count": len(DEEP_ENGINES)}
+    if cmd == "memory":
+        rows = memory_mod.recent(chat_id, 6)
+        for chunk in split_text(format_memory(rows)):
+            api.send(chat_id, chunk)
+        return {"ok": True, "action": "memory", "count": len(rows)}
     if cmd == "research":
         if not arg:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
             return {"ok": False, "action": "research", "error": "query required"}
-        _stop_research = False  # naya research shuru, flag reset
-        try:
-            api.send(chat_id, "🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)\n\n🛑 Rokne ke liye /stop likhein")
-        except Exception:
-            pass
-        import threading
-        result_box = [None]
-        def _do_research():
-            if not _stop_research:
-                result_box[0] = (research or research_markdown)(arg, cfg)
-        t = threading.Thread(target=_do_research, daemon=True)
-        t.start()
-        t.join(timeout=120)
-        if _stop_research:
-            return {"ok": False, "action": "research", "error": "stopped by user"}
-        if result_box[0] is None:
-            api.send(chat_id, "⏱️ Research timeout ho gaya. Dobara try karein ya chota sawal likhein.")
-            return {"ok": False, "action": "research", "error": "timeout"}
-        md = result_box[0]
-        chunks = split_text(md)
-        for c in chunks:
-            if _stop_research:
-                api.send(chat_id, "🛑 Report rok di gayi.")
-                break
-            api.send(chat_id, c)
-        # Report mukammal — bot khud ruk jata hai
-        _stop_research = True
-        return {"ok": True, "action": "research", "query": arg, "chunks": len(chunks)}
+        return _send_research(chat_id, arg, cfg=cfg, api=api, research=research)
     api.send(chat_id, "Maaf kijiye, yeh command samajh nahi aaya. /help use kijiye.")
     return {"ok": False, "action": "unknown", "error": "unknown command"}
+
+
+def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
+                   row_id: int | None = None, advance: bool = False) -> dict:
+    """Research chalao -> report chunks -> 'mil gaya?' buttons + memory."""
+    global _stop_research
+    _stop_research = False
+    used_sources: list[str] = []
+    used_channels: list[str] = []
+    round_no = 1
+    if row_id:
+        row = memory_mod.get(row_id) or {}
+        used_sources = row.get("used_sources") or []
+        used_channels = row.get("used_channels") or []
+        round_no = int(row.get("round_no") or 1) + (1 if advance else 0)
+    header = ("🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)\n"
+              "🛑 Rokne ke liye /stop likhein") if round_no <= 1 else \
+             (f"🔁 Round {round_no}: naye sources/channels try ho rahe hain "
+              f"({len(used_sources)} engines + {len(used_channels)} channels skip)...\n"
+              "🛑 Rokne ke liye /stop likhein")
+    try:
+        api.send(chat_id, header)
+    except Exception:
+        pass
+
+    result_box = [None]
+
+    def _do_research():
+        if _stop_research:
+            return
+        try:
+            if research is None:
+                result_box[0] = research_full(
+                    query, cfg, skip_sources=used_sources,
+                    skip_channels=used_channels)
+            else:
+                result_box[0] = research(query, cfg)
+        except Exception as exc:
+            result_box[0] = {"ok": False, "markdown": f"❌ Research error: "
+                             f"{type(exc).__name__}: {util.truncate(str(exc), 250)}",
+                             "sources": [], "channels": []}
+
+    import threading
+    t = threading.Thread(target=_do_research, daemon=True)
+    t.start()
+    t.join(timeout=150)
+    if _stop_research:
+        return {"ok": False, "action": "research", "error": "stopped by user"}
+    if result_box[0] is None:
+        api.send(chat_id, "⏱️ Research timeout ho gaya. Dobara try karein ya chota sawal likhein.")
+        return {"ok": False, "action": "research", "error": "timeout"}
+
+    out = result_box[0]
+    if isinstance(out, dict):
+        md = str(out.get("markdown") or "")
+        sources = [str(s) for s in (out.get("sources") or [])]
+        channels_used = [str(c) for c in (out.get("channels") or [])]
+    else:
+        md, sources, channels_used = str(out or ""), [], []
+    if not md.strip():
+        md = "❌ Report khali rahi. /research dobara try karein."
+
+    chunks = split_text(md)
+    for chunk in chunks:
+        if _stop_research:
+            api.send(chat_id, "🛑 Report rok di gayi.")
+            break
+        api.send(chat_id, chunk)
+
+    # Memory: kaunse sources/channels is round me use hue
+    try:
+        if row_id:
+            row = memory_mod.remember(row_id, sources, channels_used,
+                                      advance=advance)
+        else:
+            row = memory_mod.begin(chat_id, query)
+            row = memory_mod.remember(row["id"], sources, channels_used)
+        row = row or {"id": 0, "round_no": round_no}
+    except Exception:
+        row = {"id": 0, "round_no": round_no}
+    if row.get("id"):
+        try:
+            api.send(chat_id, ask_after_report(row, len(row.get("used_sources") or []),
+                                               len(row.get("used_channels") or [])),
+                     buttons=after_report_buttons(row["id"]))
+        except Exception:
+            pass
+    _stop_research = True
+    return {"ok": True, "action": "research", "query": query,
+            "chunks": len(chunks), "round": row.get("round_no") or 1,
+            "sources": len(sources), "channels": len(channels_used)}
+
+
+def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
+                    research=None) -> dict:
+    """Inline button: ✅ Mil gaya / 🔁 Nahi mila - aur dhondo."""
+    cfg = cfg or config.load()
+    api = api or _api(str(cfg.get("telegram_bot_token") or ""), cfg)
+    row_id, action = parse_callback(data)
+    if not row_id:
+        api.send(chat_id, "Purana button hai. Naya /research karein.")
+        return {"ok": False, "action": "callback", "error": "bad data"}
+    row = memory_mod.get(row_id)
+    if not row:
+        api.send(chat_id, "Ye research memory me nahi mili. Naya /research karein.")
+        return {"ok": False, "action": "callback", "error": "not found"}
+    if action == "done":
+        memory_mod.mark_done(row_id)
+        api.send(chat_id, "✅ Theek hai, yaad rakh liya.\n"
+                          f"Query: {util.truncate(row.get('query') or '', 200)}\n"
+                          f"Rounds: {row.get('round_no')} · "
+                          f"Used: {len(row.get('used_sources') or [])} engines, "
+                          f"{len(row.get('used_channels') or [])} channels\n\n"
+                          "Naya sawal: /research <sawal>")
+        return {"ok": True, "action": "callback_done", "round": row.get("round_no")}
+    if action == "more":
+        if not (row.get("used_sources") or row.get("used_channels")):
+            memory_mod.reset(row_id)
+            row = memory_mod.get(row_id) or row
+        return _send_research(chat_id, row.get("query") or "", cfg=cfg, api=api,
+                              research=research, row_id=row_id, advance=True)
+    if action == "reset":
+        memory_mod.reset(row_id)
+        api.send(chat_id, "♻️ Memory reset - sab sources dobara try honge.")
+        return {"ok": True, "action": "callback_reset"}
+    api.send(chat_id, "Samajh nahi aaya. Naya /research karein.")
+    return {"ok": False, "action": "callback", "error": "unknown action"}
+
 
 
 # --------------------------------------------------------------------------

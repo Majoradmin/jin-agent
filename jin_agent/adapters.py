@@ -313,6 +313,37 @@ def parse_telegram(html: str, channel: str) -> list[dict]:
     return out
 
 
+def parse_pubmed(esearch_json: str, esummary_json: str) -> list[dict]:
+    """Deep-web DB: PubMed IDs + summaries -> normal items (no key)."""
+    try:
+        ids = (json.loads(esearch_json or "{}").get("esearchresult") or {}).get("idlist") or []
+    except Exception:
+        return []
+    try:
+        result = json.loads(esummary_json or "{}").get("result") or {}
+    except Exception:
+        result = {}
+    out = []
+    for pid in ids[:20]:
+        pid = str(pid)
+        row = result.get(pid) or {}
+        title = util.clean_text(row.get("title") or "", 300)
+        if not title:
+            continue
+        published = str(row.get("pubdate") or row.get("epubdate") or "")[:10]
+        journal = str(row.get("fulljournalname") or row.get("source") or "")
+        out.append({
+            "title": title,
+            "url": "https://pubmed.ncbi.nlm.nih.gov/" + pid + "/",
+            "source": "PubMed (NLM)", "source_key": "pubmed",
+            "published": published,
+            "excerpt": util.clean_text(journal, 200),
+            "body": "", "category": "Science", "trust": 0.9,
+            "tier": "T1", "kind": "paper", "link_only": False,
+        })
+    return out
+
+
 def parse_ahmia(html: str, query: str) -> list[dict]:
     """Legal onion discovery. LINKS ONLY - the .onion URL is never fetched."""
     if not html:
@@ -1095,22 +1126,47 @@ class TelegramAdapter(Adapter):
 
 class AhmiaAdapter(Adapter):
     key, name, category, trust, tier, frequency = "ahmia", "Ahmia onion index", "Custom Watchlist", 0.5, "T4", 1440
-    enabled = False  # links-only, never auto-fetched
+    enabled = True  # link-only: koi onion fetch NAHI, sirf prefilled search link
 
     def search(self, query, days=7, limit=25, cfg=None, offline=False):
         cfg = cfg or config.load()
         self.last_fetch = None
         if str(cfg.get("tor_mode", "links_only")) == "off":
             return []
+        if not policy.wants_onion(query):
+            return []  # sirf dark/deep queries par, warna report me noise
+        q = urllib.parse.quote(str(query)[:150])
+        return [{
+            "title": "Ahmia — onion search (Tor browser me kholein)",
+            "url": "https://ahmia.fi/search/?q=" + q,
+            "source": "Ahmia onion index", "source_key": "ahmia",
+            "published": "", "excerpt": policy.DARK_WEB_RULE + " Onion address: "
+            "juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion",
+            "body": "", "category": "Custom Watchlist", "trust": 0.5,
+            "tier": "T4", "kind": "onion-links", "link_only": True,
+        }]
+
+
+class PubMedAdapter(Adapter):
+    key, name, category, trust, tier, frequency = "pubmed", "PubMed (NLM)", "Science", 0.9, "T1", 60
+
+    def search(self, query, days=7, limit=25, cfg=None, offline=False):
+        self.last_fetch = None
         if offline:
             return _offline_items(self, query, limit)
-        try:
-            url = "https://ahmia.fi/search/?q=" + urllib.parse.quote(str(query)[:150])
-            text = fetch(url, cfg)
-            self.last_fetch = {"url": url, "text": text, "ts": util.now_iso()}
-            return parse_ahmia(text, query)[:limit]
-        except Exception:
+        term = urllib.parse.quote(str(query)[:200])
+        n = min(10, max(3, limit))
+        base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+        ids_text = fetch(base + "esearch.fcgi?db=pubmed&term=" + term +
+                         f"&retmode=json&retmax={n}&sort=relevance", cfg)
+        ids = (json.loads(ids_text or "{}").get("esearchresult") or {}).get("idlist") or []
+        if not ids:
             return []
+        summary = fetch(base + "esummary.fcgi?db=pubmed&id=" + ",".join(ids) +
+                        "&retmode=json", cfg)
+        self.last_fetch = {"url": base + "esearch.fcgi?term=" + term,
+                           "text": summary, "ts": util.now_iso()}
+        return parse_pubmed(ids_text, summary)[:limit]
 
 
 RSS_FEEDS = [
@@ -1130,7 +1186,7 @@ ADAPTERS: list[Adapter] = [RSSAdapter(*row) for row in RSS_FEEDS] + [
     RedditAdapter(), WikipediaAdapter(), WikidataAdapter(),
     GoogleNewsTopicAdapter(), WaybackAdapter(), GitHubSearchAdapter(),
     NVDAdapter(), SitemapAdapter(), BraveSearchAdapter(), BingSearchAdapter(),
-    TelegramAdapter(), AhmiaAdapter(),
+    TelegramAdapter(), AhmiaAdapter(), PubMedAdapter(),
 ]
 BY_KEY = {a.key: a for a in ADAPTERS}
 
@@ -1264,9 +1320,12 @@ def key_ready(adapter: Adapter, cfg: dict) -> bool:
 
 def run(query: str, keys=None, days: int = 7, limit: int = 25,
         cfg: dict | None = None, offline: bool = False,
-        include_opt_in: bool = False) -> tuple[list[dict], list[dict]]:
+        include_opt_in: bool = False,
+        skip=None) -> tuple[list[dict], list[dict]]:
     """Run selected adapters in parallel. Never raises on network failure."""
     cfg = cfg or config.load()
+    skip = {str(s) for s in (skip if skip is not None
+                             else (cfg.get("skip_sources") or ()))}
     if keys:
         wanted = set(keys)
         # Explicit keys always honoured (opt-in included); a keyed adapter is
@@ -1277,6 +1336,8 @@ def run(query: str, keys=None, days: int = 7, limit: int = 25,
         selected = [a for a in ADAPTERS if adapter_ready(a, cfg)]
         if include_opt_in:
             selected = [a for a in ADAPTERS if key_ready(a, cfg)]
+    if skip:
+        selected = [a for a in selected if a.key not in skip]
     if not selected:
         return [], []
     items: list[dict] = []

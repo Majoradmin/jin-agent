@@ -23,10 +23,12 @@ def _log():
 
 def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         keys: list[str] | None = None, cfg: dict | None = None,
-        save: bool = True) -> dict:
+        save: bool = True, skip_sources: list[str] | None = None) -> dict:
     """Execute one research run. Default is OFFLINE (deterministic, no network)."""
     log = _log()
-    cfg = cfg or config.load()
+    cfg = dict(cfg or config.load())
+    if skip_sources:
+        cfg["skip_sources"] = [str(s) for s in skip_sources]
     query = str(query or "").strip()[: util.clamp(cfg.get("max_query_chars"), 100, 8000, 4000)]
     started = time.monotonic()
     store.init_db()
