@@ -1,4 +1,4 @@
-# PHASES — JIN Agent P13–P38
+# PHASES — JIN Agent P13–P39
 
 **Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
 **Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
@@ -642,5 +642,38 @@ PDF third-party dependency maangta hai, is liye chhoda — MD/HTML hi formats ha
 saaf context shuru karta hai. `VERSION` `2.9.0` barqarar; stdlib-only, local-only.
 
 **PHASE REVIEW — PHASE 38: READY**
+
+---
+
+## 32. PHASE REVIEW — PHASE 39 — Explore Discovery Engine Fix (Bing + anomaly fallback) (2.9.0)
+
+**TASK:** `/explore <topic>` Telegram channels kabhi discover nahi karta tha — hamesha
+`📡 Telegram` group khaali, sirf Open web + Deep links. Root cause prove ho chuka:
+`web_search_candidates` sirf DuckDuckGo par hardcoded tha (`uddg=` regex), aur DDG
+abhi anti-bot "anomaly" page deta hai (`uddg=0`). `www.bing.com` allowlist me hi
+nahi tha. Is liye `candidates=0 → probed=0 → added=0`.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `policy.py` | `ALLOWED_HOSTS` me `www.bing.com` (sirf search ke liye); `SOURCE_REGISTER` me `bing-web` (`https://www.bing.com/search`, `auto=True`, keyless HTML) — register 45 → 46 |
+| `channels.py` | `decode_bing_url` (urlsafe base64 + padding + `validate=True`), `parse_bing_html` (`ck/a` decode + raw links), `bing_has_results` (`<li class="b_algo">`), `parse_ddg_html`, `web_search_probe` (Bing → DDG html → DDG lite; anomaly par agla engine), `merge_web_probe`, `web_search_candidates(..., info=)`; `run_discovery` me `web_search` hisaab + `tg_discovery_state` table (`save_discovery_state` / `last_discovery_state`) |
+| `telegram_bot.py` | `/status` me **Telegram discovery** block (last, engine, candidates/probed/added, fail wajah); 0-candidate explore par honest message (`_explore_empty_reason`) |
+| `tests/test_bing_discovery.py` (naya) | 16 tests: Bing parse + `ck/a` decode, anomaly fallback, policy allow, `/status` block, honest message |
+| `tests/test_status_health.py`, `test_adapters_v2.py`, `test_governance.py`, `test_explore_v2.py` | count assertions 45 → 46 (auto 26 → 27) + mock signature |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ full suite **531 tests OK (1 skipped)**. Live check (2026-11-19):
+`web_search_candidates("android security")` → `engine=bing`, `anomaly=False`,
+handles `['MobileSecurityTesting', 'androidMalware']` (DDG is dafa anomaly).
+
+**RESULT:** `/explore` ab asli search engine (Bing) se Telegram channels dhoondta
+hai; DDG html/lite fallback aur anti-bot anomaly detection wujood me hai. Fail hone
+par bot user ko wajah aur `/status` engine health dikhti hai. `VERSION` `2.9.0`
+barqarar; stdlib-only, local-only, onion fetch block aur FRP/FMI/HuaweiID/Knox/MDM
+patterns untouched.
+
+**PHASE REVIEW — PHASE 39: READY**
 
 ---

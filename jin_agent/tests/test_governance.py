@@ -40,10 +40,10 @@ class TestRelease(unittest.TestCase):
     def test_phase_reviews_all_ready(self):
         text = (PKG / "PHASES.md").read_text(encoding="utf-8")
         reviews = re.findall(r"\*\*PHASE REVIEW — PHASE (\d+): (READY|NOT READY)\*\*", text)
-        # P28-P38 ke reviews PHASES.md me add hue — is liye expected count 26.
-        self.assertEqual(len(reviews), 26)
+        # P28-P39 ke reviews PHASES.md me add hue — is liye expected count 27.
+        self.assertEqual(len(reviews), 27)
         self.assertEqual([n for n, _ in reviews],
-                         [str(n) for n in range(13, 39)])
+                         [str(n) for n in range(13, 40)])
         self.assertTrue(all(status == "READY" for _, status in reviews))
         self.assertIn("N/A Register", text)
 
@@ -111,7 +111,8 @@ class TestBoundaries(unittest.TestCase):
     def test_adapter_and_register_counts(self):
         self.assertEqual(len(adapters.ADAPTERS), 27)
         # P2.1: 12 legal/public institutional sources (33 -> 45).
-        self.assertEqual(len(policy.register()), 45)
+        # P39: +1 keyless Bing HTML search (45 -> 46).
+        self.assertEqual(len(policy.register()), 46)
 
     def test_onion_fetch_prohibited_in_code(self):
         self.assertFalse(policy.check_url("http://abcdefghijklmnop.onion/x")[0])

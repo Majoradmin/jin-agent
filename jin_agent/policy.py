@@ -39,6 +39,8 @@ ALLOWED_HOSTS = frozenset({
     "security.samsungmobile.com", "support.apple.com",
     "api.gdeltproject.org", "t.me", "telegram.me", "api.telegram.org",
     "html.duckduckgo.com", "lite.duckduckgo.com",
+    # P39: channel discovery ka keyless HTML search engine (DDG fallback ke saath)
+    "www.bing.com",
     "ahmia.fi", "api.openalex.org", "api.crossref.org", "export.arxiv.org",
     "www.google.com", "patents.google.com",
     # P27 retrieval breadth
@@ -79,6 +81,7 @@ SOURCE_REGISTER = [
     {"key": "sitemap", "name": "Sitemap discovery", "url": "https://source.android.com/sitemap.xml", "tier": "T0", "category": "World", "trust": 0.8, "auto": True, "notes": "P27 robots.txt + sitemap.xml discovery, bounded depth and URL cap. Allowlisted hosts only."},
     {"key": "brave-search", "name": "Brave Search API", "url": "https://api.search.brave.com/res/v1/web/search", "tier": "T1", "category": "World", "trust": 0.75, "auto": False, "notes": "P27 optional keyed adapter. No brave_key = disabled silently (free tier friendly)."},
     {"key": "bing-search", "name": "Bing Web Search API", "url": "https://api.bing.microsoft.com/v7.0/search", "tier": "T1", "category": "World", "trust": 0.75, "auto": False, "notes": "P27 optional keyed adapter. No bing_key = disabled silently (free tier friendly)."},
+    {"key": "bing-web", "name": "Bing Search (HTML)", "url": "https://www.bing.com/search", "tier": "T1", "category": "World", "trust": 0.7, "auto": True, "notes": "P39 keyless HTML search — Telegram channel discovery (t.me/s <topic>). ck/a base64 result URLs decode hote hain; anti-bot anomaly par DDG html/lite fallback."},
     {"key": "gdelt", "name": "GDELT DOC 2.0", "url": "https://api.gdeltproject.org/api/v2/doc/doc", "tier": "T1", "category": "World", "trust": 0.7, "auto": True, "notes": "Free global news index; can be flaky, graceful degradation."},
     {"key": "openalex", "name": "OpenAlex", "url": "https://api.openalex.org/works", "tier": "T3", "category": "Science", "trust": 0.85, "auto": True, "notes": "Legal scholarly index, no key."},
     {"key": "crossref", "name": "Crossref", "url": "https://api.crossref.org/works", "tier": "T3", "category": "Science", "trust": 0.85, "auto": True, "notes": "Legal DOI metadata, no key."},

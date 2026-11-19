@@ -294,7 +294,8 @@ class TestRegistryAndSafety(unittest.TestCase):
     def test_adapter_and_register_counts(self):
         self.assertEqual(len(adapters.ADAPTERS), 27)
         # P2.1: 12 legal/public institutional sources (33 -> 45).
-        self.assertEqual(len(policy.register()), 45)
+        # P39: +1 keyless Bing HTML search (45 -> 46).
+        self.assertEqual(len(policy.register()), 46)
 
     def test_new_hosts_allowlisted(self):
         for url in ("https://www.reddit.com/r/android/search.json",
