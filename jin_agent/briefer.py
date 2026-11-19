@@ -17,7 +17,7 @@ import json
 import os
 import time
 
-from . import config, policy, store, util
+from . import config, policy, store, util, verifier
 
 HINTS = {
     "Mobile & Firmware": "Flash karne se pehle exact model, region / CSC aur binary revision match karain; galat package bootloop ya blocked binary deta hai.",
@@ -73,6 +73,7 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
         categories.setdefault(item.get("category", "Custom Watchlist"), []).append(item)
     verified = [i for i in items if i.get("verified")]
     unverified = [i for i in items if not i.get("verified")]
+    conf = verifier.aggregate_confidence(items)
     lines = [
         "# JIN Agent - Research Brief",
         "",
@@ -80,6 +81,9 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
         f"**Date checked:** {date_checked}",
         f"**Mode:** {mode} | **Duration:** {duration_ms} ms",
         f"**Policy:** {policy.POLICY_ID} | **Tor:** {cfg.get('tor_mode', 'links_only')}",
+        f"**Confidence:** {conf['label']} ({conf['value']}) — "
+        f"{conf['cross_verified']} cross-verified / {conf['verified']} verified "
+        f"/ {conf['items']} items",
         "",
         "## Executive Summary",
         "",
@@ -246,6 +250,7 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
     cfg = cfg or config.load()
     markdown = _markdown(query, items, diagnostics, cfg, plan_result, audit,
                          metrics, duration_ms, mode, blocked)
+    confidence = verifier.aggregate_confidence(items)
     structured = {
         "query": query, "date_checked": util.now_iso(), "mode": mode,
         "policy_id": policy.POLICY_ID, "tor_mode": cfg.get("tor_mode"),
@@ -253,6 +258,7 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
         "tools": [c["tool"] for c in (plan_result or {}).get("calls", [])],
         "items": items, "diagnostics": diagnostics, "audit": audit,
         "metrics": metrics, "blocked": blocked or None,
+        "confidence": confidence,
     }
     return {
         "title": f"JIN Agent Brief - {util.truncate(query, 60)}",
@@ -263,6 +269,8 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
         "verified_count": sum(1 for i in items if i.get("verified")),
         "not_verified_count": sum(1 for i in items if not i.get("verified")),
         "categories": sorted({i.get("category", "") for i in items}),
+        "confidence": confidence["value"],
+        "confidence_label": confidence["label"],
     }
 
 

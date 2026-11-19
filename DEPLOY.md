@@ -43,6 +43,9 @@ ya default `python bot.py` (yeh shim ab wahi supervisor chalata hai).
 | `JIN_AGENT_BACKUP_KEEP` | na | `data/backups/` me rakhne wale backups, default `7` |
 | `JIN_AGENT_REPORT_DAYS` | na | `data/reports/` retention (din), default `90` |
 | `JIN_AGENT_MAX_ROUNDS` | na | research rounds ki cap, default `5` |
+| `JIN_AGENT_CHANNEL_NEGATIVE_TTL_DAYS` | na | failed channel ki negative memory TTL (din), default `7` — agla round unhe skip karega |
+| `JIN_AGENT_CHANNEL_DEAD_TTL_DAYS` | na | dead `tg_channels` registry TTL (din), default `30` — purani dead rows retention delete karta hai |
+| `JIN_AGENT_REPORT_CONFIDENCE` | na | report confidence gate (0–1), default `0.6` — is se niche "bharosemand nahi" payam, file nahi |
 | `JIN_AGENT_REQUIRE_CHAT_ID` | na | `1` par unset `TELEGRAM_CHAT_ID` reject (default off = allow-all) |
 | `GROQ_API_KEY` | na | Roman Urdu translation / related search ke liye |
 | `LLM_PROVIDER` | na | `custom` |

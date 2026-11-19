@@ -12,6 +12,7 @@ No citation is ever invented by this module.
 
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 
 from . import canonical, policy, util
@@ -152,6 +153,67 @@ def _cluster_match(item: dict, best: dict[str, dict]):
         if canonical.near_duplicate_titles(item_title, str(rec.get("title") or "")):
             return key
     return None
+
+
+def aggregate_confidence(items: list[dict]) -> dict:
+    """Report-level confidence — competitor pattern (per-claim score + hard caps).
+
+    Rules (deterministic, reproducible):
+      * har item ki confidence uski verification status par cap hoti hai:
+        ``cross_verified`` 0.99, ``verified`` 0.80, bina corroboration 0.60
+        (single-source/degraded par 0.6 se zyada claim nahi).
+      * ``verified`` / ``cross_verified`` chhota boost (cap ke andar).
+      * weight = ranker ``score`` (kam az kam 0.1) — behtareen ranked story
+        zyada influence rakhti hai.
+      * aggregate = weight-weighted mean, 0..1.
+    """
+    rows = [i for i in (items or []) if isinstance(i, dict)]
+    if not rows:
+        return {"value": 0.0, "label": "n/a", "items": 0,
+                "verified": 0, "cross_verified": 0}
+    weighted = 0.0
+    total_w = 0.0
+    verified = cross = 0
+    for item in rows:
+        try:
+            conf = max(0.0, min(1.0, float(item.get("confidence") or 0)))
+        except (TypeError, ValueError):
+            conf = 0.0
+        if item.get("verified"):
+            verified += 1
+        if item.get("cross_verified"):
+            conf = min(0.99, conf + 0.05)
+            cross += 1
+        elif item.get("verified"):
+            conf = min(0.80, conf + 0.03)
+        else:
+            conf = min(0.60, conf)
+        try:
+            weight = max(0.1, float(item.get("score") or 0))
+        except (TypeError, ValueError):
+            weight = 0.1
+        weighted += conf * weight
+        total_w += weight
+    value = round(weighted / total_w, 3) if total_w else 0.0
+    if value >= 0.8:
+        label = "high"
+    elif value >= 0.6:
+        label = "medium"
+    elif value >= 0.4:
+        label = "low"
+    else:
+        label = "very low"
+    return {"value": value, "label": label, "items": len(rows),
+            "verified": verified, "cross_verified": cross}
+
+
+def confidence_threshold() -> float:
+    """Report gate threshold (env ``JIN_AGENT_REPORT_CONFIDENCE``, default 0.6)."""
+    try:
+        return max(0.0, min(1.0, float(os.environ.get("JIN_AGENT_REPORT_CONFIDENCE")
+                                    or 0.6)))
+    except (TypeError, ValueError):
+        return 0.6
 
 
 def citation_audit(items: list[dict]) -> dict:

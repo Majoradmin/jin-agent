@@ -73,6 +73,7 @@ DEFAULT = {
         "watchlist_minutes": 5,
         "retention_minutes": 1440,
         "discovery_minutes": 720,
+        "explore_minutes": 1440,
     },
     "retention_days": 90,
     "max_fetch_bytes": 2_000_000,

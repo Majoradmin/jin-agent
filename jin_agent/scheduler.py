@@ -20,6 +20,7 @@ JOB_MINUTES = {
     "watchlist": "watchlist_minutes",
     "retention": "retention_minutes",
     "discovery": "discovery_minutes",
+    "explore": "explore_minutes",
 }
 
 
@@ -39,6 +40,27 @@ def firehose(query: str = "mobile firmware security tools", cfg: dict | None = N
                                 f"inserted={ingest['inserted']} updated={ingest['updated']}")
     return {"raw": len(raw), "records": len(records), "ingest": ingest,
             "diagnostics": diagnostics}
+
+
+def explore(topic: str, cfg: dict | None = None, offline: bool = True) -> dict:
+    """Channels/sources explore kar ke scored digest do (rozana digest pattern).
+
+    Discovery (naye/dead channels) + archive me topic ke scored top items +
+    local digest report. Sab kuch deterministic/offline-safe hai.
+    """
+    cfg = cfg or config.load()
+    store.init_db()
+    discovery = channels.run_discovery(cfg, offline)
+    found = store.search_archive(topic, 20)
+    scored = sorted(
+        found,
+        key=lambda r: (r.get("score") or 0, r.get("confidence") or 0),
+        reverse=True)[:10]
+    out = orchestrator.digest(cfg)
+    return {"topic": topic, "query": topic, "discovery": discovery,
+            "scored": scored,
+            "digest": str((out.get("saved") or {}).get("md") or ""),
+            "items": int((out.get("report") or {}).get("facts_count") or 0)}
 
 
 def run_job(kind: str, payload: dict | None = None, cfg: dict | None = None,
@@ -74,6 +96,9 @@ def run_job(kind: str, payload: dict | None = None, cfg: dict | None = None,
         return {"hits": hits}
     if kind == "discovery":
         return channels.run_discovery(cfg, offline)
+    if kind == "explore":
+        return explore(str(payload.get("query") or "mobile firmware security tools"),
+                       cfg, offline)
     if kind == "retention":
         kept = store.retention(int(cfg.get("retention_days") or 90))
         try:

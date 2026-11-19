@@ -39,6 +39,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         audit = verifier.citation_audit([])
         metrics = {"blocked": True, "sources_ok": 0, "sources_failed": 0,
                    "items": 0, "changes_sources": 0,
+                   "confidence": 0.0, "confidence_label": "n/a",
                    "duration_ms": round((time.monotonic() - started) * 1000)}
         empty_changes = {"since": None, "generated_at": util.now_iso(),
                          "sources": [], "total": 0,
@@ -106,8 +107,11 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     sources_ok = sum(1 for d in diagnostics if d.get("ok") and d.get("count", 0))
     sources_failed = sum(1 for d in diagnostics if not d.get("ok"))
     duration_ms = round((time.monotonic() - started) * 1000)
+    confidence = verifier.aggregate_confidence(ranked)
     metrics = {
         "items": len(ranked), "raw_items": len(executed["items"]),
+        "confidence": confidence["value"],
+        "confidence_label": confidence["label"],
         "unique_stories": len(ranked), "duplicate_rows_merged": merged_away,
         "off_topic_dropped": off_topic_dropped,
         "dedupe_rate_pct": round(100.0 * (1 - len(normalized) / len(executed["items"])), 1)
@@ -198,9 +202,11 @@ def digest(cfg: dict | None = None, limit_per_category: int = 3) -> dict:
     merged_away -= len(picked)
     audit = verifier.citation_audit(picked)
     changes = snapshots.recent_changes(limit=12)
+    conf = verifier.aggregate_confidence(picked)
     metrics = {"items": len(picked), "categories": len(buckets), "source": "archive",
                "unique_stories": len(picked), "duplicate_rows_merged": merged_away,
-               "changes_sources": changes["total"]}
+               "changes_sources": changes["total"],
+               "confidence": conf["value"], "confidence_label": conf["label"]}
     built = briefer.build("Daily digest (local archive)", picked, [], cfg, None,
                           audit, metrics, 0, "archive")
     saved = briefer.save(built, "Daily digest", metrics)

@@ -334,3 +334,56 @@ Ye assumptions `config.DEFAULT["assumptions"]` aur `GET /api/status` mein zinda 
 **PHASE REVIEW — PHASE 27: READY**
 
 ---
+
+## 21. PHASE REVIEW — PHASE 28 — Channel Memory & Health (2.10.0)
+
+**TASK:** "No working channel" masla: failed/dead channels ka negative memory, channel
+health telemetry, aur dead registry ka TTL cleanup. Competitor patterns (web research):
+silent/dead channels ka record 14/30/90 din thresholds par clean karo, aur failed
+channel ko yaad rakho taake agla round wahi dhoond na kare.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `searchmemory.py` | `failed_channels` column (migration samet) + `remember_failed()` / `failed_channels()`; TTL env `JIN_AGENT_CHANNEL_NEGATIVE_TTL_DAYS` (default 7). |
+| `channels.py` | `dead_ttl_days()` + `cleanup_dead()` — `status='dead'` aur TTL purani rows delete (active/archived ko chhuna nahi); env `JIN_AGENT_CHANNEL_DEAD_TTL_DAYS` (default 30). |
+| `store.py` | `retention()` ab dead-channel TTL cleanup ko channels module se guzarti hai. |
+| `telegram_bot.py` | `format_channels()` empty-state: active 0 magar dead/archived hon to "`/channels --all`" tareeqa; `/channels --all` command; `/status` aur `status()` me `channels_active` / `channels_dead` / `channels_archived`; research agle round me failed channels skip karta hai. |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **Ran 379 tests — OK** (1 skip: PySocks). Naye `test_phase1_memory_health.py` (10 tests).
+
+**RESULT:** Phases P13–P28 sab `PHASE REVIEW READY`. Failed/dead channel memory TTL
+ke saath bounded; registry unbounded nahi; stdlib-only, local-only, policy barqarar.
+
+**PHASE REVIEW — PHASE 28: READY**
+
+---
+
+## 22. PHASE REVIEW — PHASE 29 — Confidence, Report File & Explore (2.10.0)
+
+**TASK:** Competitor patterns: per-claim confidence + hard caps, report ko chat flood
+ki jagah `sendDocument` file ki shakal me, aur rozana scored digest/explore.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `verifier.py` | `aggregate_confidence()` — score-weighted mean, hard caps (cross 0.99 / verified 0.80 / single 0.60), `confidence_threshold()` env `JIN_AGENT_REPORT_CONFIDENCE` (default 0.6). |
+| `briefer.py` | `build()` structured + markdown me aggregate confidence; `confidence` / `confidence_label` output. |
+| `orchestrator.py` | `run()` / `digest()` metrics me `confidence` + `confidence_label`. |
+| `telegram_bot.py` | `_API.send_document()` (multipart, caption ≤1024); `_send_research` report `.md` file bhejta hai (high confidence) ya "bharosemand nahi" payam (low); `/explore [topic]` + `format_explore()`; `research_full` `report_path` / `confidence` / `failed_channels` return karta hai. |
+| `scheduler.py` | Naya `explore` job kind + `explore()` (discovery + scored archive + digest); `explore_minutes` (default 1440). |
+| `config.py` | `schedule.explore_minutes` default 1440. |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **Ran 379 tests — OK** (1 skip: PySocks). Naye `test_phase2_confidence_report.py` (14 tests).
+
+**RESULT:** Phases P13–P29 sab `PHASE REVIEW READY`. Confidence deterministic aur
+reproducible; Telegram chat flood ke bajaye report file; explore rozana scored digest;
+stdlib-only, local-only, policy barqarar.
+
+**PHASE REVIEW — PHASE 29: READY**
+
+---
