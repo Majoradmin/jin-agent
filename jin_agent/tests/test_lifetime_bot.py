@@ -182,15 +182,22 @@ class TestStopNotQueued(unittest.TestCase):
             return {"ok": True, "markdown": "# slow", "sources": [],
                     "channels": []}
 
+        def slow_search(query, cfg=None, **kw):
+            release.wait(8)
+            return {"query": query, "items": [], "channels": [], "failed": []}
+
+        # Do busy pool workers: ek research, ek channel search. /tgsearch kaam
+        # store nahi chheta, is liye test ke baad koi lingering DB thread nahi.
         api = ScriptAPI([
             [{"update_id": 1,
               "message": {"chat": {"id": 1}, "text": "/research one"}},
              {"update_id": 2,
-              "message": {"chat": {"id": 1}, "text": "/research two"}}],
+              "message": {"chat": {"id": 1}, "text": "/tgsearch slow"}}],
             [{"update_id": 3,
               "message": {"chat": {"id": 1}, "text": "/stop"}}],
         ])
-        with mock.patch.object(tb, "research_full", slow_research):
+        with mock.patch.object(tb, "research_full", slow_research), \
+                mock.patch.object(tb.channels_mod, "search_posts", slow_search):
             t0 = time.monotonic()
             tb.run("tok", cfg={"telegram_chat_id": "1"}, api=api, stop=api.stop)
             elapsed = time.monotonic() - t0
@@ -203,6 +210,11 @@ class TestStopNotQueued(unittest.TestCase):
             time.sleep(0.05)
             joined = "\n".join(t for _, t, _ in api.sent)
         self.assertIn("rok di gayi", joined)
+        # Lingering research thread ke agle module ke JIN_AGENT_DATA par na likhe.
+        end = time.monotonic() + 3
+        while tb._active_research_threads() and time.monotonic() < end:
+            time.sleep(0.02)
+        self.assertEqual(tb._active_research_threads(), [])
 
 
 if __name__ == "__main__":
