@@ -106,6 +106,14 @@ def _telegram_retry_after(exc: urllib.error.HTTPError) -> int:
 # JIN_AGENT_UPDATE_WORKERS se barha sakte hain.
 DEFAULT_UPDATE_WORKERS = 2
 MAX_UPDATE_WORKERS = 16
+# Light commands (help/status/channels/buttons) ke liye alag bounded pool.
+# Research 30-60s tak main pool ka worker rooshta hai — is liye chhote commands
+# usi queue me atkte the (live test me 10-45s lag). Default 4, env
+# JIN_AGENT_CONTROL_WORKERS se badal sakte hain.
+DEFAULT_CONTROL_WORKERS = 4
+MAX_CONTROL_WORKERS = 16
+# Ye commands research/report banate hain — unhe main (bounded) pool par bhejo.
+HEAVY_COMMANDS = frozenset({"research", "deep", "explore", "digest"})
 HELP_TEXT = (
     "Salam! Main aap ka JIN Agent hoon. 6 commands:\n\n"
     "/research <sawal> — research + Roman Urdu report\n"
@@ -123,7 +131,7 @@ HELP_TEXT = (
     "/report [md|html] — aakhri report dobara bhejo (default md)\n\n"
     "Seedha matn bhi likh sakte hain — wo /research ban jata hai. "
     "Purane commands bhi chalte hain: /dork, /addchannel, /rmchannel, /tgsearch, "
-    "/deep, /engines, /memory, /stop, /new, /digest, /reports, /alerts, "
+    "/deep <topic>, /engines, /memory, /stop, /new, /digest, /reports, /alerts, "
     "/schedule, /channelhealth, /memoryaudit, /selftest.\n\n"
     "Har report ke baad bot poochta hai: mil gaya ya nahi. 'Nahi mila' par naye "
     "sources/channels try hote hain (purane skip). Policy SAHULAT-SAFE-SERVICE-v1; "
@@ -243,6 +251,54 @@ def update_workers() -> int:
     return max(1, min(MAX_UPDATE_WORKERS, n))
 
 
+def update_control_workers() -> int:
+    """Control/callback pool size (env JIN_AGENT_CONTROL_WORKERS, default 4)."""
+    raw = str(os.environ.get("JIN_AGENT_CONTROL_WORKERS", "") or "").strip()
+    if not raw:
+        return DEFAULT_CONTROL_WORKERS
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        print(f"[bot] JIN_AGENT_CONTROL_WORKERS ghalat ({raw!r}) — "
+              f"default {DEFAULT_CONTROL_WORKERS}", flush=True)
+        return DEFAULT_CONTROL_WORKERS
+    return max(1, min(MAX_CONTROL_WORKERS, n))
+
+
+_control_pool: ThreadPoolExecutor | None = None
+
+
+def _get_control_pool() -> ThreadPoolExecutor:
+    """Lazy control pool — light commands ke liye alag bounded executor.
+
+    Process-lifetime hai (ek process me ek run). ``run()`` ke finally me
+    shutdown + None kiya jata hai taake dobara run par naya bane.
+    """
+    global _control_pool
+    if _control_pool is None:
+        _control_pool = ThreadPoolExecutor(
+            max_workers=update_control_workers(),
+            thread_name_prefix="jin-control")
+    return _control_pool
+
+
+def _shutdown_control_pool() -> None:
+    """Control pool band karo (run ke finally me). Dobara run par naya bane."""
+    global _control_pool
+    if _control_pool is None:
+        return
+    try:
+        _control_pool.shutdown(wait=False, cancel_futures=True)
+    except TypeError:  # Python < 3.9
+        _control_pool.shutdown(wait=False)
+    _control_pool = None
+
+
+def _is_heavy_command(cmd: str) -> bool:
+    """Research/report banane wale commands — main pool par, light nahi."""
+    return str(cmd or "") in HEAVY_COMMANDS
+
+
 def max_poll_failures() -> int:
     """Lagataar poll failures ki cap (env JIN_AGENT_MAX_POLL_FAILURES).
 
@@ -279,17 +335,15 @@ def _active_research_threads() -> list[threading.Thread]:
 
 
 def _submit_control(pool, fn, *args, **kwargs):
-    """``/stop`` / ``/status`` ko dedicated short-lived thread par bhejo.
+    """Light commands/callbacks ko dedicated bounded control pool par bhejo.
 
-    Do busy research workers hone par bhi ``/stop`` foran kaam kare — pool ki
-    queue me nahi atkega. Real ``ThreadPoolExecutor`` par naya daemon thread
-    chalu hota hai; injected/fake pool (tests) par ``submit`` hi use hota hai.
+    ``/stop`` / ``/status`` aur ab baqi chhote commands bhi busy research
+    workers ke peeche nahi atkte (live test me 10-45s lag tha). Real
+    ``ThreadPoolExecutor`` par alag pool chalta hai; injected/fake pool
+    (tests) par ``submit`` hi use hota hai.
     """
     if isinstance(pool, _ThreadPoolExecutor):
-        t = threading.Thread(target=fn, args=args, kwargs=kwargs, daemon=True,
-                             name="jin-control")
-        t.start()
-        return t
+        return _get_control_pool().submit(fn, *args, **kwargs)
     return pool.submit(fn, *args, **kwargs)
 
 
@@ -1817,6 +1871,21 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         send_chunks(api, chat_id, format_engines())
         return {"ok": True, "action": "engines", "count": len(TG_SEARCH_ENGINES)}
     if cmd in ("deep", "darkweb"):
+        topic = str(arg or "").strip()
+        if topic:
+            # ``/deep <topic>`` — deep research chalao + deep engines ke links
+            # report ke saath (onion sirf link, fetch kabhi nahi hota).
+            try:
+                composed = chat_context.attach(chat_id, topic)
+                chat_context.note(chat_id, topic)
+            except Exception:
+                composed = topic
+            res = _send_research(chat_id, composed, cfg=cfg, api=api, research=research)
+            if res.get("ok"):
+                send_chunks(api, chat_id, format_deep(topic))
+                res["deep"] = True
+            return res
+        # Bina topic: sirf deep-engine list (purana raasta barqarar)
         send_chunks(api, chat_id, format_deep(arg))
         return {"ok": True, "action": "deep", "count": len(DEEP_ENGINES)}
     if cmd == "memory":
@@ -2472,7 +2541,8 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                         bot_chat = (cb.get("message") or {}).get("chat") or {}
                         cb_chat_id = int((bot_chat or {}).get("id") or 0)
                         if is_owner(cb_chat_id, cfg):
-                            pool.submit(
+                            _submit_control(
+                                pool,
                                 handle_callback,
                                 cb_chat_id, str(cb.get("data") or ""),
                                 cfg=cfg, api=api,
@@ -2501,11 +2571,15 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 if cmd_name not in ("stop", "status") and not _group_allowed(chat_id):
                     continue
                 try:
-                    if cmd_name in ("stop", "status"):
+                    if _is_heavy_command(cmd_name):
+                        # Research/report banata hai — main bounded pool (worker
+                        # rooshta hai; isi liye light commands is pool ko chhorti hain)
+                        pool.submit(dispatch, chat_id, text, cfg=cfg, api=api)
+                    else:
+                        # Light command — control pool, busy research ke peeche
+                        # nahi atka (live test me 10-45s lag tha)
                         _submit_control(pool, dispatch, chat_id, text,
                                         cfg=cfg, api=api)
-                    else:
-                        pool.submit(dispatch, chat_id, text, cfg=cfg, api=api)
                 except Exception:
                     time.sleep(2)
             if updates:
@@ -2517,6 +2591,10 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
             pool.shutdown(wait=False, cancel_futures=True)
         except TypeError:  # Python < 3.9
             pool.shutdown(wait=False)
+        try:
+            _shutdown_control_pool()
+        except Exception:
+            pass
         _cancel_research(join_timeout=1.0)
 
 
