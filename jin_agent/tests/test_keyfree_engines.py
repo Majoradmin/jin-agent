@@ -98,8 +98,8 @@ class TestPolicyAllowlist(unittest.TestCase):
 class TestRegisterFlags(unittest.TestCase):
     def test_counts(self):
         rows = policy.register()
-        self.assertEqual(len(rows), 92)
-        self.assertEqual(sum(1 for r in rows if r["auto"]), 39)
+        self.assertEqual(len(rows), 130)
+        self.assertEqual(sum(1 for r in rows if r["auto"]), 57)
 
     def test_auto_engines_are_auto(self):
         rows = {r["key"]: r for r in policy.register()}
@@ -119,7 +119,7 @@ class TestRegisterFlags(unittest.TestCase):
             self.assertNotIn(key, adapters.BY_KEY, key)
 
     def test_adapter_count(self):
-        self.assertEqual(len(adapters.ADAPTERS), 39)
+        self.assertEqual(len(adapters.ADAPTERS), 57)
 
 
 class TestParsers(unittest.TestCase):

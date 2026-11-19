@@ -77,6 +77,19 @@ ALLOWED_HOSTS = frozenset({
     # Archive / News / Social / TG dirs
     "openlibrary.org", "gutendex.com", "www.googleapis.com", "news.yahoo.com",
     "public.api.bsky.app", "mastodon.social", "tgstat.com", "telemetr.io",
+    # P41 — dork + extra engines (news RSS / academic / patents / data / web / social)
+    "feeds.bbci.co.uk", "www.aljazeera.com", "feeds.arstechnica.com",
+    "www.wired.com", "techcrunch.com", "www.theverge.com", "www.zdnet.com",
+    "www.cnet.com", "rss.nytimes.com", "feeds.washingtonpost.com",
+    "feeds.npr.org", "www.reutersagency.com", "ground.news",
+    "api.datacite.org", "pub.orcid.org", "api.scilit.net", "api.fatcat.wiki",
+    "api.openaire.eu", "api.archives-ouvertes.fr", "citeseerx.ist.psu.edu",
+    "ideas.repec.org", "econpapers.repec.org", "philpapers.org",
+    "pubpsych.zpid.de", "search.ipaustralia.gov.au", "j-platpat.inpit.go.jp",
+    "kris.kipris.or.kr", "index.commoncrawl.org", "www.loc.gov",
+    "search.worldcat.org", "earthquake.usgs.gov", "api.weather.gov",
+    "api.reliefweb.int", "wiby.me", "rightdao.com", "lemmy.ml", "a.4cdn.org",
+    "8kun.top",
 })
 
 # key, name, url, tier, category, trust, auto_fetch, notes
@@ -188,6 +201,51 @@ SOURCE_REGISTER = [
     # --- TG dirs ---
     {"key": "tgstat", "name": "TGStat", "url": "https://tgstat.com/search", "tier": "T2", "category": "Telecom", "trust": 0.5, "auto": False, "notes": "P40 Telegram directory. Live: JS app shell, 0 result — auto=False."},
     {"key": "telemetr", "name": "Telemetr", "url": "https://telemetr.io/search", "tier": "T2", "category": "Telecom", "trust": 0.5, "auto": False, "notes": "P40 Telegram directory. Live: HTTP 403 Cloudflare — auto=False."},
+    # P41 — dork + extra engines. Live check 2026-11-19 (JIN-Agent UA).
+    # --- News RSS ---
+    {"key": "bbc-news", "name": "BBC News", "url": "https://feeds.bbci.co.uk/news/rss.xml", "tier": "T0", "category": "World", "trust": 0.85, "auto": True, "notes": "P41 news RSS. Live: asli feed."},
+    {"key": "aljazeera", "name": "Al Jazeera", "url": "https://www.aljazeera.com/xml/rss/all.xml", "tier": "T0", "category": "World", "trust": 0.8, "auto": True, "notes": "P41 news RSS. Live: asli feed."},
+    {"key": "arstechnica", "name": "Ars Technica", "url": "https://feeds.arstechnica.com/arstechnica/index", "tier": "T0", "category": "World", "trust": 0.8, "auto": True, "notes": "P41 news RSS. Live: asli feed."},
+    {"key": "wired", "name": "Wired", "url": "https://www.wired.com/feed", "tier": "T0", "category": "World", "trust": 0.8, "auto": True, "notes": "P41 news RSS. Live: asli feed."},
+    {"key": "techcrunch", "name": "TechCrunch", "url": "https://techcrunch.com/feed/", "tier": "T0", "category": "World", "trust": 0.75, "auto": True, "notes": "P41 news RSS. Live: asli feed."},
+    {"key": "theverge", "name": "The Verge", "url": "https://www.theverge.com/rss/index.xml", "tier": "T0", "category": "World", "trust": 0.75, "auto": True, "notes": "P41 news Atom. Live: asli feed."},
+    {"key": "zdnet", "name": "ZDNet", "url": "https://www.zdnet.com/news/rss.xml", "tier": "T0", "category": "World", "trust": 0.7, "auto": True, "notes": "P41 news Atom. Live: asli feed."},
+    {"key": "cnet", "name": "CNET", "url": "https://www.cnet.com/rss/news/", "tier": "T0", "category": "World", "trust": 0.7, "auto": True, "notes": "P41 news Atom. Live: asli feed."},
+    {"key": "nytimes", "name": "New York Times", "url": "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", "tier": "T0", "category": "World", "trust": 0.85, "auto": True, "notes": "P41 news RSS. Live: asli feed."},
+    {"key": "wapo", "name": "Washington Post", "url": "https://feeds.washingtonpost.com/rss/technology", "tier": "T0", "category": "World", "trust": 0.85, "auto": False, "notes": "P41 news RSS. Live: HTTP 404 — auto=False."},
+    {"key": "npr", "name": "NPR", "url": "https://feeds.npr.org/1001/rss.xml", "tier": "T0", "category": "World", "trust": 0.8, "auto": True, "notes": "P41 news RSS. Live: asli feed."},
+    {"key": "reuters", "name": "Reuters", "url": "https://www.reutersagency.com/feed/", "tier": "T0", "category": "World", "trust": 0.9, "auto": False, "notes": "P41 news RSS. Live: HTTP 404 — auto=False."},
+    {"key": "groundnews", "name": "Ground News", "url": "https://ground.news/rss", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P41 news RSS. Live: HTTP 404 — auto=False."},
+    # --- Academic ---
+    {"key": "datacite", "name": "DataCite", "url": "https://api.datacite.org/dois", "tier": "T1", "category": "Science", "trust": 0.85, "auto": True, "notes": "P41 keyless DOI metadata API. Live: JSON results."},
+    {"key": "orcid", "name": "ORCID", "url": "https://pub.orcid.org/v3.0/search", "tier": "T1", "category": "Science", "trust": 0.85, "auto": False, "notes": "P41 ORCID search. Live: sirf profiles (koi title/publication nahi) — auto=False."},
+    {"key": "scilit", "name": "Scilit", "url": "https://api.scilit.net/api/publications", "tier": "T1", "category": "Science", "trust": 0.8, "auto": False, "notes": "P41 academic API. Live: HTTP 403 access denied — auto=False."},
+    {"key": "fatcat", "name": "Fatcat", "url": "https://api.fatcat.wiki/v0/release/lookup", "tier": "T1", "category": "Science", "trust": 0.8, "auto": False, "notes": "P41 scholarly API. Live: timeout — auto=False."},
+    {"key": "openaire", "name": "OpenAIRE", "url": "https://api.openaire.eu/search/publications", "tier": "T1", "category": "Science", "trust": 0.85, "auto": True, "notes": "P41 keyless OpenAIRE JSON. Live: results milte hain."},
+    {"key": "hal", "name": "HAL Archives Ouvertes", "url": "https://api.archives-ouvertes.fr/search/", "tier": "T1", "category": "Science", "trust": 0.85, "auto": True, "notes": "P41 keyless HAL JSON. Live: results milte hain."},
+    {"key": "citeseerx", "name": "CiteSeerX", "url": "https://citeseerx.ist.psu.edu/search", "tier": "T1", "category": "Science", "trust": 0.8, "auto": False, "notes": "P41 academic search. Live: HTTP 404 — auto=False."},
+    {"key": "repec", "name": "IDEAS/RePEc", "url": "https://ideas.repec.org/cgi-bin/htsearch", "tier": "T1", "category": "Science", "trust": 0.75, "auto": False, "notes": "P41 RePEc search. Live: direct query URL results nahi deta (form/session) — auto=False."},
+    {"key": "econpapers", "name": "EconPapers", "url": "https://econpapers.repec.org/scripts/search.pf", "tier": "T1", "category": "Science", "trust": 0.75, "auto": False, "notes": "P41 EconPapers search. Live: direct query URL results nahi deta (form/session) — auto=False."},
+    {"key": "philpapers", "name": "PhilPapers", "url": "https://philpapers.org/advancedsearch", "tier": "T1", "category": "Science", "trust": 0.85, "auto": False, "notes": "P41 philosophy index. Live: HTTP 403 Cloudflare — auto=False."},
+    {"key": "pubpsych", "name": "PubPsych", "url": "https://pubpsych.zpid.de/api/v1/search", "tier": "T1", "category": "Science", "trust": 0.8, "auto": False, "notes": "P41 psychology index. Live: HTTP 404 — auto=False."},
+    # --- Patents ---
+    {"key": "ipaustralia", "name": "IP Australia", "url": "https://search.ipaustralia.gov.au/patents/search", "tier": "T2", "category": "Science", "trust": 0.8, "auto": False, "notes": "P41 patent search. Live: HTTP 503 — auto=False."},
+    {"key": "jplatpat", "name": "J-PlatPat", "url": "https://j-platpat.inpit.go.jp/", "tier": "T2", "category": "Science", "trust": 0.8, "auto": False, "notes": "P41 patent search. Live: timeout — auto=False."},
+    {"key": "kipris", "name": "KIPRIS", "url": "https://kris.kipris.or.kr/", "tier": "T2", "category": "Science", "trust": 0.8, "auto": False, "notes": "P41 patent search. Live: connection refused — auto=False."},
+    # --- Archive / data ---
+    {"key": "commoncrawl", "name": "Common Crawl Index", "url": "https://index.commoncrawl.org/", "tier": "T1", "category": "World", "trust": 0.7, "auto": False, "notes": "P41 web index. Live: HTTP 504 — auto=False."},
+    {"key": "loc", "name": "Library of Congress", "url": "https://www.loc.gov/search/", "tier": "T1", "category": "World", "trust": 0.85, "auto": False, "notes": "P41 library search. Live: HTTP 403 Cloudflare — auto=False."},
+    {"key": "worldcat", "name": "WorldCat", "url": "https://search.worldcat.org/", "tier": "T1", "category": "World", "trust": 0.75, "auto": False, "notes": "P41 library search. Live: HTTP 403 Cloudflare — auto=False."},
+    {"key": "usgs", "name": "USGS Earthquakes", "url": "https://earthquake.usgs.gov/fdsnws/event/1/query", "tier": "T1", "category": "World", "trust": 0.85, "auto": True, "notes": "P41 keyless GeoJSON feed. Live: results milte hain."},
+    {"key": "weather", "name": "NOAA Weather Alerts", "url": "https://api.weather.gov/alerts", "tier": "T1", "category": "World", "trust": 0.85, "auto": True, "notes": "P41 keyless alerts JSON. Live: results milte hain."},
+    {"key": "reliefweb", "name": "ReliefWeb", "url": "https://api.reliefweb.int/v2/reports", "tier": "T1", "category": "World", "trust": 0.8, "auto": False, "notes": "P41 humanitarian API. Live: HTTP 403 approved appname zaroori — auto=False."},
+    # --- Web ---
+    {"key": "wiby", "name": "Wiby", "url": "https://wiby.me/", "tier": "T1", "category": "World", "trust": 0.6, "auto": True, "notes": "P41 keyless indie web search. Live: results milte hain."},
+    {"key": "rightdao", "name": "RightDAO", "url": "https://rightdao.com/search", "tier": "T1", "category": "World", "trust": 0.55, "auto": True, "notes": "P41 keyless web search. Live: results milte hain."},
+    # --- TG / social ---
+    {"key": "lemmy", "name": "Lemmy", "url": "https://lemmy.ml/api/v3/search", "tier": "T2", "category": "World", "trust": 0.6, "auto": True, "notes": "P41 keyless Lemmy community search. Live: JSON results."},
+    {"key": "4cdn", "name": "4chan", "url": "https://a.4cdn.org/", "tier": "T2", "category": "Telecom", "trust": 0.5, "auto": False, "notes": "P41 imageboard. Live: HTTP 404 (search endpoint nahi) — auto=False."},
+    {"key": "8kun", "name": "8kun", "url": "https://8kun.top/", "tier": "T2", "category": "Telecom", "trust": 0.4, "auto": False, "notes": "P41 imageboard. Live: HTTP 404 — auto=False."},
 ]
 
 TRUST_LABELS = ((0.9, "Official"), (0.8, "Verified"), (0.6, "Reported"),

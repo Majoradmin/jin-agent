@@ -1455,6 +1455,167 @@ def parse_openlibrary_rows(text, source, source_key, query, cfg, limit=25,
     return out
 
 
+def parse_datacite_rows(text, source, source_key, query, cfg, limit=25,
+                        category="Science", trust=0.85, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for row in (data.get("data") or [])[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        a = row.get("attributes") or {}
+        titles = a.get("titles") or []
+        title = str((titles[0] or {}).get("title") or "").strip() if titles else ""
+        doi = str(a.get("doi") or "").strip()
+        url = str(a.get("url") or ("https://doi.org/" + doi if doi else "")).strip()
+        descs = a.get("descriptions") or []
+        excerpt = str((descs[0] or {}).get("description") or "") if descs else ""
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key, excerpt,
+                                    category=category, trust=trust, tier=tier))
+    return out
+
+
+def _oa_value(value) -> str:
+    if isinstance(value, dict):
+        return str(value.get("$") or "").strip()
+    if isinstance(value, list):
+        return str((value[0] or {}).get("$") or "").strip() if value else ""
+    return str(value or "").strip()
+
+
+def parse_openaire_rows(text, source, source_key, query, cfg, limit=25,
+                        category="Science", trust=0.85, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    rows = (((data.get("response") or {}).get("results") or {}).get("result") or [])
+    out = []
+    for row in rows[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        try:
+            res = row["metadata"]["oaf:entity"]["oaf:result"]
+        except (KeyError, TypeError):
+            continue
+        title = _oa_value(res.get("title"))
+        pid = res.get("pid")
+        doi = ""
+        if isinstance(pid, dict):
+            if pid.get("@classid") == "doi":
+                doi = str(pid.get("$") or "")
+        elif isinstance(pid, list):
+            for p in pid:
+                if isinstance(p, dict) and p.get("@classid") == "doi":
+                    doi = str(p.get("$") or "")
+                    break
+        url = ("https://doi.org/" + doi) if doi else ""
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    _oa_value(res.get("description")),
+                                    _oa_value(res.get("dateofacceptance")),
+                                    category, trust, tier))
+    return out
+
+
+def parse_hal_rows(text, source, source_key, query, cfg, limit=25,
+                   category="Science", trust=0.85, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    docs = (data.get("response") or {}).get("docs") or []
+    out = []
+    for row in docs[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        titles = row.get("title_s") or []
+        title = str(titles[0] if titles else "").strip()
+        url = str(row.get("uri_s") or "").strip()
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    published=row.get("producedDate_tdate") or "",
+                                    category=category, trust=trust, tier=tier))
+    return out
+
+
+def parse_usgs_rows(text, source, source_key, query, cfg, limit=25,
+                    category="World", trust=0.85, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for feat in (data.get("features") or [])[:max(1, int(limit))]:
+        p = feat.get("properties") or {}
+        title = str(p.get("title") or "").strip()
+        url = str(p.get("url") or "").strip()
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    p.get("place") or "", category=category,
+                                    trust=trust, tier=tier))
+    return out
+
+
+def parse_weather_rows(text, source, source_key, query, cfg, limit=25,
+                       category="World", trust=0.85, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for feat in (data.get("features") or [])[:max(1, int(limit))]:
+        p = feat.get("properties") or {}
+        event = str(p.get("event") or "").strip()
+        area = str(p.get("areaDesc") or "").strip()
+        title = (event + (" — " + area if area else "")).strip()
+        url = str(p.get("@id") or p.get("id") or "").strip()
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    p.get("headline") or p.get("description") or "",
+                                    p.get("effective") or p.get("sent"),
+                                    category, trust, tier))
+    return out
+
+
+def parse_wiby_rows(text, source, source_key, query, cfg, limit=25,
+                    category="World", trust=0.6, tier="T1", **_):
+    return parse_html_links(text, source, source_key, query, cfg,
+                            exclude_hosts=("wiby.me",), min_text=12,
+                            limit=limit, category=category, trust=trust,
+                            tier=tier)
+
+
+def parse_rightdao_rows(text, source, source_key, query, cfg, limit=25,
+                        category="World", trust=0.55, tier="T1", **_):
+    return parse_html_links(text, source, source_key, query, cfg,
+                            exclude_hosts=("rightdao.com",), min_text=12,
+                            limit=limit, category=category, trust=trust,
+                            tier=tier)
+
+
+def parse_lemmy_rows(text, source, source_key, query, cfg, limit=25,
+                     category="World", trust=0.6, tier="T2", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for row in (data.get("communities") or [])[:max(1, int(limit))]:
+        c = row.get("community") or {}
+        name = str(c.get("name") or "").strip()
+        if not name:
+            continue
+        title = str(c.get("title") or name).strip()
+        out.append(_engine_item(title, "https://lemmy.ml/c/" + name,
+                                source, source_key, c.get("description") or "",
+                                c.get("published") or "", category, trust, tier))
+    return out
+
+
 _PARSERS = {
     "doaj": parse_doaj_rows,
     "europepmc": parse_europepmc_rows,
@@ -1464,6 +1625,14 @@ _PARSERS = {
     "crates": parse_crates_rows,
     "archive-search": parse_archive_rows,
     "openlibrary": parse_openlibrary_rows,
+    "datacite": parse_datacite_rows,
+    "openaire": parse_openaire_rows,
+    "hal": parse_hal_rows,
+    "usgs": parse_usgs_rows,
+    "weather": parse_weather_rows,
+    "wiby": parse_wiby_rows,
+    "rightdao": parse_rightdao_rows,
+    "lemmy": parse_lemmy_rows,
 }
 
 
@@ -1562,6 +1731,33 @@ SIMPLE_ENGINES = [
     ("openlibrary", "Open Library",
      "https://openlibrary.org/search.json?q={q}&limit={n}", "openlibrary", {},
      "World", 0.75, "T1", True),
+    # Academic (P41)
+    ("datacite", "DataCite",
+     "https://api.datacite.org/dois?query={q}&page[size]={n}", "datacite", {},
+     "Science", 0.85, "T1", True),
+    ("openaire", "OpenAIRE",
+     "https://api.openaire.eu/search/publications?title={q}&format=json&size={n}",
+     "openaire", {}, "Science", 0.85, "T1", True),
+    ("hal", "HAL Archives Ouvertes",
+     "https://api.archives-ouvertes.fr/search/?q={q}"
+     "&fl=title_s,uri_s,producedDate_tdate&rows={n}&wt=json", "hal", {},
+     "Science", 0.85, "T1", True),
+    # Archive / data (P41)
+    ("usgs", "USGS Earthquakes",
+     "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit={n}",
+     "usgs", {}, "World", 0.85, "T1", True),
+    ("weather", "NOAA Weather Alerts",
+     "https://api.weather.gov/alerts?limit={n}", "weather", {},
+     "World", 0.85, "T1", True),
+    # Web (P41)
+    ("wiby", "Wiby", "https://wiby.me/?q={q}", "wiby", {},
+     "World", 0.6, "T1", True),
+    ("rightdao", "RightDAO", "https://rightdao.com/search?q={q}", "rightdao",
+     {}, "World", 0.55, "T1", True),
+    # TG / social (P41)
+    ("lemmy", "Lemmy",
+     "https://lemmy.ml/api/v3/search?q={q}&type_=Communities&limit={n}",
+     "lemmy", {}, "World", 0.6, "T2", True),
 ]
 
 SIMPLE_ADAPTERS = [
@@ -1579,6 +1775,17 @@ RSS_FEEDS = [
     ("9to5google", "9to5Google", "https://9to5google.com/feed/", "Android", 0.7),
     ("sammobile", "SamMobile", "https://www.sammobile.com/feed/", "Mobile & Firmware", 0.7),
     ("apple-newsroom", "Apple Newsroom", "https://www.apple.com/newsroom/rss-feed.rss", "iOS", 0.9),
+    # P41 news RSS
+    ("bbc-news", "BBC News", "https://feeds.bbci.co.uk/news/rss.xml", "World", 0.85),
+    ("aljazeera", "Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml", "World", 0.8),
+    ("arstechnica", "Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", "World", 0.8),
+    ("wired", "Wired", "https://www.wired.com/feed", "World", 0.8),
+    ("techcrunch", "TechCrunch", "https://techcrunch.com/feed/", "World", 0.75),
+    ("theverge", "The Verge", "https://www.theverge.com/rss/index.xml", "World", 0.75),
+    ("zdnet", "ZDNet", "https://www.zdnet.com/news/rss.xml", "World", 0.7),
+    ("cnet", "CNET", "https://www.cnet.com/rss/news/", "World", 0.7),
+    ("nytimes", "New York Times", "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", "World", 0.85),
+    ("npr", "NPR", "https://feeds.npr.org/1001/rss.xml", "World", 0.8),
 ]
 
 ADAPTERS: list[Adapter] = [RSSAdapter(*row) for row in RSS_FEEDS] + [
