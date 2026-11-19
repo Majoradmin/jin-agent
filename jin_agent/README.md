@@ -60,11 +60,11 @@ startup par ek dafa, best-effort):
 | `/channels add <link>` | Channel memory me rakho (✅/❌ confirm gate) |
 | `/channels rm <@handle>` | Channel archive (delete nahi) |
 | `/explore [topic]` | Channels + sites discovery, scored cards, har item par ✅ rakhna / ❌ skip gate |
-| `/status` | Agent + explore block: channels active/dead/archived/stale, sites, sources health breakdown, last explore, pending candidates |
+| `/status` | Agent + explore block: channels active/dead/archived/stale, sites, sources health breakdown, Telegram discovery (engine + candidates/probed/added + fail wajah), last explore, pending candidates |
 | `/report [md\|html]` | Aakhri report dobara bhejo (default `md`; HTML stdlib-only template) |
 | `/help` | Yeh menu |
 
-Sources register: **45** legal/public sources — **26 auto** (adapter wired,
+Sources register: **46** legal/public sources — **27 auto** (adapter wired,
 automatic fetch) + **19 registry-only** (verified manually; koi stable feed ya
 adapter nahi). `/status` is breakdown ke saath non-overlapping health buckets
 bhi dikhta hai: ok / failed / stale / disabled (fail/stale ka naam + wajah).
@@ -84,7 +84,8 @@ Fetch → Verify → Brief → Deliver stages wahi status message edit hote hain
 ### Channel Auto-Discovery (P23)
 
 Agent khud informative Telegram channels dhoondta hai — user ke channel naam
-nai zaroori. Sources: public search engine (`site:t.me/s <topic>`) + preview
+nai zaroori. Sources: public search engine (pehle **Bing** `t.me/s <topic>`,
+phir DDG html/lite fallback — anti-bot anomaly par agla engine) + preview
 harvest (`t.me/<handle>` mentions) + archive harvest. Har candidate ko liveness
 probe se tasdeeq hota hai; informative wale (`score >= channel_min_score`,
 default 4) khud `auto` add hote hain, dead channels `status='dead'` archive
@@ -93,7 +94,9 @@ hote hain (delete nahi). Daily discovery job scheduler me hai
 Koi private group / userbot / MTProto / login scrape — koi wohi (P13 policy).
 
 `mobile & firmware | gsm repair | osint | ai tools | tech news` jaise topics
-se `site:t.me/s` discovery rotate hoti hai; koi bhi language channel add allowed.
+se search discovery rotate hoti hai; koi bhi language channel add allowed.
+Search fail (anti-bot) par `/explore` wajah batata hai aur `/status` me
+**Telegram discovery** block (engine, candidates/probed/added, fail wajah) hota hai.
 
 `--live` na lagane par sab kuch offline deterministic fixture corpus par chalta
 hai — tests aur demos mein kabhi live internet zaroori nahi.
@@ -156,7 +159,7 @@ parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
 | `logging_setup.py`, `metrics.py`, `ci_gate.py` | JSON-lines logs (redacted), in-memory metrics, offline CI gate |
 | `server.py`, `web/` | Loopback Agent Console |
 | `canonical.py`, `snapshots.py`, `ratelimit.py` | URL canonical dedup, page change detection, per-host rate limits |
-| `tests/` | 515 offline tests (1 skipped) |
+| `tests/` | 531 offline tests (1 skipped) |
 | `PHASES.md` | P13–P38 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.
