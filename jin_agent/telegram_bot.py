@@ -37,8 +37,9 @@ try:
 except ImportError:
     _SOCKS_AVAILABLE = False
 
-from . import (VERSION, channels as channels_mod, config, llm, orchestrator,
-               policy, scheduler, searchmemory as memory_mod, store, util, verifier)
+from . import (VERSION, channels as channels_mod, config, highlight as highlight_mod,
+               llm, orchestrator, policy, scheduler, searchmemory as memory_mod, store,
+               util, verifier)
 
 
 class BotAPIError(RuntimeError):
@@ -383,6 +384,22 @@ def split_text(text: str, limit: int = SEND_CHUNK_LIMIT) -> list[str]:
 
 def _html_escape(text: str) -> str:
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _highlight_html(text: str, query: str) -> str:
+    """Markdown/plain text -> HTML jismein query ke lafz ``<b>`` se highlight hon.
+
+    User ka maksad: "report jo milti hai wo keyword highlight kar ky mily".
+    Highlight sirf **text nodes** me hota hai (tags, attributes, URLs, entities
+    nahi chhoo-te) — waja: ``highlight.highlight_html``. Chunking ke liye
+    ``highlight.split_html`` use karo (entity-safe, tag-balanced).
+    Koi masla ho to escape-only HTML — kabhi adhura message nahi.
+    """
+    try:
+        html = markdown_to_html(text)
+        return highlight_mod.highlight_html(html, highlight_mod.terms(query))
+    except Exception:
+        return _html_escape(text)
 
 
 def markdown_to_html(text: str) -> str:
@@ -1739,7 +1756,11 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                                       confidence, confidence_label, sources,
                                       channels_used, absence_kind,
                                       trace_path=trace_path)
-                    api.send(chat_id, bluf)
+                    try:                       # query ke lafz <b> se highlight
+                        api.send(chat_id, _highlight_html(bluf, query),
+                                 parse_mode="HTML")
+                    except TypeError:          # fake/purana API — plain fallback
+                        api.send(chat_id, bluf)
                     if SEND_DELAY > 0:
                         time.sleep(SEND_DELAY)
                     api.send_document(chat_id, report_path, caption=caption)
@@ -1756,8 +1777,8 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                 except Exception:
                     pass
         if not delivered:
-            html = markdown_to_html(final_md)
-            chunks = split_text(html)
+            html = _highlight_html(final_md, query)      # query terms <b> me
+            chunks = highlight_mod.split_html(html)      # entity-safe + balanced
             for i, chunk in enumerate(chunks):
                 if not _session_active(session):
                     api.send(chat_id, "🛑 Report rok di gayi.")

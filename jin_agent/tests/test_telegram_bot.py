@@ -16,9 +16,11 @@ def setUpModule():
 class FakeAPI:
     def __init__(self):
         self.sent = []
+        self.modes = []          # har send ka parse_mode (highlight wiring ke liye)
 
-    def send(self, chat_id, text, buttons=None):
+    def send(self, chat_id, text, buttons=None, parse_mode=None):
         self.sent.append((int(chat_id), str(text), buttons))
+        self.modes.append(parse_mode)
         return {"ok": True, "result": {"message_id": len(self.sent)}}
 
     def get_updates(self, offset, timeout=None):
@@ -26,6 +28,11 @@ class FakeAPI:
 
     def answer_callback(self, callback_id, text=""):
         return {"ok": True}
+
+    def send_document(self, chat_id, file_path, caption="", timeout=120):
+        self.sent.append((int(chat_id), str(caption), None))
+        self.modes.append(None)
+        return {"ok": True, "result": {"message_id": len(self.sent)}}
 
 
 class TestBotHelpers(unittest.TestCase):
@@ -62,9 +69,9 @@ class TestBotHelpers(unittest.TestCase):
                           api=api, research=fake_research)
         self.assertTrue(res["ok"])
         self.assertEqual(res["action"], "research")
-        # 1 progress + 3 report chunks + 1 'mil gaya?' question
-        # (5000-char report ab limit ke andar 3 chunks me aata hai)
-        self.assertEqual(len(api.sent), 5)
+        # 1 progress + 2 report chunks + 1 'mil gaya?' question
+        # (5000-char report ab entity-safe, tag-balanced split_html se 2 chunks me)
+        self.assertEqual(len(api.sent), 4)
         self.assertIn("Research chal rahi hai", api.sent[0][1])
         self.assertIn("# Research Brief", api.sent[1][1])
         for _, text, _ in api.sent[1:-1]:
