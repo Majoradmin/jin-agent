@@ -38,8 +38,8 @@ except ImportError:
     _SOCKS_AVAILABLE = False
 
 from . import (VERSION, channels as channels_mod, config, highlight as highlight_mod,
-               llm, orchestrator, policy, scheduler, searchmemory as memory_mod, store,
-               util, verifier)
+               llm, orchestrator, policy, report_export, scheduler,
+               searchmemory as memory_mod, store, util, verifier)
 
 
 class BotAPIError(RuntimeError):
@@ -118,7 +118,8 @@ HELP_TEXT = (
     "/status — agent + explore ka live status\n"
     "  Misal: /status\n"
     "/help — yeh menu\n"
-    "  Misal: /help\n\n"
+    "  Misal: /help\n"
+    "/report [md|html] — aakhri report dobara bhejo (default md)\n\n"
     "Seedha matn bhi likh sakte hain — wo /research ban jata hai. "
     "Purane commands bhi chalte hain: /addchannel, /rmchannel, /tgsearch, "
     "/deep, /engines, /memory, /stop, /new, /digest, /reports, /alerts, "
@@ -1572,6 +1573,49 @@ def _do_channel_search(chat_id: int, arg: str, cfg: dict, api,
             "count": len(res.get("items") or [])}
 
 
+def _do_report(chat_id: int, arg: str, api) -> dict:
+    """``/report [md|html]`` — aakhri saved report dobara bhejo (default md)."""
+    fmt = str(arg or "").strip().lower() or "md"
+    if fmt not in ("md", "html"):
+        api.send(chat_id, "Format `md` ya `html` likhein. PDF is stdlib-only "
+                          "project me support nahi karta.")
+        return {"ok": False, "action": "report", "error": "bad format"}
+    rows = store.list_reports(1)
+    if not rows:
+        api.send(chat_id, "Koi report nahi mila — pehle /research chalayein.")
+        return {"ok": False, "action": "report", "error": "no report"}
+    row = rows[0]
+    md_path = str(row.get("path") or "")
+    title = util.truncate(row.get("title") or "JIN Agent Brief", 80)
+    if fmt == "html":
+        html, err = report_export.from_report_file(md_path)
+        if err or not html:
+            api.send(chat_id, f"HTML export nahi bana ({err}) — MD bhej raha hoon.")
+            if os.path.isfile(md_path):
+                api.send_document(chat_id, md_path, caption=title)
+                return {"ok": True, "action": "report", "fmt": "md", "path": md_path,
+                        "fallback": "html unavailable"}
+            api.send(chat_id, "Report file bhi nahi mili (purani entry).")
+            return {"ok": False, "action": "report", "error": "report file missing"}
+        html_path = os.path.splitext(md_path)[0] + ".html"
+        try:
+            with open(html_path, "w", encoding="utf-8") as fh:
+                fh.write(html)
+        except OSError as exc:
+            api.send(chat_id, f"HTML file likhna fail ({type(exc).__name__}) — "
+                              f"MD bhej raha hoon.")
+            api.send_document(chat_id, md_path, caption=title)
+            return {"ok": True, "action": "report", "fmt": "md", "path": md_path,
+                    "fallback": "html write failed"}
+        api.send_document(chat_id, html_path, caption=title)
+        return {"ok": True, "action": "report", "fmt": "html", "path": html_path}
+    if not os.path.isfile(md_path):
+        api.send(chat_id, "Report file nahi mili (purani entry).")
+        return {"ok": False, "action": "report", "error": "report file missing"}
+    api.send_document(chat_id, md_path, caption=title)
+    return {"ok": True, "action": "report", "fmt": "md", "path": md_path}
+
+
 def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             research=None, probe=None, tg_search=None) -> dict:
     """Handle one private chat command. Returns {'ok':.., 'action':..}."""
@@ -1733,6 +1777,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
                 f"• {util.truncate(r.get('title') or '', 80)} — {r.get('path') or ''}"
                 for r in rows))
         return {"ok": True, "action": "reports", "count": len(rows)}
+    if cmd == "report":
+        return _do_report(chat_id, arg, api)
     if cmd == "schedule":
         sch = cfg.get("schedule") or {}
         lines = ["⏰ Schedule (minutes):"] + [f"• {k}: {v}" for k, v in sorted(sch.items())]
