@@ -202,6 +202,8 @@ _EXPLORE_CB_RE = re.compile(
 _EXPLORE_TOPIC_CB_RE = re.compile(r"^exp:topic:([a-f0-9]{6,24})$")
 _EXPLORE_SCOPE_CB_RE = re.compile(
     r"^exp:scope:(all|tg|web|oss|deep):([a-f0-9]{6,24})$")
+# "Aur explore karo" — wahi topic dobara discovery (naye items).
+_EXPLORE_MORE_CB_RE = re.compile(r"^exp:more:([a-f0-9]{6,24})$")
 
 # Global stop flag — /stop command set karta hai, research thread check karti hai.
 # Sirf bool se kaam nahi chalta: do concurrent /research (ya research + /stop)
@@ -732,6 +734,12 @@ def parse_explore_topic_callback(data: str) -> str:
     return m.group(1) if m else ""
 
 
+def parse_explore_more_callback(data: str) -> str:
+    """``exp:more:<hash>`` -> hash ("Aur explore karo" button)."""
+    m = _EXPLORE_MORE_CB_RE.match(str(data or "").strip())
+    return m.group(1) if m else ""
+
+
 def parse_explore_scope_callback(data: str) -> tuple[str, str]:
     """``exp:scope:<scope>:<hash>`` -> (scope, hash)."""
     m = _EXPLORE_SCOPE_CB_RE.match(str(data or "").strip())
@@ -1067,8 +1075,10 @@ def _render_explore(chat_id: int, topic: str, scope: str, res: dict,
     if mark:
         _explore_mark_shown(chat_id, keys)
     _EXPLORE_TOPICS[_explore_topic_hash(topic)] = topic
-    buttons = (_explore_buttons(groups) + explore_scope_buttons(topic)
-               + [_explore_bulk_buttons()])
+    more_btn = [{"text": "🔄 Aur explore karo",
+                 "callback_data": "exp:more:" + _explore_topic_hash(topic)}]
+    buttons = (_explore_buttons(groups) + [more_btn]
+               + explore_scope_buttons(topic) + [_explore_bulk_buttons()])
     api.send(chat_id, format_explore_cards_v2(topic, scope, groups),
              buttons=buttons)
     return {"ok": True, "action": "explore", "topic": topic, "scope": scope,
@@ -2400,6 +2410,15 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
         if not topic:
             api.send(chat_id, "Purana topic button hai. Naya /explore karein.")
             return {"ok": False, "action": "explore", "error": "expired"}
+        return _run_explore(chat_id, topic, "all", cfg, api)
+    more_hash = parse_explore_more_callback(data)
+    if more_hash:
+        # "Aur explore karo": wahi topic dobara discovery. run_discovery purane
+        # (known) channels ko chhod deta hai, is liye naye cards milte hain.
+        topic = _EXPLORE_TOPICS.get(more_hash, "")
+        if not topic:
+            api.send(chat_id, "Purana explore button hai. Naya /explore karein.")
+            return {"ok": False, "action": "explore_more", "error": "expired"}
         return _run_explore(chat_id, topic, "all", cfg, api)
     scope, scope_hash = parse_explore_scope_callback(data)
     if scope:

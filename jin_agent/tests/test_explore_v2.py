@@ -237,6 +237,57 @@ class TestAutoSaveBadge(unittest.TestCase):
         self.assertIn("auto-save ✅", cards)
 
 
+class TestMoreExplore(unittest.TestCase):
+    """"🔄 Aur explore karo" — wahi topic dobara discovery, naye items."""
+
+    def setUp(self):
+        tb._EXPLORE_PENDING.pop(42, None)
+        tb._EXPLORE_SHOWN.pop(42, None)
+        tb._EXPLORE_TOPICS.clear()
+
+    def tearDown(self):
+        tb._EXPLORE_PENDING.pop(42, None)
+        tb._EXPLORE_SHOWN.pop(42, None)
+
+    def test_more_button_present(self):
+        api = FakeAPI()
+        with mock.patch.object(tb.scheduler, "run_job",
+                               lambda *a, **k: _res()):
+            tb.dispatch(42, "/explore android security",
+                        {"telegram_chat_id": "42"}, api=api)
+        cbs = [b["callback_data"] for row in api.sent[-1][2] for b in row]
+        self.assertTrue(any(c.startswith("exp:more:") for c in cbs))
+
+    def test_more_callback_runs_discovery_and_shows_new(self):
+        api = FakeAPI()
+        calls = {"n": 0}
+
+        def job(kind, payload=None, cfg=None, offline=True):
+            calls["n"] += 1
+            return _res(added=["first_ch"] if calls["n"] == 1 else ["second_ch"])
+
+        with mock.patch.object(tb.scheduler, "run_job", job):
+            tb.dispatch(42, "/explore android security",
+                        {"telegram_chat_id": "42"}, api=api)
+            cbs = [b["callback_data"] for row in api.sent[-1][2] for b in row]
+            more = [c for c in cbs if c.startswith("exp:more:")][0]
+            api.sent.clear()
+            res = tb.handle_callback(42, more, {"telegram_chat_id": "42"},
+                                     api=api)
+        self.assertTrue(res["ok"])
+        self.assertEqual(calls["n"], 2)
+        cards = api.sent[-1][1]
+        self.assertIn("@second_ch", cards)
+        self.assertNotIn("@first_ch", cards)  # pehle dikhaya hua skip
+
+    def test_more_expired_topic(self):
+        api = FakeAPI()
+        res = tb.handle_callback(42, "exp:more:deadbeef0000",
+                                 {"telegram_chat_id": "42"}, api=api)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["action"], "explore_more")
+
+
 class TestStatusBlock(unittest.TestCase):
     def test_status_has_full_explore_block(self):
         api = FakeAPI()
