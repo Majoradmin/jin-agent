@@ -1,4 +1,4 @@
-# PHASES — JIN Agent P13–P39
+# PHASES — JIN Agent P13–P40
 
 **Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
 **Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
@@ -675,5 +675,46 @@ barqarar; stdlib-only, local-only, onion fetch block aur FRP/FMI/HuaweiID/Knox/M
 patterns untouched.
 
 **PHASE REVIEW — PHASE 39: READY**
+
+---
+
+## 33. PHASE REVIEW — PHASE 40 — Key-Free Engine List (2.9.0)
+
+**TASK:** User ne kaha "poori list add kro key free batch b add kro" — web /
+regional / academic / patents / OSS / archive / news / social / TG dirs ke
+engine source universe me add karne, har engine ke liye allowlist + register +
+adapter/parser, aur jo block/key wale hon un par auto=False (jhoota auto NA).
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `policy.py` | `ALLOWED_HOSTS` me 44 naye host; `SOURCE_REGISTER` me 46 naye entries (9 web, 9 regional, 7 academic, 3 patents, 8 OSS, 4 archive, 2 news, 2 social, 2 TG dirs) — register 46 → 92; `auto=True` sirf 12 engine jin ka live adapter results deta hai |
+| `adapters.py` | `SimpleEngineAdapter` (URL template + parser kind), `parse_html_links` (`_LinkCollector`), `parse_json_rows`, 9 khaas JSON parser (doaj/europepmc/gitlab/huggingface/npm/crates/archive-search/openlibrary) + `SIMPLE_ENGINES` table; `ADAPTERS` 27 → 39 |
+| `tests/test_keyfree_engines.py` (naya) | 19 tests: allowlist, auto/blocked flags, adapter presence, har parser |
+| `tests/test_adapters_v2.py`, `test_governance.py`, `test_status_health.py` | counts 39 adapters / 92 register / 39 auto — 53 registry-only |
+
+**LIVE CLASSIFICATION (2026-11-19, JIN-Agent UA):**
+- **auto=True (12):** yahoojp, seznam, bing-news, doaj, europepmc, gitlab,
+  huggingface, stackexchange, npm, crates, archive-search, openlibrary.
+- **auto=False (34):** mojeek/marginalia/searx (captcha/JS), gibiru/qwant/
+  swisscows/rambler/sourceforge (JS shell), ecosia/startpage/espacenet/
+  telemetr (Cloudflare/Anubis 403), presearch (530), yandex (SmartCaptcha),
+  baidu/sogou/naver/daum (JS/ad-heavy), yahoo (500), yahoo-news (404),
+  semanticscholar (429), biorxiv (recent-feed only), unpaywall (email),
+  core (429/key), base-search (access denied), patentscope (JS/session),
+  uspto (401 key), codeberg (429), pypi (no search API), gutendex (timeout),
+  googlebooks (429 quota), bsky (501), mastodon (empty), tgstat (JS shell).
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **550 tests OK (1 skipped)**. End-to-end `adapters.run` (doaj/gitlab/npm/
+openlibrary/yahoojp/bing-news) → 120 items, sab diagnostics ok.
+
+**RESULT:** Source register 46 → **92** (39 auto / 53 registry-only); adapters
+27 → 39. Har engine ki wajah (blocked/key/JS) register note me likhi hai.
+`VERSION` `2.9.0`, `is_owner`, `server.py`, `watchdog.py`, onion fetch block
+aur FRP/FMI/HuaweiID/Knox/MDM patterns untouched.
+
+**PHASE REVIEW — PHASE 40: READY**
 
 ---

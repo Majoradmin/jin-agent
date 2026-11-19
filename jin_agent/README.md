@@ -64,9 +64,12 @@ startup par ek dafa, best-effort):
 | `/report [md\|html]` | Aakhri report dobara bhejo (default `md`; HTML stdlib-only template) |
 | `/help` | Yeh menu |
 
-Sources register: **46** legal/public sources — **27 auto** (adapter wired,
-automatic fetch) + **19 registry-only** (verified manually; koi stable feed ya
-adapter nahi). `/status` is breakdown ke saath non-overlapping health buckets
+Sources register: **92** legal/public sources — **39 auto** (adapter wired,
+automatic fetch) + **53 registry-only** (verified manually; koi stable feed ya
+adapter nahi). P40 key-free engine list (web/regional/academic/patents/OSS/
+archive/news/social/TG dirs) ka har engine yahan hai; jo block (captcha/429/
+Cloudflare/JS) ya key maange us par `auto=False` + wajah note hai (jhoota auto
+nahi). `/status` is breakdown ke saath non-overlapping health buckets
 bhi dikhta hai: ok / failed / stale / disabled (fail/stale ka naam + wajah).
 
 Multi-turn: chhota follow-up (`aur`, `iske baare me`, `phir`, `more`) pichhle
@@ -150,7 +153,7 @@ parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
 |---|---|
 | `config.py`, `util.py`, `policy.py` | Config, helpers, legal source register, SSRF guard |
 | `store.py` | SQLite WAL + FTS5, dedupe, jobs, watchlist, retention, backup |
-| `adapters.py` | 19 adapters + RSS feeds, one fetch contract, parallel diagnostics |
+| `adapters.py` | 39 adapters + RSS feeds, one fetch contract, parallel diagnostics |
 | `normalizer.py`, `verifier.py`, `ranker.py` | Canonical record, provenance, smart ranking |
 | `planner.py`, `llm.py` | Tool layer + optional local LLM |
 | `briefer.py`, `evaluator.py` | Roman Urdu report, 25-query harness |
@@ -159,8 +162,8 @@ parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
 | `logging_setup.py`, `metrics.py`, `ci_gate.py` | JSON-lines logs (redacted), in-memory metrics, offline CI gate |
 | `server.py`, `web/` | Loopback Agent Console |
 | `canonical.py`, `snapshots.py`, `ratelimit.py` | URL canonical dedup, page change detection, per-host rate limits |
-| `tests/` | 531 offline tests (1 skipped) |
-| `PHASES.md` | P13–P38 `PHASE REVIEW` record |
+| `tests/` | 550 offline tests (1 skipped) |
+| `PHASES.md` | P13–P40 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.
 
