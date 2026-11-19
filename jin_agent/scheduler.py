@@ -24,7 +24,48 @@ JOB_MINUTES = {
 }
 
 
-def firehose(query: str = "mobile firmware security tools", cfg: dict | None = None,
+def _rotating_topic(cfg: dict | None = None) -> str:
+    """Neutral rotating topic (config.TOPICS) — koi hardcoded niche default nahi."""
+    cfg = cfg or config.load()
+    topics = [str(t).strip() for t in (cfg.get("topics") or config.TOPICS)
+              if str(t).strip()]
+    if not topics:
+        return ""
+    return topics[int(time.time() // 3600) % len(topics)]
+
+
+# Scope classification (archive item -> web / open-source / deep-web link).
+OSS_SOURCE_KEYS = {"openalex", "crossref", "arxiv", "github", "github-search"}
+OSS_CATEGORIES = {"Science", "Tools & Reverse Engineering"}
+
+
+def is_oss_item(item: dict) -> bool:
+    """Papers/repos (arXiv, Crossref, OpenAlex, GitHub) — open source scope."""
+    it = item or {}
+    key = str(it.get("source_key") or "").lower()
+    if key in OSS_SOURCE_KEYS:
+        return True
+    src = str(it.get("source") or "").lower()
+    return any(k in src for k in ("arxiv", "crossref", "openalex", "github")) \
+        or str(it.get("category") or "") in OSS_CATEGORIES
+
+
+def is_deep_item(item: dict) -> bool:
+    """Onion / deep-web link — sirf display, fetch kabhi nahi."""
+    url = str((item or {}).get("url") or "").lower()
+    return ".onion" in url or str((item or {}).get("source_key") or "") == "ahmia"
+
+
+def is_web_item(item: dict) -> bool:
+    """Article/blog URL (clearnet, open-source/deep ko chhor kar)."""
+    it = item or {}
+    url = str(it.get("url") or "")
+    if not url.startswith(("http://", "https://")):
+        return False
+    return not is_oss_item(it) and not is_deep_item(it)
+
+
+def firehose(query: str = "", cfg: dict | None = None,
              offline: bool = True, keys: list[str] | None = None) -> dict:
     """Store EVERYTHING the adapters return (dedupe, no ranking, no filtering)."""
     cfg = cfg or config.load()
@@ -42,27 +83,45 @@ def firehose(query: str = "mobile firmware security tools", cfg: dict | None = N
             "diagnostics": diagnostics}
 
 
-def explore(topic: str, cfg: dict | None = None, offline: bool = True) -> dict:
+def explore(topic: str = "", cfg: dict | None = None, offline: bool = True,
+            scope: str = "all") -> dict:
     """Channels/sources explore kar ke scored digest do (rozana digest pattern).
 
-    Discovery (naye/dead channels) + archive me topic ke scored top items +
-    local digest report. Sab kuch deterministic/offline-safe hai.
+    ``topic`` khaali ho to neutral rotating topic (config.TOPICS) — koi
+    hardcoded niche default NAHI. ``scope`` = all | tg | web | oss | deep:
+    tg = channels, web/oss = archive scored items, deep = sirf links (fetch nahi).
     """
     cfg = cfg or config.load()
     store.init_db()
-    discovery = channels.run_discovery(cfg, offline)
+    topic = str(topic or "").strip() or _rotating_topic(cfg)
+    scope = str(scope or "all").strip().lower()
+    if scope not in ("all", "tg", "web", "oss", "deep"):
+        scope = "all"
+    if scope in ("all", "tg"):
+        # topic-driven discovery: query ke mutabiq candidates.
+        discovery = channels.run_discovery(cfg, offline, query=topic)
+    else:
+        # web/oss/deep scope me channel probe ki zaroorat nahi (bina probe).
+        discovery = {"query": topic, "candidates": 0, "probed": 0, "added": [],
+                     "dead": [], "rechecked": 0, "counts": channels.counts()}
     found = store.search_archive(topic, 20)
     scored = sorted(
         found,
         key=lambda r: (r.get("score") or 0, r.get("confidence") or 0),
         reverse=True)[:10]
+    if scope == "web":
+        scored = [i for i in scored if is_web_item(i)]
+    elif scope == "oss":
+        scored = [i for i in scored if is_oss_item(i)]
+    elif scope in ("tg", "deep"):
+        scored = []
     out = orchestrator.digest(cfg)
-    store.add_event("explore", f"topic={util.truncate(topic, 60)} "
+    store.add_event("explore", f"topic={util.truncate(topic, 60)} scope={scope} "
                                 f"added={len(discovery.get('added') or [])} "
                                 f"dead={len(discovery.get('dead') or [])} "
                                 f"active={discovery.get('counts', {}).get('active', 0)}")
-    return {"topic": topic, "query": topic, "discovery": discovery,
-            "scored": scored,
+    return {"topic": topic, "query": topic, "scope": scope,
+            "discovery": discovery, "scored": scored,
             "digest": str((out.get("saved") or {}).get("md") or ""),
             "items": int((out.get("report") or {}).get("facts_count") or 0)}
 
@@ -72,13 +131,13 @@ def run_job(kind: str, payload: dict | None = None, cfg: dict | None = None,
     payload = payload or {}
     cfg = cfg or config.load()
     if kind == "feeds":
-        return firehose(str(payload.get("query") or "mobile firmware security tools"),
+        return firehose(str(payload.get("query") or _rotating_topic(cfg)),
                         cfg, offline)
     if kind == "telegram":
-        return firehose(str(payload.get("query") or "firmware"),
+        return firehose(str(payload.get("query") or _rotating_topic(cfg)),
                         cfg, offline, keys=["telegram-public"])
     if kind == "papers":
-        return firehose(str(payload.get("query") or "firmware security"),
+        return firehose(str(payload.get("query") or _rotating_topic(cfg)),
                         cfg, offline, keys=["openalex", "crossref", "arxiv"])
     if kind == "digest":
         out = orchestrator.digest(cfg)
@@ -101,8 +160,8 @@ def run_job(kind: str, payload: dict | None = None, cfg: dict | None = None,
     if kind == "discovery":
         return channels.run_discovery(cfg, offline)
     if kind == "explore":
-        return explore(str(payload.get("query") or "mobile firmware security tools"),
-                       cfg, offline)
+        return explore(str(payload.get("query") or ""), cfg, offline,
+                       scope=str(payload.get("scope") or "all"))
     if kind == "retention":
         kept = store.retention(int(cfg.get("retention_days") or 90))
         try:

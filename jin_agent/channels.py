@@ -240,9 +240,13 @@ def list_sites(limit: int = 50) -> list[dict]:
 
 def site_counts() -> dict:
     ensure_table()
+    week_ago = util.epoch() - 7 * 86400
     with store.session() as con:
         row = con.execute("SELECT COUNT(*) FROM tg_sites").fetchone()
-    return {"total": int(row[0]) if row else 0}
+        wk = con.execute("SELECT COUNT(*) FROM tg_sites WHERE added_at>=?",
+                         (week_ago,)).fetchone()
+    return {"total": int(row[0]) if row else 0,
+            "week": int(wk[0]) if wk else 0}
 
 
 def add_candidates(handles: list[str]) -> int:
@@ -312,9 +316,15 @@ def extract_handles(text: str) -> list[str]:
     return out
 
 
-def harvest_archive(cfg: dict | None = None) -> list[str]:
-    """Firehose archive ke items ke text se t.me candidates."""
+def harvest_archive(cfg: dict | None = None, query: str = "") -> list[str]:
+    """Firehose archive ke items ke text se t.me candidates.
+
+    ``query`` diya ho to sirf woh items jinke text me query ke lafz hon —
+    taake topic-driven explore usi topic par candidates de (neutral rotate
+    ke baghair).
+    """
     cfg = cfg or config.load()
+    words = set(util.terms(query, 20)) if str(query or "").strip() else set()
     out, seen = [], set()
     try:
         with store.session() as con:
@@ -324,6 +334,8 @@ def harvest_archive(cfg: dict | None = None) -> list[str]:
         return []
     for r in rows:
         text = " ".join([r["title"] or "", r["excerpt"] or "", r["body"] or ""])
+        if words and not any(w in text.lower() for w in words):
+            continue
         for h in extract_handles(text):
             if h not in seen:
                 seen.add(h)
@@ -612,14 +624,21 @@ def check_channel(channel: str, cfg: dict | None = None) -> dict:
 # --------------------------------------------------------------------------
 
 def run_discovery(cfg: dict | None = None, offline: bool = False,
-                  max_add: int | None = None) -> dict:
-    """Poora cycle: candidates dhoondo -> probe -> good add, dead archive."""
+                  max_add: int | None = None, query: str = "") -> dict:
+    """Poora cycle: candidates dhoondo -> probe -> good add, dead archive.
+
+    ``query`` (topic) diya ho to web search, archive harvest aur pool isi
+    query se filter hote hain — ``/explore <topic>`` us topic par hi explore
+    kare (neutral rotation ke baghair). Query khaali = purana neutral rotate.
+    """
     cfg = cfg or config.load()
     ensure_table()
     max_add = int(max_add or util.clamp(
         cfg.get("channel_discovery_probe_per_run"), 1, 40, 8))
     min_score = int(util.clamp(cfg.get("channel_min_score"), 0, 10, 4))
     max_auto = int(util.clamp(cfg.get("channel_discovery_max_auto"), 1, 500, 60))
+    q = str(query or "").strip()
+    words = set(util.terms(q, 20)) if q else set()
 
     known = {r["channel"] for r in list_channels()}
     manual = {clean_handle(c) for c in (cfg.get("telegram_channels") or [])}
@@ -627,21 +646,31 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
 
     # 1) web search (bootstrap) - offline me skip
     if not offline and bool(cfg.get("channel_discovery_web", True)):
-        topics = cfg.get("topics") or TOPIC_KEYWORDS
-        kw = topics[int(time.time() // 3600) % len(topics)]
-        candidates.extend(web_search_candidates(str(kw), cfg))
-        candidates.extend(web_search_candidates(
-            TOPIC_KEYWORDS[int(time.time() // 3600) % len(TOPIC_KEYWORDS)], cfg))
+        if q:
+            # topic-driven: sirf us topic ki search
+            candidates.extend(web_search_candidates(q, cfg))
+        else:
+            topics = cfg.get("topics") or TOPIC_KEYWORDS
+            kw = topics[int(time.time() // 3600) % len(topics)]
+            candidates.extend(web_search_candidates(str(kw), cfg))
+            candidates.extend(web_search_candidates(
+                TOPIC_KEYWORDS[int(time.time() // 3600) % len(TOPIC_KEYWORDS)], cfg))
 
-    # 2) archive harvest (offline-safe)
-    candidates.extend(harvest_archive(cfg))
+    # 2) archive harvest (offline-safe) - query filter ke saath
+    candidates.extend(harvest_archive(cfg, query=q))
 
     # 3) preview harvest pool: pichhle probes ke posts me mile channels
     with store.session() as con:
         pool = con.execute(
             "SELECT handle FROM tg_candidates WHERE probed_at=0 "
             "ORDER BY found_at LIMIT 200").fetchall()
-    candidates.extend(r["handle"] for r in pool)
+    pool_handles = [r["handle"] for r in pool]
+    if words:
+        matched = [h for h in pool_handles
+                   if any(w in h.lower() for w in words)]
+        candidates.extend(matched or pool_handles)
+    else:
+        candidates.extend(pool_handles)
 
     candidates = [c for c in dict.fromkeys(candidates)
                   if c not in known and c not in manual]
@@ -677,7 +706,7 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
                 check_channel(row["channel"], cfg)
                 rechecked += 1
 
-    out = {"candidates": len(candidates), "probed": len(summaries),
+    out = {"query": q, "candidates": len(candidates), "probed": len(summaries),
            "added": added, "dead": dead, "rechecked": rechecked,
            "counts": counts()}
     store.add_event("channel_discovery",
