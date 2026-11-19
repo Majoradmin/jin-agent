@@ -15,9 +15,12 @@ Boundary (Sahulat & Safe Service Policy / C12 / C13 / C27):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
+import socket
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -41,6 +44,13 @@ SEND_CHUNK_LIMIT = 4096
 POLL_TIMEOUT = 30
 POLL_OFFSET = 0
 MAX_COMMAND_LEN = 64
+
+# Per-update worker pool: har update ke liye naya thread kholna unbounded hota
+# hai (telegram flood par thread storm). Is liye pool bounded hai. Default
+# chhota rakha hai taake ek waqt me zyada research parallel na chale; env
+# JIN_AGENT_UPDATE_WORKERS se barha sakte hain.
+DEFAULT_UPDATE_WORKERS = 2
+MAX_UPDATE_WORKERS = 16
 HELP_TEXT = (
     "Salam! Main aap ka JIN Agent hoon.\n\n"
     "/research <sawal> - agent research karo aur Roman Urdu report bhej do\n"
@@ -105,8 +115,86 @@ _LINK_ONLY_RE = re.compile(
     r"(?:https?://)?(?:t\.me|telegram\.me)/(?:s/)?@?[A-Za-z0-9_]{3,40}/?", re.I)
 _HANDLE_ONLY_RE = re.compile(r"@[A-Za-z0-9_]{3,40}")
 
-# Global stop flag — /stop command set karta hai, research thread check karta hai
+# Global stop flag — /stop command set karta hai, research thread check karti hai.
+# Sirf bool se kaam nahi chalta: do concurrent /research (ya research + /stop)
+# race karte the. Is liye session id + lock:
+#   * _send_research lock ke andar naya session banata hai.
+#   * /stop bina lock kiye session invalidate karta hai (running research foran ruk ti hai).
+#   * purana session ka koi hissa (thread/send) check karke apna kaam chhod deta hai.
 _stop_research = False
+_research_lock = threading.Lock()
+_research_session = 0
+_research_threads: set[threading.Thread] = set()
+_research_threads_lock = threading.Lock()
+_SOCKS_SCOPE_LOCK = threading.Lock()
+
+
+def update_workers() -> int:
+    """Per-update thread pool size (env JIN_AGENT_UPDATE_WORKERS, default 2)."""
+    raw = str(os.environ.get("JIN_AGENT_UPDATE_WORKERS", "") or "").strip()
+    if not raw:
+        return DEFAULT_UPDATE_WORKERS
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        print(f"[bot] JIN_AGENT_UPDATE_WORKERS ghalat ({raw!r}) — "
+              f"default {DEFAULT_UPDATE_WORKERS}", flush=True)
+        return DEFAULT_UPDATE_WORKERS
+    return max(1, min(MAX_UPDATE_WORKERS, n))
+
+
+def max_poll_failures() -> int:
+    """Lagataar poll failures ki cap (env JIN_AGENT_MAX_POLL_FAILURES).
+
+    0 = unlimited (purana behaviour). Positive N = N failures ke baad process
+    exit, taake supervisor/watchdog restart kar sake.
+    """
+    raw = str(os.environ.get("JIN_AGENT_MAX_POLL_FAILURES", "0") or "0").strip()
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        print(f"[bot] JIN_AGENT_MAX_POLL_FAILURES ghalat ({raw!r}) — "
+              f"0 (unlimited) mana", flush=True)
+        return 0
+
+
+def _session_active(session: int) -> bool:
+    """Kya ye research session abhi bhi chal raha hai?"""
+    return session == _research_session and not _stop_research
+
+
+def _register_research_thread(t: threading.Thread) -> None:
+    with _research_threads_lock:
+        _research_threads.add(t)
+
+
+def _unregister_research_thread(t: threading.Thread) -> None:
+    with _research_threads_lock:
+        _research_threads.discard(t)
+
+
+def _active_research_threads() -> list[threading.Thread]:
+    with _research_threads_lock:
+        return list(_research_threads)
+
+
+def _cancel_research(join_timeout: float = 1.0) -> None:
+    """Running research session ko roko: session invalidate + threads join.
+
+    Join sirf chhota timeout rakhta hai — orchestrator ke andar network call
+    ko beech me nahi kaata, magar session invalidate hone se research apna
+    baaki kaam (report banana/bhejna) chhod deta hai. Threads daemon hain,
+    is liye process exit bhi safe hai.
+    """
+    global _stop_research, _research_session
+    _stop_research = True
+    _research_session += 1
+    me = threading.current_thread()
+    for t in _active_research_threads():
+        if t is me or not t.is_alive():
+            continue
+        t.join(timeout=join_timeout)
+
 
 
 # --------------------------------------------------------------------------
@@ -272,11 +360,57 @@ def format_memory(rows: list[dict]) -> str:
 
 
 
+def _socks5_target(cfg: dict | None = None):
+    """(host, port, user, pass) agar SOCKS5 configured hai, warna None."""
+    cfg = cfg or config.load()
+    ptype = str(cfg.get("proxy_type") or "").strip().lower()
+    phost = str(cfg.get("proxy_host") or "").strip()
+    try:
+        pport = int(cfg.get("proxy_port") or 0)
+    except (TypeError, ValueError):
+        return None
+    if phost and pport and ptype == "socks5":
+        return (phost, pport, cfg.get("proxy_user") or None,
+                cfg.get("proxy_pass") or None)
+    return None
+
+
+@contextlib.contextmanager
+def _socks_scope(cfg: dict | None = None):
+    """SOCKS5 ko SIRF is HTTP call tak scope karo (process-global nahi).
+
+    Purana code `socket.socket = socks.socksocket` globally patch karta tha —
+    us se poora process (console ke HTTP handler bhi) SOCKS use karta tha.
+    Ab patch sirf `opener.open()` ke dauran hota hai, aur lock ki wajah se
+    do concurrent calls race nahi karti; finally me asli socket restore hota hai.
+    """
+    target = _socks5_target(cfg) if _SOCKS_AVAILABLE else None
+    if not target:
+        yield
+        return
+    with _SOCKS_SCOPE_LOCK:
+        orig_socket = socket.socket
+        socks.set_default_proxy(socks.SOCKS5, target[0], target[1], True,
+                                target[2], target[3])
+        socket.socket = socks.socksocket
+        try:
+            yield
+        finally:
+            socket.socket = orig_socket
+            try:
+                socks.set_default_proxy()  # global default wapas saaf
+            except Exception:
+                pass
+
+
 def _make_opener(cfg: dict | None = None):
     """
     Build a urllib opener with SOCKS5 proxy if configured.
     cfg keys: proxy_type (socks5/http), proxy_host, proxy_port, proxy_user, proxy_pass
     Falls back to direct if PySocks not installed or proxy not configured.
+
+    SOCKS5 ke liye yahan koi global socket patch NAHI hota — patch `_socks_scope`
+    ke andar `_post` ke waqt hota hai (sirf us HTTP call par).
     """
     cfg = cfg or config.load()
     ptype = str(cfg.get("proxy_type") or "").strip().lower()
@@ -295,12 +429,10 @@ def _make_opener(cfg: dict | None = None):
               flush=True)
         return urllib.request.build_opener()
 
-    if phost and pport and ptype == "socks5" and _SOCKS_AVAILABLE:
-        puser = cfg.get("proxy_user") or None
-        ppass = cfg.get("proxy_pass") or None
-        socks.set_default_proxy(socks.SOCKS5, phost, pport, True, puser, ppass)
-        import socket
-        socket.socket = socks.socksocket
+    if phost and pport and ptype == "socks5":
+        if not _SOCKS_AVAILABLE:
+            print("[bot] SOCKS5 configure hai magar PySocks nahi hai — direct connection",
+                  flush=True)
         return urllib.request.build_opener()
 
     if phost and pport and ptype == "http":
@@ -323,6 +455,7 @@ def _make_opener(cfg: dict | None = None):
 
 def _api(token: str, cfg: dict | None = None):
     """Tiny Bot API client (stdlib urllib) with optional proxy support."""
+    cfg = cfg or config.load()
     opener = _make_opener(cfg)
 
     class _API:
@@ -333,8 +466,9 @@ def _api(token: str, cfg: dict | None = None):
             req = urllib.request.Request(
                 self.base + path, data=body,
                 headers={"Content-Type": "application/json"}, method="POST")
-            with opener.open(req, timeout=timeout) as r:
-                return json.loads(r.read().decode())
+            with _socks_scope(cfg):
+                with opener.open(req, timeout=timeout) as r:
+                    return json.loads(r.read().decode())
 
         def _checked(self, res: dict, what: str) -> dict:
             # Telegram ok:false (409 conflict, 429 flood, 400) pehle ignore hota
@@ -438,7 +572,10 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
                 "markdown": f"❌ Research error: {type(exc).__name__}: "
                             f"{util.truncate(str(exc), 300)}"}
     finally:
-        pool.shutdown(wait=False)
+        try:
+            pool.shutdown(wait=False, cancel_futures=True)
+        except TypeError:  # Python < 3.9
+            pool.shutdown(wait=False)
 
     if out.get("blocked"):
         return {"ok": False, "sources": [], "channels": [],
@@ -487,7 +624,6 @@ def ask_after_report(row: dict, sources: int, channels: int) -> str:
 def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             research=None, probe=None, tg_search=None) -> dict:
     """Handle one private chat command. Returns {'ok':.., 'action':..}."""
-    global _stop_research
     cfg = cfg or config.load()
     api = api or _api(str(cfg.get("telegram_bot_token") or ""), cfg)
     cmd, arg = parse_command(text)
@@ -498,7 +634,10 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         api.send(chat_id, HELP_TEXT)
         return {"ok": True, "action": "help"}
     if cmd == "stop":
-        _stop_research = True
+        # Pehle session invalidate karo (running research turant apna kaam chhod
+        # deti hai), phir khabar bhejo. Lock ki zaroorat nahi — isi liye /stop
+        # research ke chalne ke dauran bhi foran kaam karta hai.
+        _cancel_research()
         api.send(chat_id, "🛑 Research rok di gayi. Naya /research karne se phir shuru hoga.")
         return {"ok": True, "action": "stop"}
     if cmd == "status":
@@ -599,113 +738,129 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
 def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                    row_id: int | None = None, advance: bool = False,
                    related: bool = False) -> dict:
-    """Research chalao -> report chunks -> 'mil gaya?' buttons + memory."""
-    global _stop_research
-    _stop_research = False
-    used_sources: list[str] = []
-    used_channels: list[str] = []
-    round_no = 1
-    if row_id:
-        row = memory_mod.get(row_id) or {}
-        used_sources = row.get("used_sources") or []
-        used_channels = row.get("used_channels") or []
-        round_no = int(row.get("round_no") or 1) + (1 if advance else 0)
-    header = ("🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)\n"
-              "🛑 Rokne ke liye /stop likhein") if round_no <= 1 else \
-             (f"🔁 Round {round_no}: naye sources/channels try ho rahe hain "
-              f"({len(used_sources)} engines + {len(used_channels)} channels skip)...\n"
-              "🛑 Rokne ke liye /stop likhein")
-    try:
-        api.send(chat_id, header)
-    except Exception:
-        pass
+    """Research chalao -> report chunks -> 'mil gaya?' buttons + memory.
 
-    result_box = [None]
-
-    def _do_research():
-        if _stop_research:
-            return
-        try:
-            if related and research is None:
-                # User ne "Nahi mila" maula -> LLM related queries -> un se
-                # naye sources/channels dhoondho.
-                queries = llm.related_queries(cfg, query, n=3) or [query]
-                final = None
-                for q in queries:
-                    if _stop_research:
-                        return
-                    final = research_full(q, cfg, skip_sources=used_sources,
-                                          skip_channels=used_channels)
-                    if str((final or {}).get("markdown") or "").strip():
-                        break
-                result_box[0] = final
-            elif research is None:
-                result_box[0] = research_full(
-                    query, cfg, skip_sources=used_sources,
-                    skip_channels=used_channels)
-            else:
-                result_box[0] = research(query, cfg)
-        except Exception as exc:
-            result_box[0] = {"ok": False, "markdown": f"❌ Research error: "
-                             f"{type(exc).__name__}: {util.truncate(str(exc), 250)}",
-                             "sources": [], "channels": []}
-
-    import threading
-    t = threading.Thread(target=_do_research, daemon=True)
-    t.start()
-    t.join(timeout=150)
-    if _stop_research:
-        return {"ok": False, "action": "research", "error": "stopped by user"}
-    if result_box[0] is None:
-        api.send(chat_id, "⏱️ Research timeout ho gaya. Dobara try karein ya chota sawal likhein.")
-        return {"ok": False, "action": "research", "error": "timeout"}
-
-    out = result_box[0]
-    if isinstance(out, dict):
-        md = str(out.get("markdown") or "")
-        sources = [str(s) for s in (out.get("sources") or [])]
-        channels_used = [str(c) for c in (out.get("channels") or [])]
-    else:
-        md, sources, channels_used = str(out or ""), [], []
-    if not md.strip():
-        md = "❌ Report khali rahi. /research dobara try karein."
-
-    final_md = md
-    try:
-        translated = llm.translate_text(cfg, md)
-        if translated:
-            final_md = translated  # foreign sources -> Roman Urdu report
-    except Exception:
-        final_md = md
-    chunks = split_text(final_md)
-    for chunk in chunks:
-        if _stop_research:
-            api.send(chat_id, "🛑 Report rok di gayi.")
-            break
-        api.send(chat_id, chunk)
-
-    # Memory: kaunse sources/channels is round me use hue
-    try:
+    Serialization: `_research_lock` ke andar chalta hai, is liye do /research
+    (ya /research + /stop) race nahi karte. Har session ki apni id hoti hai;
+    /stop ya naya research purana session invalidate kar deta hai.
+    """
+    global _stop_research, _research_session
+    with _research_lock:
+        _research_session += 1
+        session = _research_session
+        _stop_research = False
+        used_sources: list[str] = []
+        used_channels: list[str] = []
+        round_no = 1
         if row_id:
-            row = memory_mod.remember(row_id, sources, channels_used,
-                                      advance=advance)
-        else:
-            row = memory_mod.begin(chat_id, query)
-            row = memory_mod.remember(row["id"], sources, channels_used)
-        row = row or {"id": 0, "round_no": round_no}
-    except Exception:
-        row = {"id": 0, "round_no": round_no}
-    if row.get("id"):
+            row = memory_mod.get(row_id) or {}
+            used_sources = row.get("used_sources") or []
+            used_channels = row.get("used_channels") or []
+            round_no = int(row.get("round_no") or 1) + (1 if advance else 0)
+        header = ("🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)\n"
+                  "🛑 Rokne ke liye /stop likhein") if round_no <= 1 else \
+                 (f"🔁 Round {round_no}: naye sources/channels try ho rahe hain "
+                  f"({len(used_sources)} engines + {len(used_channels)} channels skip)...\n"
+                  "🛑 Rokne ke liye /stop likhein")
         try:
-            api.send(chat_id, ask_after_report(row, len(row.get("used_sources") or []),
-                                               len(row.get("used_channels") or [])),
-                     buttons=after_report_buttons(row["id"]))
+            api.send(chat_id, header)
         except Exception:
             pass
-    _stop_research = True
-    return {"ok": True, "action": "research", "query": query,
-            "chunks": len(chunks), "round": row.get("round_no") or 1,
-            "sources": len(sources), "channels": len(channels_used)}
+
+        result_box = [None]
+
+        def _do_research():
+            if not _session_active(session):
+                return
+            try:
+                if related and research is None:
+                    # User ne "Nahi mila" maula -> LLM related queries -> un se
+                    # naye sources/channels dhoondho.
+                    queries = llm.related_queries(cfg, query, n=3) or [query]
+                    final = None
+                    for q in queries:
+                        if not _session_active(session):
+                            return
+                        final = research_full(q, cfg, skip_sources=used_sources,
+                                              skip_channels=used_channels)
+                        if str((final or {}).get("markdown") or "").strip():
+                            break
+                    result_box[0] = final
+                elif research is None:
+                    result_box[0] = research_full(
+                        query, cfg, skip_sources=used_sources,
+                        skip_channels=used_channels)
+                else:
+                    result_box[0] = research(query, cfg)
+            except Exception as exc:
+                result_box[0] = {"ok": False, "markdown": f"❌ Research error: "
+                                 f"{type(exc).__name__}: {util.truncate(str(exc), 250)}",
+                                 "sources": [], "channels": []}
+            finally:
+                _unregister_research_thread(threading.current_thread())
+
+        t = threading.Thread(target=_do_research, daemon=True,
+                             name="jin-research")
+        _register_research_thread(t)
+        t.start()
+        # Stop-aware join: /stop aane par turant wake ho (150s blind join nahi).
+        deadline = time.monotonic() + 150
+        while t.is_alive() and time.monotonic() < deadline:
+            t.join(timeout=0.5)
+            if not _session_active(session):
+                break
+        if not _session_active(session):
+            return {"ok": False, "action": "research", "error": "stopped by user"}
+        if result_box[0] is None:
+            api.send(chat_id, "⏱️ Research timeout ho gaya. Dobara try karein ya chota sawal likhein.")
+            return {"ok": False, "action": "research", "error": "timeout"}
+
+        out = result_box[0]
+        if isinstance(out, dict):
+            md = str(out.get("markdown") or "")
+            sources = [str(s) for s in (out.get("sources") or [])]
+            channels_used = [str(c) for c in (out.get("channels") or [])]
+        else:
+            md, sources, channels_used = str(out or ""), [], []
+        if not md.strip():
+            md = "❌ Report khali rahi. /research dobara try karein."
+
+        final_md = md
+        try:
+            translated = llm.translate_text(cfg, md)
+            if translated:
+                final_md = translated  # foreign sources -> Roman Urdu report
+        except Exception:
+            final_md = md
+        chunks = split_text(final_md)
+        for chunk in chunks:
+            if not _session_active(session):
+                api.send(chat_id, "🛑 Report rok di gayi.")
+                break
+            api.send(chat_id, chunk)
+
+        # Memory: kaunse sources/channels is round me use hue
+        try:
+            if row_id:
+                row = memory_mod.remember(row_id, sources, channels_used,
+                                          advance=advance)
+            else:
+                row = memory_mod.begin(chat_id, query)
+                row = memory_mod.remember(row["id"], sources, channels_used)
+            row = row or {"id": 0, "round_no": round_no}
+        except Exception:
+            row = {"id": 0, "round_no": round_no}
+        if row.get("id"):
+            try:
+                api.send(chat_id, ask_after_report(row, len(row.get("used_sources") or []),
+                                                   len(row.get("used_channels") or [])),
+                         buttons=after_report_buttons(row["id"]))
+            except Exception:
+                pass
+        _stop_research = True
+        return {"ok": True, "action": "research", "query": query,
+                "chunks": len(chunks), "round": row.get("round_no") or 1,
+                "sources": len(sources), "channels": len(channels_used)}
 
 
 def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
@@ -758,11 +913,17 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
 # --------------------------------------------------------------------------
 
 def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
-    """Long polling (getUpdates offset+timeout). Stop via threading.Event."""
-    import threading as _threading
+    """Long polling (getUpdates offset+timeout). Stop via threading.Event.
+
+    Har update ek bounded ThreadPoolExecutor (JIN_AGENT_UPDATE_WORKERS, default
+    2) par dispatch hota hai — telegram flood par thread storm nahi. Pool ka
+    shutdown clean hai (pending tasks cancel).
+    """
     cfg = cfg or config.load()
     api = api or _api(token, cfg)
     stop = stop or type("S", (), {"is_set": lambda self: False})()
+    workers = update_workers()
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="jin-update")
 
     # --- STARTUP: purani queue clear karo (restart ke baad loop band) ---
     # Telegram ki pending queue ko skip karo: offset se shuru kar ke tak update
@@ -795,85 +956,87 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
         print("[bot] KHABARDAAR: telegram_chat_id unset — allow-all mode. "
               "Production me TELEGRAM_CHAT_ID set karein.", flush=True)
 
+    print(f"[bot] update workers: {workers} (JIN_AGENT_UPDATE_WORKERS)", flush=True)
+
     # Network failure par exponential backoff + visible log. Purana code har
     # failure par 5s sleep karta tha bina log ke — region-block (api.telegram.org
     # unreachable) par bot hamesha "down" lagta tha magar crash nahi hota tha.
     # Ab: backoff, counter, aur JIN_AGENT_MAX_POLL_FAILURES (0 = unlimited, purana
-    # behaviour) ke baad process exit -> watchdog restart karega.
+    # behaviour) ke baad process exit -> watchdog/supervisor restart karega.
     fail_count = 0
-    try:
-        max_fail = int(os.environ.get("JIN_AGENT_MAX_POLL_FAILURES", "0") or "0")
-    except (TypeError, ValueError):
-        max_fail = 0
+    max_fail = max_poll_failures()
+    if max_fail:
+        print(f"[bot] poll failure cap: {max_fail} (0 = unlimited)", flush=True)
 
-    while not stop.is_set():
-        try:
-            updates = api.get_updates(offset, POLL_TIMEOUT) or []
-        except Exception as exc:
-            fail_count += 1
-            delay = min(5 * (2 ** min(fail_count - 1, 4)), 60)  # 5, 10, 20, 40, 60s
-            print(f"[bot] get_updates fail #{fail_count} "
-                  f"({type(exc).__name__}: {exc}); {delay}s baad retry", flush=True)
-            if max_fail and fail_count >= max_fail:
-                print(f"[bot] {max_fail} lagataar failures — process exit "
-                      f"(watchdog restart karega)", flush=True)
-                raise
-            time.sleep(delay)
-            continue
-        if fail_count:
-            print(f"[bot] get_updates wapas chal gaya (failures: {fail_count})", flush=True)
-            fail_count = 0
-        last_id = offset
-        for u in updates:
-            mid = int((u.get("update_id") or 0))
-            last_id = max(last_id, mid)
-            cb = u.get("callback_query") or {}
-            if cb:
-                # Inline button: ✅ Mil gaya / 🔁 Nahi mila - aur dhondo
+    try:
+        while not stop.is_set():
+            try:
+                updates = api.get_updates(offset, POLL_TIMEOUT) or []
+            except Exception as exc:
+                fail_count += 1
+                delay = min(5 * (2 ** min(fail_count - 1, 4)), 60)  # 5, 10, 20, 40, 60s
+                print(f"[bot] get_updates fail #{fail_count} "
+                      f"({type(exc).__name__}: {exc}); {delay}s baad retry", flush=True)
+                if max_fail and fail_count >= max_fail:
+                    print(f"[bot] {max_fail} lagataar failures — process exit "
+                          f"(watchdog restart karega)", flush=True)
+                    raise
+                time.sleep(delay)
+                continue
+            if fail_count:
+                print(f"[bot] get_updates wapas chal gaya (failures: {fail_count})", flush=True)
+                fail_count = 0
+            last_id = offset
+            for u in updates:
+                mid = int((u.get("update_id") or 0))
+                last_id = max(last_id, mid)
+                cb = u.get("callback_query") or {}
+                if cb:
+                    # Inline button: ✅ Mil gaya / 🔁 Nahi mila - aur dhondo
+                    try:
+                        bot_chat = (cb.get("message") or {}).get("chat") or {}
+                        cb_chat_id = int((bot_chat or {}).get("id") or 0)
+                        if is_owner(cb_chat_id, cfg):
+                            pool.submit(
+                                handle_callback,
+                                cb_chat_id, str(cb.get("data") or ""),
+                                cfg=cfg, api=api,
+                                callback_id=str(cb.get("id") or ""),
+                            )
+                    except Exception:
+                        time.sleep(2)
+                    continue
+                msg = u.get("message") or {}
+                chat = msg.get("chat") or {}
+                chat_id = int(chat.get("id") or 0)
+                text = str(msg.get("text") or "")
+                if not text.startswith("/"):
+                    handle = forwarded_handle(msg)
+                    if handle:
+                        text = "/addchannel @" + handle
+                    elif _LINK_ONLY_RE.fullmatch(text.strip()) or \
+                            _HANDLE_ONLY_RE.fullmatch(text.strip()):
+                        text = "/addchannel " + text.strip()
+                if not text or text == "/addchannel ":
+                    continue
+                if not is_owner(chat_id, cfg):
+                    continue
+                # Bounded pool: dispatch loop ko block nahi karta aur flood par
+                # threads ki tadad env cap ke andar rehti hai.
                 try:
-                    bot_chat = (cb.get("message") or {}).get("chat") or {}
-                    cb_chat_id = int((bot_chat or {}).get("id") or 0)
-                    if is_owner(cb_chat_id, cfg):
-                        _threading.Thread(
-                            target=handle_callback,
-                            args=(cb_chat_id, str(cb.get("data") or "")),
-                            kwargs={"cfg": cfg, "api": api,
-                                    "callback_id": str(cb.get("id") or "")},
-                            daemon=True,
-                        ).start()
+                    pool.submit(dispatch, chat_id, text, cfg=cfg, api=api)
                 except Exception:
                     time.sleep(2)
-                continue
-            msg = u.get("message") or {}
-            chat = msg.get("chat") or {}
-            chat_id = int(chat.get("id") or 0)
-            text = str(msg.get("text") or "")
-            if not text.startswith("/"):
-                handle = forwarded_handle(msg)
-                if handle:
-                    text = "/addchannel @" + handle
-                elif _LINK_ONLY_RE.fullmatch(text.strip()) or \
-                        _HANDLE_ONLY_RE.fullmatch(text.strip()):
-                    text = "/addchannel " + text.strip()
-            if not text or text == "/addchannel ":
-                continue
-            if not is_owner(chat_id, cfg):
-                continue
-            # Fire-and-forget: dispatch thread ko block mat karo.
-            # done.wait(timeout=150) hata diya -- yahi loop ka sabab tha.
-            try:
-                _threading.Thread(
-                    target=dispatch,
-                    args=(chat_id, text),
-                    kwargs={"cfg": cfg, "api": api},
-                    daemon=True,
-                ).start()
-            except Exception:
-                time.sleep(2)
-        if updates:
-            offset = last_id + 1
-        if stop.is_set():
-            break
+            if updates:
+                offset = last_id + 1
+            if stop.is_set():
+                break
+    finally:
+        try:
+            pool.shutdown(wait=False, cancel_futures=True)
+        except TypeError:  # Python < 3.9
+            pool.shutdown(wait=False)
+        _cancel_research(join_timeout=1.0)
 
 
 def status(cfg: dict | None = None) -> dict:
