@@ -940,6 +940,21 @@ def _filter_groups(groups: dict, scope: str) -> dict:
             for g in ("tg", "web", "oss", "deep")}
 
 
+def _explore_empty_reason(res: dict, scope: str) -> str:
+    """0-item explore par wajah (honest) — anti-bot search failure saaf lage."""
+    disc = (res or {}).get("discovery") or {}
+    if scope in ("all", "tg") and int(disc.get("candidates") or 0) == 0:
+        ws = disc.get("web_search") or {}
+        if ws.get("anomaly"):
+            return ("📡 Telegram: is dafa koi naya channel nahi mila — search "
+                    "engine ne results nahi diye (anti-bot). `/status` par "
+                    "engine health dekhein.")
+        if ws.get("error"):
+            return (f"📡 Telegram: koi naya channel nahi mila — "
+                    f"{util.truncate(str(ws['error']), 120)}.")
+    return "Koi naya item nahi mila (ya sab pehle dikhaye chuke hain)."
+
+
 def _render_explore(chat_id: int, topic: str, scope: str, res: dict,
                     cfg: dict, api, groups: dict | None = None) -> dict:
     """Ek hi explore message bhejo (dedupe + shown memory ke saath).
@@ -968,7 +983,7 @@ def _render_explore(chat_id: int, topic: str, scope: str, res: dict,
         api.send(chat_id,
                  f"🧭 Explore: {util.truncate(topic, 80)} · "
                  f"{SCOPE_LABELS.get(scope, scope)}\n\n"
-                 "Koi naya item nahi mila (ya sab pehle dikhaye chuke hain).\n"
+                 f"{_explore_empty_reason(res, scope)}\n"
                  "Dobara /explore karein ya neeche scope badlein.",
                  buttons=explore_scope_buttons(topic))
         return {"ok": True, "action": "explore", "topic": topic, "scope": scope,
@@ -1104,6 +1119,10 @@ def format_status_text(cfg: dict | None = None) -> str:
     last = last_explore_at()
     last_scope = last_explore_scope()
     last_topic = last_explore_topic()
+    try:
+        disc = channels_mod.last_discovery_state()
+    except Exception:
+        disc = {}
     lines = [
         "📊 JIN Agent status",
         f"• Policy: {cfg.get('policy_id') or 'SAHULAT-SAFE-SERVICE-v1'}",
@@ -1120,6 +1139,20 @@ def format_status_text(cfg: dict | None = None) -> str:
         f"scope {last_scope or 'n/a'} · pending candidates {pending}",
         f"• Aakhri explore: {last_topic or 'kabhi nahi'}",
     ]
+    if disc:
+        try:
+            disc_ts = time.strftime("%Y-%m-%d %H:%M",
+                                    time.localtime(float(disc.get("ts") or 0)))
+        except (TypeError, ValueError, OverflowError, OSError):
+            disc_ts = "n/a"
+        lines.append(
+            f"• Telegram discovery: last {disc_ts} · "
+            f"engine {disc.get('engine') or 'n/a'} · "
+            f"candidates {int(disc.get('candidates') or 0)} · "
+            f"probed {int(disc.get('probed') or 0)} · "
+            f"added {int(disc.get('added') or 0)}")
+        if disc.get("error"):
+            lines.append("  ✗ wajah: " + util.truncate(str(disc["error"]), 100))
     # Fail/stale source ka naam + wajah — hisaab chhota rehne par bhi khabar
     # saaf honi chahiye (kaunsa source, kyun band).
     for row in health["failed"]:
