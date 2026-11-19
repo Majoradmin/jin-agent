@@ -113,8 +113,8 @@ HELP_TEXT = (
     "  Misal: /search firmware\n"
     "/channels — saved channels ki list + clickable links, add/rm\n"
     "  Misal: /channels add https://t.me/durov  (hataana: /channels rm @durov)\n"
-    "/explore [topic] — channels + sites explore + scored report\n"
-    "  Misal: /explore android security\n"
+    "/explore <topic> — topic-wise channels + web + open source + deep links\n"
+    "  Misal: /explore android security  (bina topic: /explore se topic chunein)\n"
     "/status — agent + explore ka live status\n"
     "  Misal: /status\n"
     "/help — yeh menu\n"
@@ -187,6 +187,10 @@ _DEEP_FLAG_RE = re.compile(r"(?:^|\s)--deep\s*$", re.I)
 # Explore confirm gate: exp:keep:ch:<handle> / exp:skip:st:<idx> / :all
 _EXPLORE_CB_RE = re.compile(
     r"^exp:(keep|skip):(all|ch:[A-Za-z0-9_]{3,40}|st:\d{1,4})$")
+# Explore topic picker / scope filter: exp:topic:<hash> / exp:scope:<scope>:<hash>
+_EXPLORE_TOPIC_CB_RE = re.compile(r"^exp:topic:([a-f0-9]{6,24})$")
+_EXPLORE_SCOPE_CB_RE = re.compile(
+    r"^exp:scope:(all|tg|web|oss|deep):([a-f0-9]{6,24})$")
 
 # Global stop flag — /stop command set karta hai, research thread check karti hai.
 # Sirf bool se kaam nahi chalta: do concurrent /research (ya research + /stop)
@@ -210,8 +214,13 @@ _STATUS_MESSAGES: dict[int, int] = {}
 # ~20 edit/min limit hai; stage edits 3s se kam na hon (20/min ke andar).
 _STATUS_LAST_EDIT: dict[int, float] = {}
 STATUS_EDIT_MIN_GAP = 3.0
-# Explore confirm gate: chat_id -> {item_key: item} (✅ rakhna / ❌ nahi).
-_EXPLORE_PENDING: dict[int, dict[str, dict]] = {}
+# Explore confirm gate: chat_id -> {"topic", "scope", "items": {key: item}}
+_EXPLORE_PENDING: dict[int, dict] = {}
+# Per-chat "pehle dikhaye gaye" item keys (max 200) — dobara /explore par wahi
+# cheez na aaye. dict ordered-set ki tarah (key -> None).
+_EXPLORE_SHOWN: dict[int, dict[str, None]] = {}
+# topic hash -> topic (callback_data 64-byte limit ki wajah se hash use hota hai)
+_EXPLORE_TOPICS: dict[str, str] = {}
 # Group/chat rate limit: chat_id -> sliding window of dispatch timestamps.
 _GROUP_HITS: dict[int, list[float]] = {}
 GROUP_RATE_LIMIT = 20
@@ -651,6 +660,20 @@ def parse_explore_callback(data: str) -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
+def parse_explore_topic_callback(data: str) -> str:
+    """``exp:topic:<hash>`` -> hash (topic picker button)."""
+    m = _EXPLORE_TOPIC_CB_RE.match(str(data or "").strip())
+    return m.group(1) if m else ""
+
+
+def parse_explore_scope_callback(data: str) -> tuple[str, str]:
+    """``exp:scope:<scope>:<hash>`` -> (scope, hash)."""
+    m = _EXPLORE_SCOPE_CB_RE.match(str(data or "").strip())
+    if not m:
+        return "", ""
+    return m.group(1), m.group(2)
+
+
 def _keep_explore_item(item: dict, cfg: dict | None = None) -> None:
     """Confirm gate ✅: channel registry / site memory me rakho."""
     if not isinstance(item, dict):
@@ -682,8 +705,9 @@ def _skip_explore_item(item: dict, cfg: dict | None = None) -> None:
 
 def _handle_explore_callback(chat_id: int, action: str, key: str,
                              cfg: dict, api) -> dict:
-    """Explore ke ✅/❌ buttons (per-item aur bulk)."""
-    items = _EXPLORE_PENDING.get(int(chat_id)) or {}
+    """Explore ke ✅/❌ buttons (per-item aur bulk) — purana gate format."""
+    pending = _EXPLORE_PENDING.get(int(chat_id)) or {}
+    items = pending.get("items") or {}
     if key == "all":
         kept = skipped = 0
         for item in list(items.values()):
@@ -713,76 +737,312 @@ def _handle_explore_callback(chat_id: int, action: str, key: str,
     return {"ok": True, "action": "explore_skip", "kind": item.get("kind")}
 
 
-def _send_explore_gate(chat_id: int, topic: str, res: dict, cfg: dict,
-                       api) -> dict:
-    """Discovery ke naye channels/sites ko cards + ✅/❌ confirm gate ke saath bhejo."""
-    disc = (res or {}).get("discovery") or {}
-    added = disc.get("added") or []
-    try:
-        rows = {r["channel"]: r for r in channels_mod.list_channels()}
-    except Exception:
-        rows = {}
-    chan_items: list[dict] = []
-    for handle in added[:10]:
-        row = rows.get(handle) or {}
-        chan_items.append({
-            "kind": "channel", "key": "ch:" + str(handle),
+EXPLORE_SCOPES = [
+    ("all", "🌐 Sab"), ("tg", "🐦 Telegram"), ("web", "🌐 Open web"),
+    ("oss", "📚 Open source"), ("deep", "🕶️ Deep web"),
+]
+SCOPE_LABELS = {k: v for k, v in EXPLORE_SCOPES}
+_EXPLORE_GROUP_CAP = {"tg": 6, "web": 5, "oss": 5, "deep": 4}
+
+
+def _explore_topic_hash(topic: str) -> str:
+    """Topic ka chhota hash (callback_data 64-byte limit ke liye)."""
+    return util.fingerprint(str(topic or ""))[:12]
+
+
+def explore_scope_buttons(topic: str) -> list[list[dict]]:
+    """Scope filter buttons (callback me hash; topic pending/map me rehta hai)."""
+    h = _explore_topic_hash(topic)
+    _EXPLORE_TOPICS[h] = str(topic)
+    return [[{"text": label, "callback_data": f"exp:scope:{key}:{h}"}]
+            for key, label in EXPLORE_SCOPES]
+
+
+def explore_topic_buttons(cfg: dict | None = None) -> list[list[dict]]:
+    """``/explore`` bina topic: config.TOPICS se 6-8 topic buttons (koi niche default nahi)."""
+    cfg = cfg or config.load()
+    topics = [str(t).strip() for t in (cfg.get("topics") or config.TOPICS)
+              if str(t).strip()][:8]
+    for t in topics:
+        _EXPLORE_TOPICS[_explore_topic_hash(t)] = t
+    return [[{"text": t[:28],
+              "callback_data": "exp:topic:" + _explore_topic_hash(t)}]
+            for t in topics]
+
+
+def explore_deep_links(topic: str) -> list[dict]:
+    """Deep-web engines ke prefilled links — sirf display, fetch/crawl NAHI."""
+    q = urllib.parse.quote(str(topic or "").strip()[:150])
+    out = []
+    for name, url, note in DEEP_ENGINES:
+        link = url.replace("{q}", q) if q else url.split("?")[0].replace("{q}", "")
+        out.append({"kind": "deep", "title": str(name), "url": link,
+                    "source": "deep-web", "note": str(note)})
+    return out
+
+
+def _explore_shown(chat_id: int) -> dict[str, None]:
+    return _EXPLORE_SHOWN.setdefault(int(chat_id), {})
+
+
+def _explore_mark_shown(chat_id: int, keys) -> None:
+    """Dikhaye gaye keys yaad rakho (max 200) — dobara explore par skip."""
+    seen = _explore_shown(chat_id)
+    for k in keys:
+        if k:
+            seen[k] = None
+    while len(seen) > 200:
+        seen.pop(next(iter(seen)))
+
+
+def _explore_item_key(item: dict) -> str:
+    if not isinstance(item, dict):
+        return ""
+    if item.get("kind") == "channel":
+        return "ch:" + str(item.get("handle") or "")
+    return "url:" + str(item.get("url") or "")
+
+
+def _explore_channel_item(handle: str, rows: dict) -> dict:
+    row = rows.get(handle) or {}
+    return {"kind": "channel", "key": "ch:" + str(handle),
             "handle": str(handle),
             "title": str(row.get("title") or handle),
             "score": int(row.get("score") or 0),
             "subs": str(row.get("subscribers") or ""),
             "status": str(row.get("status") or "active"),
             "url": "https://t.me/" + str(handle),
-            "label": "@" + str(handle),
-        })
-    site_items: list[dict] = []
-    for it in ((res or {}).get("scored") or [])[:8]:
-        url = str(it.get("url") or "").strip()
-        if not url:
-            continue
-        site_items.append({
-            "kind": "site", "key": "st:" + str(len(site_items)),
+            "label": "@" + str(handle)}
+
+
+def _explore_site_item(it: dict, url: str, topic: str, idx: int) -> dict:
+    return {"kind": "site", "key": "st:" + str(idx),
             "title": str(it.get("title") or url),
             "source": str(it.get("source") or ""),
             "url": url, "topic": topic,
-            "label": str(it.get("source") or "site"),
-        })
-    items = chan_items + site_items
-    if not items:
-        api.send(chat_id, f"🧭 Explore: {util.truncate(topic, 80)}\n\n"
-                          f"Koi naya channel/site nahi mila. Dobara /explore karein.")
-        return {"ok": False, "action": "explore_empty", "items": 0}
-    _EXPLORE_PENDING[int(chat_id)] = {it["key"]: it for it in items}
+            "score": it.get("score") or 0,
+            "label": str(it.get("source") or "site")}
+
+
+def _explore_groups(res: dict, topic: str, scope: str) -> dict:
+    """Discovery + scored + deep links ko 4 scope-group me todo.
+
+    Site-like items (web/oss/deep) ke keys global ``st:<idx>`` hote hain —
+    purana ``exp:keep:st:<idx>`` callback format barqarar aur keys unique.
+    """
+    disc = (res or {}).get("discovery") or {}
+    scored = (res or {}).get("scored") or []
+    groups: dict[str, list[dict]] = {"tg": [], "web": [], "oss": [], "deep": []}
+    if scope in ("all", "tg"):
+        try:
+            rows = {r["channel"]: r for r in channels_mod.list_channels()}
+        except Exception:
+            rows = {}
+        for handle in (disc.get("added") or [])[:_EXPLORE_GROUP_CAP["tg"]]:
+            groups["tg"].append(_explore_channel_item(str(handle), rows))
+    idx = 0
+    if scope in ("all", "web", "oss"):
+        for it in scored:
+            url = str(it.get("url") or "").strip()
+            if not url:
+                continue
+            if scheduler.is_oss_item(it):
+                if scope in ("all", "oss"):
+                    groups["oss"].append(_explore_site_item(it, url, topic, idx))
+                    idx += 1
+            elif scheduler.is_web_item(it):
+                if scope in ("all", "web"):
+                    groups["web"].append(_explore_site_item(it, url, topic, idx))
+                    idx += 1
+    if scope in ("all", "deep"):
+        for d in explore_deep_links(topic):
+            d = dict(d)
+            d["key"] = "st:" + str(idx)
+            d["label"] = "deep link"
+            idx += 1
+            groups["deep"].append(d)
+    for g in groups:
+        groups[g] = groups[g][:_EXPLORE_GROUP_CAP[g]]
+    return groups
+
+
+def _explore_filter_items(groups: dict, chat_id: int) -> dict:
+    """Same handle/URL ek baar + pehle dikhaye gaye keys skip."""
+    seen = _explore_shown(chat_id)
+    out: dict[str, list[dict]] = {"tg": [], "web": [], "oss": [], "deep": []}
+    used: set[str] = set()
+    for g in ("tg", "web", "oss", "deep"):
+        for it in groups.get(g) or []:
+            key = _explore_item_key(it)
+            if not key or key in used or key in seen:
+                continue
+            used.add(key)
+            out[g].append(it)
+    return out
+
+
+def format_explore_cards_v2(topic: str, scope: str, groups: dict) -> str:
+    """Ek hi message: har scope ka heading + clickable link + score."""
+    label = SCOPE_LABELS.get(scope, scope)
+    lines = [f"🧭 Explore: {util.truncate(topic, 80)} · {label}", ""]
+    for g, head in (("tg", "📡 Telegram"), ("web", "🌐 Open web"),
+                    ("oss", "📚 Papers & code"), ("deep", "🕶️ Deep web links")):
+        items = groups.get(g) or []
+        if not items:
+            continue
+        suffix = " — links only, bot fetch nahi karta" if g == "deep" else ""
+        lines.append(f"{head} ({len(items)}){suffix}")
+        for i, it in enumerate(items, 1):
+            title = util.truncate(str(it.get("title") or it.get("url") or ""), 70)
+            if g == "tg":
+                bits = [b for b in (f"score {it.get('score', 0)}",
+                                    (str(it.get("subs") or "") + " subs")
+                                    if it.get("subs") else "",
+                                    str(it.get("status") or "active")) if b]
+                lines.append(f"{i}. {title} — @{it.get('handle')}")
+                lines.append(f"   {' · '.join(bits)}")
+            else:
+                src = f" · {it['source']}" if it.get("source") else ""
+                score = f" · score {it['score']}" if it.get("score") else ""
+                lines.append(f"{i}. {title}{src}{score}")
+            lines.append(f"   {it.get('url')}")
+        lines.append("")
+    if len(lines) <= 2:
+        lines.append("Koi naya item nahi mila.")
+    lines.append("✅ = memory me rakho · ❌ = skip. Bulk: ✅ Sab rakho / ❌ Kuch nahi.")
+    return util.truncate("\n".join(lines), 3500)
+
+
+def _explore_buttons(groups: dict) -> list[list[dict]]:
+    """Har item par ✅/❌ (purana callback format barqarar)."""
     buttons: list[list[dict]] = []
-    for it in items:
-        buttons.append([
-            {"text": "✅ " + it["label"][:20],
-             "callback_data": "exp:keep:" + it["key"]},
-            {"text": "❌", "callback_data": "exp:skip:" + it["key"]},
-        ])
-    buttons.append([
-        {"text": "✅ Sab rakho", "callback_data": "exp:keep:all"},
-        {"text": "❌ Kuch nahi", "callback_data": "exp:skip:all"},
-    ])
-    api.send(chat_id, format_explore_cards(topic, chan_items, site_items),
+    for g in ("tg", "web", "oss", "deep"):
+        for it in groups.get(g) or []:
+            buttons.append([
+                {"text": "✅ " + str(it.get("label") or "")[:20],
+                 "callback_data": "exp:keep:" + it["key"]},
+                {"text": "❌", "callback_data": "exp:skip:" + it["key"]},
+            ])
+    return buttons
+
+
+def _explore_bulk_buttons() -> list[dict]:
+    return [{"text": "✅ Sab rakho", "callback_data": "exp:keep:all"},
+            {"text": "❌ Kuch nahi", "callback_data": "exp:skip:all"}]
+
+
+def _filter_groups(groups: dict, scope: str) -> dict:
+    """Scope button par sirf us group ko dikhao (baqi khaali)."""
+    if scope == "all":
+        return groups
+    return {g: (list(groups.get(g) or []) if g == scope else [])
+            for g in ("tg", "web", "oss", "deep")}
+
+
+def _render_explore(chat_id: int, topic: str, scope: str, res: dict,
+                    cfg: dict, api, groups: dict | None = None) -> dict:
+    """Ek hi explore message bhejo (dedupe + shown memory ke saath).
+
+    ``groups`` diya ho (scope button par pending se) to dobara discovery nahi
+    chalti aur shown-filter bhi lagta nahi — warna scope badalne par sab
+    "pehle dikhaye" skip ho jatay.
+    """
+    if groups is None:
+        full = _explore_filter_items(_explore_groups(res, topic, "all"),
+                                     chat_id)
+        groups = _filter_groups(full, scope)
+        mark = True
+    else:
+        full = groups
+        groups = _filter_groups(groups, scope)
+        mark = False
+    items: dict[str, dict] = {}
+    keys = []
+    for g in ("tg", "web", "oss", "deep"):
+        for it in groups.get(g) or []:
+            items[it["key"]] = it
+            keys.append(_explore_item_key(it))
+    if not items:
+        _EXPLORE_PENDING.pop(int(chat_id), None)
+        api.send(chat_id,
+                 f"🧭 Explore: {util.truncate(topic, 80)} · "
+                 f"{SCOPE_LABELS.get(scope, scope)}\n\n"
+                 "Koi naya item nahi mila (ya sab pehle dikhaye chuke hain).\n"
+                 "Dobara /explore karein ya neeche scope badlein.",
+                 buttons=explore_scope_buttons(topic))
+        return {"ok": True, "action": "explore", "topic": topic, "scope": scope,
+                "items": 0, "empty": True}
+    _EXPLORE_PENDING[int(chat_id)] = {"topic": topic, "scope": scope,
+                                      "items": items, "groups": full}
+    if mark:
+        _explore_mark_shown(chat_id, keys)
+    _EXPLORE_TOPICS[_explore_topic_hash(topic)] = topic
+    buttons = (_explore_buttons(groups) + explore_scope_buttons(topic)
+               + [_explore_bulk_buttons()])
+    api.send(chat_id, format_explore_cards_v2(topic, scope, groups),
              buttons=buttons)
-    return {"ok": True, "action": "explore_gate", "items": len(items),
-            "channels": len(chan_items), "sites": len(site_items)}
+    return {"ok": True, "action": "explore", "topic": topic, "scope": scope,
+            "items": len(items), "empty": False}
+
+
+def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
+    """``/explore <topic>`` — topic required; scope default all."""
+    topic = str(topic or "").strip()
+    scope = str(scope or "all").strip().lower()
+    if scope not in SCOPE_LABELS:
+        scope = "all"
+    if not topic:
+        api.send(chat_id,
+                 "🧭 Explore ke liye topic chunein ya `/explore <kuch bhi>` likhein.\n"
+                 "Phir scope choose karein: 🐦 Telegram · 🌐 Open web · "
+                 "📚 Open source · 🕶️ Deep web.",
+                 buttons=explore_topic_buttons(cfg))
+        return {"ok": True, "action": "explore_topics"}
+    try:
+        # Manual explore: asli discovery (network probes) chalao, topic ke saath.
+        res = scheduler.run_job("explore", {"query": topic, "scope": scope},
+                                cfg, offline=False)
+    except Exception as exc:
+        api.send(chat_id, f"❌ Explore fail: {type(exc).__name__}: "
+                          f"{util.truncate(str(exc), 200)}")
+        return {"ok": False, "action": "explore", "error": "explore failed"}
+    out = _render_explore(chat_id, topic, scope, res, cfg, api)
+    out["items"] = int(out.get("items") or 0)
+    out["archive_items"] = int(res.get("items") or 0)
+    return out
+
+
+def last_explore_event() -> dict:
+    """Aakhri explore event (``/status`` ke liye); na ho to {}."""
+    try:
+        for e in store.list_events(200):
+            if str(e.get("kind") or "") == "explore":
+                return e
+    except Exception:
+        pass
+    return {}
 
 
 def last_explore_at() -> str:
     """Aakhri explore event ka ts (``/status`` ke liye); na ho to ""."""
-    try:
-        for e in store.list_events(200):
-            if str(e.get("kind") or "") == "explore":
-                return str(e.get("ts") or "")
-    except Exception:
-        pass
-    return ""
+    return str(last_explore_event().get("ts") or "")
+
+
+def last_explore_scope() -> str:
+    """Aakhri explore ka scope (event detail se)."""
+    m = re.search(r"scope=(\S+)", str(last_explore_event().get("detail") or ""))
+    return m.group(1) if m else ""
+
+
+def last_explore_topic() -> str:
+    """Aakhri explore ka topic (event detail se)."""
+    m = re.search(r"topic=(.*?)\s+scope=",
+                  str(last_explore_event().get("detail") or ""))
+    return m.group(1).strip() if m else ""
 
 
 def format_status_text(cfg: dict | None = None) -> str:
-    """``/status`` — agent + channels + explore + sources ka live hisaab."""
+    """``/status`` — agent + Telegram + sites + sources + explore ka live hisaab."""
     cfg = cfg or config.load()
     try:
         ch = channels_mod.counts()
@@ -805,17 +1065,22 @@ def format_status_text(cfg: dict | None = None) -> str:
     except Exception:
         pending = 0
     last = last_explore_at()
+    last_scope = last_explore_scope()
+    last_topic = last_explore_topic()
     lines = [
         "📊 JIN Agent status",
         f"• Policy: {cfg.get('policy_id') or 'SAHULAT-SAFE-SERVICE-v1'}",
         f"• Poll failures: {_poll_failures}",
-        f"• Channels: {ch.get('active', 0)} active / {ch.get('dead', 0)} dead / "
+        f"• Telegram: {ch.get('active', 0)} active / {ch.get('dead', 0)} dead / "
         f"{ch.get('archived', 0)} archived / {ch.get('stale', 0)} stale",
-        f"• Sites memory: {sites.get('total', 0)}",
+        f"• Sites memory: {sites.get('total', 0)} "
+        f"(is hafte {sites.get('week', 0)})",
         f"• Sources: {ok_src} ok / {fail_src} fail (total {len(sources)})",
-        f"• Explore: last {last or 'kabhi nahi'} · pending candidates {pending}",
+        f"• Explore: last {last or 'kabhi nahi'} · "
+        f"scope {last_scope or 'n/a'} · pending candidates {pending}",
+        f"• Aakhri explore: {last_topic or 'kabhi nahi'}",
         "",
-        "Explore chalane ke liye: /explore [topic]",
+        "Explore: /explore <topic> (ya /explore se topic chunein)",
     ]
     return "\n".join(lines)
 
@@ -1294,7 +1559,10 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
                 "channels_stale": int(ch.get("stale") or 0),
                 "pending_candidates": channels_mod.pending_candidates(),
                 "last_explore_at": last_explore_at(),
-                "sites": channels_mod.site_counts().get("total", 0)}
+                "last_explore_scope": last_explore_scope(),
+                "last_explore_topic": last_explore_topic(),
+                "sites": channels_mod.site_counts().get("total", 0),
+                "sites_week": channels_mod.site_counts().get("week", 0)}
     if cmd == "sources":
         api.send(chat_id, f"Sources register open hai ({len(policy.register())} official/legal sources). "
                           f"/research <sawal> se detail.")
@@ -1378,6 +1646,7 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         _STATUS_MESSAGES.pop(int(chat_id), None)
         _STATUS_LAST_EDIT.pop(int(chat_id), None)
         _EXPLORE_PENDING.pop(int(chat_id), None)
+        _EXPLORE_SHOWN.pop(int(chat_id), None)
         api.send(chat_id, f"🌱 Naya context shuru — {closed} purana research band kar "
                           f"diya. Naya /research foran shuru ho jayega.")
         return {"ok": True, "action": "new", "closed": int(closed)}
@@ -1428,18 +1697,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         send_chunks(api, chat_id, format_selftest(res))
         return {"ok": True, "action": "selftest", "ok": bool(res.get("ok"))}
     if cmd == "explore":
-        topic = arg.strip() or "mobile firmware security tools"
-        try:
-            # Manual explore: asli discovery (network probes) chalao.
-            res = scheduler.run_job("explore", {"query": topic}, cfg, offline=False)
-        except Exception as exc:
-            api.send(chat_id, f"❌ Explore fail: {type(exc).__name__}: "
-                              f"{util.truncate(str(exc), 200)}")
-            return {"ok": False, "action": "explore", "error": "explore failed"}
-        send_chunks(api, chat_id, format_explore(res))
-        gate = _send_explore_gate(chat_id, topic, res, cfg, api)
-        return {"ok": True, "action": "explore", "topic": topic,
-                "items": int(res.get("items") or 0), "gate": gate}
+        # Topic required — bina topic par topic picker (koi niche default nahi).
+        return _run_explore(chat_id, arg.strip(), "all", cfg, api)
     if cmd == "research":
         query, deep = split_deep_flag(arg)
         if not query:
@@ -1853,6 +2112,26 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
             api.send(chat_id, "Purana confirmation hai. Dobara /addchannel karein.")
             return {"ok": False, "action": "addchannel", "error": "expired"}
         return _addchannel_now(chat_id, target, cfg, api)
+    topic_hash = parse_explore_topic_callback(data)
+    if topic_hash:
+        topic = _EXPLORE_TOPICS.get(topic_hash, "")
+        if not topic:
+            api.send(chat_id, "Purana topic button hai. Naya /explore karein.")
+            return {"ok": False, "action": "explore", "error": "expired"}
+        return _run_explore(chat_id, topic, "all", cfg, api)
+    scope, scope_hash = parse_explore_scope_callback(data)
+    if scope:
+        pending = _EXPLORE_PENDING.get(int(chat_id)) or {}
+        topic = str(pending.get("topic") or "") or _EXPLORE_TOPICS.get(scope_hash, "")
+        if not topic:
+            api.send(chat_id, "Purana scope button hai. Naya /explore karein.")
+            return {"ok": False, "action": "explore", "error": "expired"}
+        groups = pending.get("groups")
+        if groups:
+            # Wahi items, sirf scope filter (shown memory dobara na lagay)
+            return _render_explore(chat_id, topic, scope, None, cfg, api,
+                                   groups=groups)
+        return _run_explore(chat_id, topic, scope, cfg, api)
     exp_action, exp_key = parse_explore_callback(data)
     if exp_action:
         return _handle_explore_callback(chat_id, exp_action, exp_key, cfg, api)
