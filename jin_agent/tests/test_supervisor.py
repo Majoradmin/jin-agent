@@ -4,7 +4,6 @@ Context: bot akele long polling karta hai aur port nahi kholta — hosted
 reverse proxy ko 502 milta tha. Supervisor dono child chalata hai.
 """
 
-import json
 import os
 import tempfile
 import threading
@@ -127,9 +126,10 @@ class TestDeploymentConfig(unittest.TestCase):
         self.assertIn("healthCheckPath: /api/health", text)
         self.assertIn("JIN_AGENT_HOST", text)
 
-    def test_railway_healthcheck(self):
-        data = json.loads((BASE / "railway.json").read_text(encoding="utf-8"))
-        self.assertEqual(data["deploy"]["healthcheckPath"], "/api/health")
+    def test_railway_removed(self):
+        # 62650f1: railway.json hata diya gaya — poora host ab FadeHost par hai.
+        # Ye test document karta hai ke file dobara na aaye (deploy = render.yaml).
+        self.assertFalse((BASE / "railway.json").exists())
 
     def test_deploy_doc_exists(self):
         self.assertTrue((BASE / "DEPLOY.md").is_file())
