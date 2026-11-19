@@ -226,7 +226,8 @@ class TestResultsWithoutHandles(unittest.TestCase):
         self.assertEqual(info["engine"], "bing")
         self.assertFalse(info["anomaly"])
         self.assertIn("t.me channel nahi mila", info["error"])
-        self.assertEqual([t["engine"] for t in info["tried"]][0], "bing")
+        # RightDAO pehle chalta hai (blocked) — bing bhi tried me darj hona chahiye.
+        self.assertIn("bing", [t["engine"] for t in info["tried"]])
 
     def test_only_anomaly_keeps_engine_empty(self):
         self.mock_fetch.side_effect = _FakeFetch({

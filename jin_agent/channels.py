@@ -39,13 +39,17 @@ VERSION = "1.0"
 HANDLE_RE = re.compile(r"(?:t\.me|telegram\.me)/(?:s/)?@?([A-Za-z0-9_]{3,40})")
 EXCLUDE_HANDLES = {"joinchat", "share", "proxy", "addstickers", "addlist",
                    "contact", "todo", "setlanguage", "premium", "telegram",
-                   "telegramtips", "tdesktop", "android", "ios", "macos"}
+                   "telegramtips", "tdesktop", "android", "ios", "macos",
+                   "login", "socks"}
 
-# P39: channel discovery ke liye keyless search engines (kram maloom).
-# Bing pehle (DDG abhi anti-bot anomaly deta hai), phir DDG html, phir DDG lite.
+# P39/P42: channel discovery ke liye keyless search engines (kram maloom).
+# RightDAO pehle (Bing ``site:`` ignore karta hai, DDG anomaly deta hai),
+# phir Bing, phir DDG html, phir DDG lite.
+RIGHTDAO_SEARCH_URL = "https://rightdao.com/search?q="
 BING_SEARCH_URL = "https://www.bing.com/search?q="
 DDG_HTML_URL = "https://html.duckduckgo.com/html/?q="
 DDG_LITE_URL = "https://lite.duckduckgo.com/lite/?q="
+RIGHTDAO_RESULT_RE = re.compile(r'class="item"')
 BING_RESULT_RE = re.compile(r'<li class="b_algo"')
 BING_TOKEN_RE = re.compile(r"u=a1([A-Za-z0-9_\-]+)")
 DDG_UDDG_RE = re.compile(r"uddg=([^&\"']+)")
@@ -420,6 +424,20 @@ def bing_has_results(html: str) -> bool:
     return bool(BING_RESULT_RE.search(str(html or "")))
 
 
+def parse_rightdao_html(html: str) -> list[str]:
+    """RightDAO HTML se t.me handles — wahi ``extract_handles`` (noise filter)."""
+    return extract_handles(html)
+
+
+def rightdao_has_results(html: str) -> bool:
+    """RightDAO ne asli results diye? Anti-bot/blocked page par ``class="item"``
+    nahi hota. Marker na mile to ``bool(handles)`` fallback (b_algo jaisa)."""
+    s = str(html or "")
+    if RIGHTDAO_RESULT_RE.search(s):
+        return True
+    return bool(parse_rightdao_html(s))
+
+
 def parse_ddg_html(html: str) -> list[str]:
     """DDG html results (``uddg=`` wrapping) se t.me handles."""
     out, seen = [], set()
@@ -454,16 +472,18 @@ def _engine_from_tried(tried: list[dict]) -> str:
 
 
 def web_search_probe(query: str, cfg: dict | None = None) -> dict:
-    """Search engines ko kram se azmo: Bing -> DDG html -> DDG lite.
+    """Search engines ko kram se azmo: RightDAO -> Bing -> DDG html -> DDG lite.
 
-    Anti-bot "anomaly" page (Bing par ``b_algo`` 0 / DDG par ``uddg=`` 0) par
-    us engine ko chhor kar agle par jao. Returns
-    ``{"handles", "engine", "candidates", "anomaly", "error", "tried"}``.
+    Anti-bot "anomaly" page (RightDAO par ``class="item"`` 0 / Bing par
+    ``b_algo`` 0 / DDG par ``uddg=`` 0) par us engine ko chhor kar agle par
+    jao. Returns ``{"handles", "engine", "candidates", "anomaly", "error",
+    "tried"}``.
     """
     cfg = cfg or config.load()
-    q = urllib.parse.quote("t.me/s " + str(query)[:120])
+    q = urllib.parse.quote("site:t.me " + str(query)[:120])
     ddg_q = urllib.parse.quote("site:t.me/s " + str(query)[:120])
     engines = (
+        ("rightdao", RIGHTDAO_SEARCH_URL + q, "rightdao"),
         ("bing", BING_SEARCH_URL + q, "bing"),
         ("ddg-html", DDG_HTML_URL + ddg_q, "ddg-html"),
         ("ddg-lite", DDG_LITE_URL + ddg_q, "ddg-lite"),
@@ -478,7 +498,10 @@ def web_search_probe(query: str, cfg: dict | None = None) -> dict:
             tried.append({"engine": name, "ok": False,
                           "error": type(exc).__name__})
             continue
-        if kind == "bing":
+        if kind == "rightdao":
+            handles = parse_rightdao_html(html)
+            anomaly = not rightdao_has_results(html)
+        elif kind == "bing":
             handles = parse_bing_html(html)
             anomaly = not bing_has_results(html)
         elif kind == "ddg-html":
@@ -546,7 +569,7 @@ def merge_web_probe(infos: list[dict]) -> dict:
 
 def web_search_candidates(query: str, cfg: dict | None = None,
                           info: dict | None = None) -> list[str]:
-    """Public search engine HTML par t.me/s search (Bing -> DDG fallback).
+    """Public search engine HTML par t.me/s search (RightDAO -> Bing -> DDG).
 
     ``info`` dict diya ho to us me probe ka hisaab (engine/anomaly/error)
     bhar diya jata hai — ``run_discovery`` honest status ke liye istemal karta
