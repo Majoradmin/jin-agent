@@ -439,6 +439,20 @@ def parse_ddg_html(html: str) -> list[str]:
     return out
 
 
+def _engine_from_tried(tried: list[dict]) -> str:
+    """``tried`` se sahi engine: pehla ``ok`` jis me anomaly nahi.
+
+    Results mile magar t.me handle na mile, tab bhi ``/status`` ko kaunsa
+    engine chal para hona chahiye — ``tried`` kram (Bing -> DDG) se pehla.
+    """
+    for t in tried or []:
+        if isinstance(t, dict) and t.get("ok") and not t.get("anomaly"):
+            name = str(t.get("engine") or "").strip()
+            if name:
+                return name
+    return ""
+
+
 def web_search_probe(query: str, cfg: dict | None = None) -> dict:
     """Search engines ko kram se azmo: Bing -> DDG html -> DDG lite.
 
@@ -486,12 +500,20 @@ def web_search_probe(query: str, cfg: dict | None = None) -> dict:
         # results to mila magar t.me handle nahi — agla engine azmo
     if saw_results:
         error = "results me t.me channel nahi mila"
+        # Results mile magar handle nahi — engine ka naam bhi rakho (``tried``
+        # kram se pehla ok/non-anomaly). Sirf anomaly par engine "" rahega.
+        engine = _engine_from_tried(tried)
     elif saw_anomaly:
         error = "search engine ne results nahi diye (anti-bot)"
+        engine = ""
     else:
         error = "kisi engine ne results nahi diye"
-    return {"handles": [], "engine": "", "candidates": 0,
-            "anomaly": saw_anomaly, "error": error, "tried": tried}
+        engine = ""
+    # ``anomaly`` sirf tab jab koi engine results hi na de — results milne par
+    # (handle na milein) wajah "results me t.me channel nahi mila" honi chahiye.
+    return {"handles": [], "engine": engine, "candidates": 0,
+            "anomaly": saw_anomaly and not saw_results,
+            "error": error, "tried": tried}
 
 
 def merge_web_probe(infos: list[dict]) -> dict:
@@ -505,6 +527,10 @@ def merge_web_probe(infos: list[dict]) -> dict:
         if i.get("engine"):
             engine = str(i["engine"])
             break
+    if not engine:
+        # Probe ne engine na bharna chhoda ho to tried se hi hisaab karo.
+        engine = _engine_from_tried(
+            [t for i in infos for t in (i.get("tried") or [])])
     error = ""
     for i in infos:
         if i.get("error"):

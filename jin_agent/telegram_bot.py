@@ -1182,14 +1182,21 @@ def format_status_text(cfg: dict | None = None) -> str:
                                     time.localtime(float(disc.get("ts") or 0)))
         except (TypeError, ValueError, OverflowError, OSError):
             disc_ts = "n/a"
-        lines.append(
+        eng = str(disc.get("engine") or "")
+        reason = util.truncate(str(disc.get("error") or ""), 100)
+        line = (
             f"• Telegram discovery: last {disc_ts} · "
-            f"engine {disc.get('engine') or 'n/a'} · "
+            f"engine {eng or 'n/a'} · "
             f"candidates {int(disc.get('candidates') or 0)} · "
             f"probed {int(disc.get('probed') or 0)} · "
             f"added {int(disc.get('added') or 0)}")
-        if disc.get("error"):
-            lines.append("  ✗ wajah: " + util.truncate(str(disc["error"]), 100))
+        # Engine milne par wajah ek hi line me (honest hisaab); engine nahi
+        # to alag ✗ line — dono sobat me "kyun" saaf rahe.
+        if reason and eng:
+            line += f" · wajah: {reason}"
+        lines.append(line)
+        if reason and not eng:
+            lines.append("  ✗ wajah: " + reason)
     try:
         dstat = dorks.backend_status()
     except Exception:

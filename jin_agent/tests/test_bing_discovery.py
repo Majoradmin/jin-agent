@@ -45,6 +45,12 @@ DDG_LITE_GOOD = (
     '<a rel="nofollow" href="https://t.me/s/lite_ch" class="result-link">'
     'Lite Channel</a>')
 DDG_LITE_ANOMALY = "<html><body>anomaly</body></html>"
+# b_algo mojood (asli results) magar koi t.me handle nahi — "results magar
+# handle nahi" ka live halat.
+BING_RESULTS_NO_HANDLE = (
+    '<div id="b_results">'
+    '<li class="b_algo"><h2><a href="https://example.com/x">Android News</a>'
+    '</h2></li></div>')
 
 
 class _FakeFetch:
@@ -193,6 +199,65 @@ class TestStatusDiscoveryBlock(unittest.TestCase):
         text = tb.format_status_text()
         self.assertIn("✗ wajah: search engine ne results nahi diye (anti-bot)",
                       text)
+
+
+class TestResultsWithoutHandles(unittest.TestCase):
+    """Results mile magar t.me handle nahi — engine ka naam bhi darj ho.
+
+    Live bug (2026-11-19): ``web_search_probe`` is haalat par ``engine=""``
+    return karta tha, is liye ``/status`` hamesha ``engine n/a`` dikhata tha.
+    """
+
+    def setUp(self):
+        self._patch = mock.patch.object(channels.adapters, "fetch")
+        self.mock_fetch = self._patch.start()
+        self.addCleanup(self._patch.stop)
+
+    def test_engine_kept_when_no_handle_found(self):
+        self.mock_fetch.side_effect = _FakeFetch({
+            "bing.com": BING_RESULTS_NO_HANDLE,
+            "html.duckduckgo.com": DDG_HTML_ANOMALY,
+            "lite.duckduckgo.com": DDG_LITE_ANOMALY,
+        })
+        info = {}
+        handles = channels.web_search_candidates("android security",
+                                                 config.load(), info)
+        self.assertEqual(handles, [])
+        self.assertEqual(info["engine"], "bing")
+        self.assertFalse(info["anomaly"])
+        self.assertIn("t.me channel nahi mila", info["error"])
+        self.assertEqual([t["engine"] for t in info["tried"]][0], "bing")
+
+    def test_only_anomaly_keeps_engine_empty(self):
+        self.mock_fetch.side_effect = _FakeFetch({
+            "bing.com": BING_ANOMALY,
+            "html.duckduckgo.com": DDG_HTML_ANOMALY,
+            "lite.duckduckgo.com": DDG_LITE_ANOMALY,
+        })
+        info = {}
+        self.assertEqual(channels.web_search_candidates("android security",
+                                                        config.load(), info), [])
+        self.assertEqual(info["engine"], "")
+        self.assertIn("anti-bot", info["error"])
+
+    def test_merge_falls_back_to_tried(self):
+        merged = channels.merge_web_probe(
+            [{"engine": "", "candidates": 0, "anomaly": False, "error": "",
+              "tried": [{"engine": "bing", "ok": True, "handles": 0,
+                         "anomaly": False}]}])
+        self.assertEqual(merged["engine"], "bing")
+
+    def test_status_shows_engine_with_reason(self):
+        channels.save_discovery_state({
+            "ts": 1_800_000_000, "query": "android security", "engine": "bing",
+            "candidates": 0, "probed": 0, "added": 0, "dead": 0,
+            "anomaly": False, "error": "results me t.me channel nahi mila",
+            "tried": [{"engine": "bing", "ok": True, "handles": 0,
+                       "anomaly": False}],
+        })
+        text = tb.format_status_text()
+        self.assertIn("engine bing", text)
+        self.assertIn("wajah: results me t.me channel nahi mila", text)
 
 
 class _FakeAPI:
