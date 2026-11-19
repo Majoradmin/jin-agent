@@ -26,7 +26,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config
+from . import config, logging_setup
 
 CONSOLE_ARGS = ("serve",)
 BOT_ARGS = ("bot",)
@@ -42,15 +42,25 @@ def _log_file() -> Path:
 
 def _log(msg: str) -> None:
     line = "%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg)
-    try:
-        p = _log_file()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with open(p, "a", encoding="utf-8", newline="\n") as fh:
-            fh.write(line)
-    except OSError:
+    ok = logging_setup.bounded_append(_log_file(), line)
+    if not ok:
         # Log dir na likhne par supervisor bhi anahq na ho.
         try:
             sys.stderr.write(line)
+        except Exception:
+            pass
+
+
+def _pump(pipe, path: Path) -> None:
+    """Child stdout/stderr ko bounded log me pump karo (har line par rotate)."""
+    try:
+        for raw in iter(pipe.readline, b""):
+            logging_setup.bounded_append(path, raw.decode("utf-8", "replace"))
+    except Exception:
+        pass
+    finally:
+        try:
+            pipe.close()
         except Exception:
             pass
 
@@ -86,15 +96,27 @@ def commands(port: int | None = None, host: str | None = None) -> dict:
 def _spawn(cmd, log_name: str = "supervisor-child.log"):
     root = Path(__file__).resolve().parent.parent
     logp = _log_file().parent / log_name
+    out = None
     try:
         logp.parent.mkdir(parents=True, exist_ok=True)
-        out = open(logp, "a", encoding="utf-8", buffering=1)
+        logging_setup.rotate_if_needed(logp)
+        out = subprocess.PIPE
     except OSError:
-        out = subprocess.DEVNULL
+        out = None
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    return subprocess.Popen(
+    if out is None:
+        proc = subprocess.Popen(
+            cmd, cwd=str(root), stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=flags)
+        return proc
+    proc = subprocess.Popen(
         cmd, cwd=str(root), stdin=subprocess.DEVNULL,
-        stdout=out, stderr=subprocess.STDOUT, creationflags=flags)
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=flags)
+    if proc.stdout is not None:
+        threading.Thread(target=_pump, args=(proc.stdout, logp), daemon=True,
+                         name="jin-child-log").start()
+    return proc
 
 
 def _terminate(proc) -> None:

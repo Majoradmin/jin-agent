@@ -14,6 +14,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
+import time
 
 from . import config, policy, store, util
 
@@ -264,8 +266,39 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
     }
 
 
+def report_days() -> int:
+    """Reports dir retention (din). Default 90, env ``JIN_AGENT_REPORT_DAYS``."""
+    try:
+        days = int(str(os.environ.get("JIN_AGENT_REPORT_DAYS", "90") or 90))
+    except (TypeError, ValueError):
+        days = 90
+    return max(1, days)
+
+
+def prune_reports(days: int | None = None) -> int:
+    """``data/reports/`` se purane ``.md/.csv/.json`` hatao (disk bounded)."""
+    days = report_days() if days is None else max(1, int(days))
+    folder = config.reports_dir()
+    cutoff = time.time() - days * 86400
+    pruned = 0
+    try:
+        entries = list(folder.iterdir())
+    except OSError:
+        return 0
+    for path in entries:
+        if path.suffix.lower() not in (".md", ".csv", ".json"):
+            continue
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+                pruned += 1
+        except OSError:
+            continue
+    return pruned
+
+
 def save(built: dict, query: str, metrics: dict | None = None) -> dict:
-    """Write Markdown + CSV + JSON, then register them in the archive."""
+    """Write Markdown + CSV + JSON, register + purane reports prune karo."""
     stamp = util.now_iso().replace(":", "").replace("-", "").replace("Z", "")
     stem = util.safe_filename("brief-" + stamp)
     folder = config.reports_dir()
@@ -275,4 +308,5 @@ def save(built: dict, query: str, metrics: dict | None = None) -> dict:
         path.write_text(built[key], encoding="utf-8")
         paths[fmt] = str(path)
     record = store.save_report(built["title"], query, paths["md"], "md", metrics)
-    return {"id": record["id"], **paths}
+    pruned = prune_reports()
+    return {"id": record["id"], "pruned_reports": int(pruned), **paths}

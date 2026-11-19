@@ -7,6 +7,7 @@ deleted; only old *articles* are removed by the retention job.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -543,21 +544,122 @@ def set_schedule_state(key: str, ts: float | None = None) -> None:
                     (key, float(ts if ts is not None else util.epoch())))
 
 
-def retention(days: int = 90) -> dict:
-    """Delete old ARTICLES only. Sources / watchlist are archived, never deleted."""
-    days = util.clamp(days, 1, 3650, 90)
+def _table_exists(con, name: str) -> bool:
+    row = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                      (name,)).fetchone()
+    return row is not None
+
+
+def _retention_days(days: int | None = None) -> int:
+    """Retention window (din). Default 180, env ``JIN_AGENT_RETENTION_DAYS``."""
+    if days is None:
+        try:
+            days = int(str(os.environ.get("JIN_AGENT_RETENTION_DAYS", "180") or 180))
+        except (TypeError, ValueError):
+            days = 180
+    return util.clamp(days, 1, 3650, 180)
+
+
+def retention(days: int | None = None) -> dict:
+    """Purani records ka sweep — items ke ilawa operational tables bhi bounded.
+
+    Articles (items) ke saath ye tables bhi prune hote hain: ``events``,
+    ``runs``, ``reports``, ``jobs``, ``search_memory``, ``tg_candidates``.
+    Dead ``tg_channels`` (30 din purane) delete hote hain taake registry
+    unbounded na barhe. Sources / watchlist archive-not-delete rehte hain.
+    """
+    days = _retention_days(days)
     cutoff = datetime.fromtimestamp(util.epoch() - days * 86400, timezone.utc)
     cutoff_iso = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    cutoff_epoch = util.epoch() - days * 86400
+    dead_epoch = util.epoch() - 30 * 86400
+    pruned: dict[str, int] = {}
     with session() as con:
         removed = con.execute("DELETE FROM items WHERE fetched_at<>'' AND fetched_at<?",
                               (cutoff_iso,)).rowcount
         con.execute("DELETE FROM entities WHERE item_id NOT IN (SELECT id FROM items)")
-    add_event("retention", f"Removed {removed} articles older than {days} days")
-    return {"removed": int(removed), "cutoff": cutoff_iso, "days": days}
+        for table, column in (("events", "ts"), ("runs", "started_at"),
+                              ("reports", "created_at"), ("jobs", "created_at")):
+            if _table_exists(con, table):
+                pruned[table] = con.execute(
+                    f"DELETE FROM {table} WHERE {column}<>'' AND {column}<?",
+                    (cutoff_iso,)).rowcount
+        if _table_exists(con, "search_memory"):
+            pruned["search_memory"] = con.execute(
+                "DELETE FROM search_memory WHERE updated_at<?", (cutoff_epoch,)).rowcount
+        if _table_exists(con, "tg_candidates"):
+            pruned["tg_candidates"] = con.execute(
+                "DELETE FROM tg_candidates WHERE found_at<?", (cutoff_epoch,)).rowcount
+        if _table_exists(con, "tg_channels"):
+            pruned["tg_channels_dead"] = con.execute(
+                "DELETE FROM tg_channels WHERE status='dead' AND last_checked<?",
+                (dead_epoch,)).rowcount
+        # Freelist pages wapas le lo (auto_vacuum off ho to no-op bhi safe).
+        try:
+            con.execute("PRAGMA incremental_vacuum")
+        except sqlite3.Error:
+            pass
+    vacuum = vacuum_db()
+    add_event("retention", f"Removed {removed} articles older than {days} days; "
+                           f"pruned={pruned}")
+    return {"removed": int(removed), "pruned": pruned, "vacuum": vacuum,
+            "cutoff": cutoff_iso, "days": days}
+
+
+def vacuum_db(threshold_pages: int = 1000) -> dict:
+    """DB file chhota rakho: ``VACUUM`` agar freelist bara ho.
+
+    ``incremental_vacuum`` retention ke andar chalta hai; agar us se bhi
+    freelist zyada bana (bade delete) to yahan poora ``VACUUM`` DB rebuild
+    karke file size wapas le leta hai. Best-effort — fail par bhi run
+    crash nahi hota.
+    """
+    before = after = 0
+    done = False
+    try:
+        con = sqlite3.connect(str(config.db_path()), timeout=15)
+        try:
+            con.execute("PRAGMA busy_timeout=15000")
+            before = int(con.execute("PRAGMA freelist_count").fetchone()[0])
+            if before >= max(0, int(threshold_pages)):
+                con.execute("VACUUM")
+                done = True
+            after = int(con.execute("PRAGMA freelist_count").fetchone()[0])
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {"freelist_before": before, "freelist_after": after, "vacuumed": False}
+    return {"freelist_before": before, "freelist_after": after, "vacuumed": done}
+
+
+def _prune_backups(keep: int | None = None) -> int:
+    """``data/backups/`` me aakhri N backup rakho, purane delete karo."""
+    if keep is None:
+        try:
+            keep = int(str(os.environ.get("JIN_AGENT_BACKUP_KEEP", "7") or 7))
+        except (TypeError, ValueError):
+            keep = 7
+    keep = max(1, int(keep))
+    folder = config.backups_dir()
+    try:
+        files = sorted(
+            (p for p in folder.iterdir()
+             if p.is_file() and p.name.startswith("jin_agent-") and p.suffix == ".db"),
+            key=lambda p: p.name, reverse=True)
+    except OSError:
+        return 0
+    pruned = 0
+    for old in files[keep:]:
+        try:
+            old.unlink()
+            pruned += 1
+        except OSError:
+            continue
+    return pruned
 
 
 def backup() -> dict:
-    """SQLite online backup - stdlib, no external process."""
+    """SQLite online backup - stdlib, no external process. Rolling retention."""
     from pathlib import Path
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     dest = config.backups_dir() / f"jin_agent-{stamp}.db"
@@ -568,5 +670,14 @@ def backup() -> dict:
     finally:
         target.close()
         source.close()
-    add_event("backup", f"Backup written: {Path(dest).name}")
-    return {"path": str(dest), "bytes": dest.stat().st_size}
+    pruned = _prune_backups()
+    add_event("backup", f"Backup written: {Path(dest).name} (pruned {pruned} old)")
+    return {"path": str(dest), "bytes": dest.stat().st_size,
+            "pruned": int(pruned), "keep": _backup_keep()}
+
+
+def _backup_keep() -> int:
+    try:
+        return max(1, int(str(os.environ.get("JIN_AGENT_BACKUP_KEEP", "7") or 7)))
+    except (TypeError, ValueError):
+        return 7

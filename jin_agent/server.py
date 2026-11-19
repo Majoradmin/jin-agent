@@ -318,6 +318,38 @@ class Handler(BaseHTTPRequestHandler):
             return self._err(f"{type(exc).__name__}: {util.truncate(str(exc), 160)}", 500)
 
 
+def _scheduler_enabled() -> bool:
+    """Scheduler auto-start flag (env ``JIN_AGENT_SCHEDULER``, default on).
+
+    Hosted deploy par retention / backup / discovery scheduler ke baghair mara
+    rehta tha. Ab ``serve()`` khud scheduler start karta hai; ``off`` / ``0`` /
+    ``false`` / ``no`` par band.
+    """
+    raw = str(os.environ.get("JIN_AGENT_SCHEDULER", "on") or "on").strip().lower()
+    return raw not in ("off", "0", "false", "no")
+
+
+def _start_scheduler(offline: bool = True):
+    """Global scheduler start karo (pehle se chal raha ho to wahi)."""
+    global _SCHEDULER
+    if not _scheduler_enabled():
+        return None
+    if _SCHEDULER is not None and _SCHEDULER.is_alive():
+        return _SCHEDULER
+    _SCHEDULER = scheduler.Scheduler(config.load(), offline=offline)
+    _SCHEDULER.start()
+    return _SCHEDULER
+
+
+def _stop_scheduler() -> None:
+    global _SCHEDULER
+    if _SCHEDULER is not None:
+        try:
+            _SCHEDULER.stop()
+        except Exception:
+            pass
+
+
 def _scheduler_state() -> dict:
     if _SCHEDULER is None:
         return {"running": False, "ticks": 0, "poll_seconds": 20}
@@ -347,9 +379,15 @@ def serve(port: int = 8766, open_browser: bool = False, host: str | None = None)
     if open_browser:
         import webbrowser
         webbrowser.open(url)
+    # Hosted par scheduler auto-start (retention/backup/discovery zinda rahe).
+    try:
+        _start_scheduler()
+    except Exception as exc:
+        print(f"[server] scheduler auto-start fail ({type(exc).__name__}: {exc})")
     try:
         httpd.serve_forever(poll_interval=0.4)
     except KeyboardInterrupt:
         pass
     finally:
+        _stop_scheduler()
         httpd.server_close()

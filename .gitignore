@@ -7,5 +7,6 @@ jin_agent/data/config.json
 jin_agent/data/reports/
 jin_agent/data/backups/
 jin_agent/data/jin_agent.db
+jin_agent/data/metrics.json
 *.log
 .env

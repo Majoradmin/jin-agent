@@ -11,7 +11,7 @@ import json
 import urllib.parse
 import urllib.request
 
-from . import config, policy, store, util
+from . import config, logging_setup, policy, store, util
 
 API_HOST = "https://api.telegram.org"
 
@@ -80,11 +80,7 @@ def notify(text: str, cfg: dict | None = None) -> dict:
     store.init_db()
     store.add_event("alert", util.truncate(text, 400))
     line = util.now_iso() + " " + util.truncate(text.replace("\n", " "), 500) + "\n"
-    try:
-        with open(config.data_dir() / "alerts.log", "a", encoding="utf-8") as fh:
-            fh.write(line)
-    except OSError:
-        pass
+    logging_setup.bounded_append(config.data_dir() / "alerts.log", line)
     sent = send_telegram(text, cfg)
     return {"local": True, "telegram": sent}
 

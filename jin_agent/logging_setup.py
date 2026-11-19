@@ -138,6 +138,62 @@ def _make_handler(path: Path) -> RotatingFileHandler:
     return handler
 
 
+def _rotate(path: Path, backups: int) -> None:
+    """``supervisor.log`` -> ``.1`` -> ``.2`` ... (``.0`` nahi, backwards rotate)."""
+    try:
+        for i in range(backups - 1, 0, -1):
+            src = path.with_name(path.name + f".{i}")
+            dst = path.with_name(path.name + f".{i + 1}")
+            if not src.exists():
+                continue
+            try:
+                dst.unlink()
+            except OSError:
+                pass
+            try:
+                src.replace(dst)
+            except OSError:
+                pass
+        path.replace(path.with_name(path.name + ".1"))
+    except OSError:
+        pass
+
+
+def rotate_if_needed(path, max_bytes: int = LOG_MAX_BYTES,
+                     backups: int = LOG_BACKUPS) -> bool:
+    """File ``max_bytes`` se bara ho to rotate karo. Fail par False (crash nahi)."""
+    p = Path(path)
+    try:
+        if not p.exists() or p.stat().st_size < max(0, int(max_bytes)):
+            return False
+    except OSError:
+        return False
+    _rotate(p, max(1, int(backups)))
+    return True
+
+
+def bounded_append(path, line: str, max_bytes: int = LOG_MAX_BYTES,
+                   backups: int = LOG_BACKUPS) -> bool:
+    """Size-capped append (default 2MB x 3) — plain-append logs ka lifetime hal.
+
+    ``supervisor.log``, ``supervisor-child.log`` aur ``alerts.log`` pehle
+    unbounded barte the. Ye writer rotation samet bounded rehta hai aur disk
+    full hone par bhi run crash nahi karta.
+    """
+    p = Path(path)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    rotate_if_needed(p, max_bytes, backups)
+    try:
+        with open(p, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(line if str(line).endswith("\n") else str(line) + "\n")
+        return True
+    except OSError:
+        return False
+
+
 def _level(value=None) -> int:
     if isinstance(value, int):
         return value
