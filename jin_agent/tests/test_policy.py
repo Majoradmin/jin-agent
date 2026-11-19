@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import urlsplit
 
 BASE = Path(__file__).resolve().parents[2]
 
@@ -45,6 +46,45 @@ class TestSourceRegister(unittest.TestCase):
                         for r in policy.register())
         for banned in ("stolen credential", "marketplace", "credential dump", "malware sample"):
             self.assertNotIn(banned, blob)
+
+
+# P2.1 - legal/public institutional sources (registry-only)
+LEGAL_NEW = ("who", "un-news", "un-data", "eu-open-data", "eu-publications",
+             "worldbank", "oecd", "cdc", "nasa", "ourworldindata", "pmc", "imf")
+
+
+class TestLegalInstitutionalSources(unittest.TestCase):
+    def _rows(self) -> dict:
+        return {r["key"]: r for r in policy.register()}
+
+    def test_new_legal_sources_reachable(self):
+        rows = self._rows()
+        for key in LEGAL_NEW:
+            self.assertIn(key, rows)
+            ok, reason = policy.check_url(rows[key]["url"])
+            self.assertTrue(ok, f"{key}: {reason}")
+
+    def test_new_legal_sources_registry_only(self):
+        rows = self._rows()
+        for key in LEGAL_NEW:
+            self.assertFalse(rows[key]["auto"], key)
+            self.assertIn("Registry-only", rows[key]["notes"], key)
+
+    def test_new_hosts_in_allowlist(self):
+        rows = self._rows()
+        for key in LEGAL_NEW:
+            host = urlsplit(rows[key]["url"]).hostname
+            self.assertIn(host, policy.ALLOWED_HOSTS, key)
+
+    def test_onion_fetch_still_blocked(self):
+        ok, _ = policy.check_url("http://abcdefghijklmnop.onion/x")
+        self.assertFalse(ok)
+
+    def test_bypass_patterns_not_removed(self):
+        blob = " ".join(p for p, _ in policy.BLOCK_PATTERNS).lower()
+        for word in ("frp", "fmi", "huawei id", "knox guard", "mdm", "imei",
+                     "carrier unlock"):
+            self.assertIn(word, blob)
 
 
 class TestURLGuard(unittest.TestCase):

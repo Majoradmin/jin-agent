@@ -47,6 +47,11 @@ ALLOWED_HOSTS = frozenset({
     "api.search.brave.com", "api.bing.microsoft.com",
     # P29 deep web (indexed databases, no login)
     "eutils.ncbi.nlm.nih.gov",
+    # P2.1 legal/public institutional sources (registry-only)
+    "www.who.int", "news.un.org", "data.un.org", "data.europa.eu",
+    "op.europa.eu", "data.worldbank.org", "www.oecd.org", "www.cdc.gov",
+    "www.nasa.gov", "ourworldindata.org", "pmc.ncbi.nlm.nih.gov",
+    "www.imf.org",
 })
 
 # key, name, url, tier, category, trust, auto_fetch, notes
@@ -84,6 +89,21 @@ SOURCE_REGISTER = [
     {"key": "patents", "name": "Google Patents", "url": "https://patents.google.com/", "tier": "T3", "category": "Science", "trust": 0.8, "auto": False, "notes": "N/A adapter: no keyless stable API; JS-heavy page. Link-only registry entry, documented in PHASES.md P17."},
     {"key": "virustotal", "name": "VirusTotal", "url": "https://www.virustotal.com/", "tier": "T3", "category": "Security", "trust": 0.9, "auto": False, "notes": "N/A adapter: API key required; no paid/credential dependency allowed (C20)."},
     {"key": "urlscan", "name": "urlscan.io", "url": "https://urlscan.io/", "tier": "T3", "category": "Security", "trust": 0.8, "auto": False, "notes": "N/A adapter: API key / submission writes out of scope for a read-only agent."},
+    # P2.1 - legal/public institutional sources. Adapter abhi nahi, magar
+    # source universe me khule ki jati hain (kabhi bypass/carrier ke pattern
+    # wale gair-legal sources add nahi hote).
+    {"key": "who", "name": "World Health Organization", "url": "https://www.who.int/news", "tier": "T1", "category": "Science", "trust": 0.9, "auto": False, "notes": "P2.1 official WHO news/rooms. Registry-only: no adapter yet."},
+    {"key": "un-news", "name": "UN News", "url": "https://news.un.org/en/", "tier": "T1", "category": "World", "trust": 0.85, "auto": False, "notes": "P2.1 official UN News. Registry-only: no adapter yet."},
+    {"key": "un-data", "name": "UN Data Portal", "url": "https://data.un.org/", "tier": "T3", "category": "World", "trust": 0.8, "auto": False, "notes": "P2.1 UN statistical data portal. Registry-only: no adapter yet."},
+    {"key": "eu-open-data", "name": "EU Open Data Portal", "url": "https://data.europa.eu/", "tier": "T1", "category": "World", "trust": 0.85, "auto": False, "notes": "P2.1 official EU open data. Registry-only: no adapter yet."},
+    {"key": "eu-publications", "name": "EU Publications Office", "url": "https://op.europa.eu/", "tier": "T3", "category": "World", "trust": 0.8, "auto": False, "notes": "P2.1 EU publications/legislation. Registry-only: no adapter yet."},
+    {"key": "worldbank", "name": "World Bank Open Data", "url": "https://data.worldbank.org/", "tier": "T1", "category": "World", "trust": 0.85, "auto": False, "notes": "P2.1 official development indicators. Registry-only: no adapter yet."},
+    {"key": "oecd", "name": "OECD", "url": "https://www.oecd.org/", "tier": "T1", "category": "World", "trust": 0.8, "auto": False, "notes": "P2.1 official OECD data/news. Registry-only: no adapter yet."},
+    {"key": "cdc", "name": "US CDC", "url": "https://www.cdc.gov/", "tier": "T1", "category": "Science", "trust": 0.9, "auto": False, "notes": "P2.1 official US health guidance. Registry-only: no adapter yet."},
+    {"key": "nasa", "name": "NASA", "url": "https://www.nasa.gov/", "tier": "T1", "category": "Science", "trust": 0.85, "auto": False, "notes": "P2.1 official NASA news/releases. Registry-only: no adapter yet."},
+    {"key": "ourworldindata", "name": "Our World in Data", "url": "https://ourworldindata.org/", "tier": "T3", "category": "Science", "trust": 0.8, "auto": False, "notes": "P2.1 research data visualisation. Registry-only: no adapter yet."},
+    {"key": "pmc", "name": "PubMed Central", "url": "https://pmc.ncbi.nlm.nih.gov/", "tier": "T1", "category": "Science", "trust": 0.9, "auto": False, "notes": "P2.1 open-access full-text archive. Registry-only: no adapter yet."},
+    {"key": "imf", "name": "IMF", "url": "https://www.imf.org/", "tier": "T1", "category": "World", "trust": 0.8, "auto": False, "notes": "P2.1 official IMF data/publications. Registry-only: no adapter yet."},
 ]
 
 TRUST_LABELS = ((0.9, "Official"), (0.8, "Verified"), (0.6, "Reported"),
