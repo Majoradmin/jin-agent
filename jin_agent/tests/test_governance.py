@@ -40,10 +40,10 @@ class TestRelease(unittest.TestCase):
     def test_phase_reviews_all_ready(self):
         text = (PKG / "PHASES.md").read_text(encoding="utf-8")
         reviews = re.findall(r"\*\*PHASE REVIEW — PHASE (\d+): (READY|NOT READY)\*\*", text)
-        # P28-P35 ke reviews PHASES.md me add hue — is liye expected count 23.
-        self.assertEqual(len(reviews), 23)
+        # P28-P38 ke reviews PHASES.md me add hue — is liye expected count 26.
+        self.assertEqual(len(reviews), 26)
         self.assertEqual([n for n, _ in reviews],
-                         [str(n) for n in range(13, 36)])
+                         [str(n) for n in range(13, 39)])
         self.assertTrue(all(status == "READY" for _, status in reviews))
         self.assertIn("N/A Register", text)
 

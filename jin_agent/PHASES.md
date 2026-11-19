@@ -1,4 +1,4 @@
-# PHASES — JIN Agent P13–P35
+# PHASES — JIN Agent P13–P38
 
 **Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
 **Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
@@ -568,5 +568,79 @@ chunks me bheja jata hai. `VERSION` `2.9.0` par barqarar; stdlib-only,
 local-only, Sahulat policy barqarar.
 
 **PHASE REVIEW — PHASE 35: READY**
+
+---
+
+## 29. PHASE REVIEW — PHASE 36 — /status Source Health Non-Overlapping (2.9.0)
+
+**TASK:** Live `/status` ka source hisaab overlap kar raha tha — `status == "ok"`
+magar `fail_count > 0` wala source `ok` aur `fail` dono buckets me gina jata
+tha (bot ne `45 ok / 1 fail (total 45)` dikhaya). Fail source ka naam/wajah bhi
+nahi dikhta tha.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `telegram_bot.py` | `source_health()` — non-overlapping buckets: `disabled` (enabled falsy) pehle, phir `failed` (`verification_failed`) / `stale` / `ok`; `auto` vs `registry_only` honest ginatī. `format_status_text()` ab `45 total — 26 auto / 19 registry-only \| 26 ok / 0 failed / 0 stale / 19 disabled` aur fail/stale ka naam + `last_error` (80 chars) dikhta hai. `/status` result me `sources_*` fields. |
+| `tests/test_status_health.py` | 6 naye tests: overlap na ho, fail naam/error aaye, stale naam, disabled bucket, auto vs registry-only breakdown |
+
+**VERIFICATION:** `test_status_health` 6/6 green; `test_telegram_bot`,
+`test_explore_v2`, `test_p0_p1_ux`, `test_bot_hardening` 80/80 green (1 skipped).
+
+**RESULT:** Har source ab sirf ek bucket me — `sum(buckets) == total == 45`.
+Store `enabled` ko `auto` se seed karta hai, is liye 19 registry-only sources
+`disabled` bucket me hain (26 auto hi enabled). Fail/stale ka naam + wajah
+`/status` me saaf dikhta hai. `VERSION` `2.9.0` barqarar; stdlib-only.
+
+**PHASE REVIEW — PHASE 36: READY**
+
+---
+
+## 30. PHASE REVIEW — PHASE 37 — HTML Report Export + /report Command (2.9.0)
+
+**TASK:** Competitor HTML/PDF/MD export deta hai; JIN sirf `.md` deta tha. Stdlib-only
+project me HTML export chahiye; PDF ke liye third-party dep ki zaroorat hoti hai —
+jaan-boojh kar nahi gaya (honest note).
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `report_export.py` (naya) | `to_html(report)` — `briefer.build()` dict ya structured JSON dono se valid HTML: heading/meta, BLUF, findings beginner-bucket headings, sources table, confidence, provenance, metrics. Saara data `html.escape`; sirf `http/https` href (javascript: nahi). `from_report_file(md_path)` JSON archive se HTML. |
+| `telegram_bot.py` | `/report [md|html]` (default md) — aakhri saved report dobara `send_document`; JSON archive na hone par honest MD fallback; `pdf` par saaf mana + wajah |
+| `tests/test_report_export.py` | 8 naye tests: escaping, adhuri report valid HTML, bucket headings, sources table, javascript: URL guard, briefer roundtrip, bot `/report` |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ `test_report_export` 8/8 green; full suite **508 tests OK (1 skipped)**.
+
+**RESULT:** HTML export stdlib-only, valid (escape + scheme guard ke saath).
+PDF third-party dependency maangta hai, is liye chhoda — MD/HTML hi formats hain.
+
+**PHASE REVIEW — PHASE 37: READY**
+
+---
+
+## 31. PHASE REVIEW — PHASE 38 — Multi-Turn Chat Context (2.9.0)
+
+**TASK:** Abhi har sawal akele samajha jata tha; chhota follow-up (`aur`,
+`iske baare me`, `phir`) ke liye user ko purana sawal dobara likhna parta.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `chat_context.py` (naya) | `is_followup()` — chhota matn (≤4 words) ya `aur/iske baare me/more/continue/phir` (word-boundary); `attach()` — pichhla sawal `prev \| current` (max 1); `note()`; `clear()` |
+| `store.py` | `chat_context` table (`chat_id` PK, `last_queries` JSON, `updated_at`) + `init_db` migration; `save_chat_query` / `last_chat_query` / `clear_chat_context` (max 5 history) |
+| `telegram_bot.py` | `/research` par context attach + note (table na hone par as-is); `/new` context clear |
+| `tests/test_chat_context.py` | 7 naye tests: migration, detect, attach, store roundtrip, bot `/research` attach + `/new` clear |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ `test_chat_context` 7/7 green; full suite **515 tests OK (1 skipped)**.
+
+**RESULT:** Chhote follow-ups ab pichhle sawal ke context se jurre hain; `/new`
+saaf context shuru karta hai. `VERSION` `2.9.0` barqarar; stdlib-only, local-only.
+
+**PHASE REVIEW — PHASE 38: READY**
 
 ---
