@@ -16,7 +16,7 @@ Config sirf environment variables se aaata hai (repo me config.json nahi):
     GROQ_API_KEY         free-tier Groq key
     LLM_ENDPOINT         https://api.groq.com/openai/v1
     LLM_MODEL            llama-3.3-70b-versatile
-    LLM_PROVIDER         groq
+    LLM_PROVIDER         custom
 """
 
 import os

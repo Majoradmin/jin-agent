@@ -12,10 +12,22 @@ sirf local DB mein rehta hai; koi network call nahi.
 from __future__ import annotations
 
 import json
+import os
 
 from . import store, util
 
 VERSION = "1.0"
+DEFAULT_MAX_ROUNDS = 5
+
+
+def max_rounds() -> int:
+    """Rounds cap (env ``JIN_AGENT_MAX_ROUNDS``, default 5) — unbounded growth rok."""
+    try:
+        return max(1, int(str(os.environ.get("JIN_AGENT_MAX_ROUNDS",
+                                             str(DEFAULT_MAX_ROUNDS))
+                          or DEFAULT_MAX_ROUNDS)))
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_ROUNDS
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS search_memory (
@@ -106,6 +118,8 @@ def remember(row_id: int, sources=None, channels=None,
     used_s = list(dict.fromkeys(row["used_sources"] + [str(s) for s in (sources or [])]))
     used_c = list(dict.fromkeys(row["used_channels"] + [str(c) for c in (channels or [])]))
     round_no = row["round_no"] + (1 if advance else 0)
+    if advance:
+        round_no = min(round_no, max_rounds())
     with store.session() as con:
         con.execute(
             "UPDATE search_memory SET used_sources=?, used_channels=?, "

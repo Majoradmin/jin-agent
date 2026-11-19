@@ -34,6 +34,16 @@ ya default `python bot.py` (yeh shim ab wahi supervisor chalata hai).
 | `PORT` | haan | FadeHost jo port deta hai use set karein (default `8766`) |
 | `JIN_AGENT_UPDATE_WORKERS` | na | per-update thread pool, default `2` |
 | `JIN_AGENT_MAX_POLL_FAILURES` | na | lagataar poll failures ki cap; `0` = unlimited (default) |
+| `JIN_AGENT_SEND_DELAY` | na | Telegram chunks ke darmiyan intezar (second), default `1.0` (429 flood rokne ke liye) |
+| `JIN_AGENT_LOG_LEVEL` | na | `DEBUG` / `INFO` / `WARNING` / `ERROR`, default `INFO` |
+| `JIN_AGENT_DATA` | na | data dir (DB / reports / backups / logs), default `jin_agent/data` |
+| `JIN_AGENT_VERBOSE` | na | set karne par HTTP access log bhi dikhta hai (default off) |
+| `JIN_AGENT_SCHEDULER` | na | `serve` par scheduler auto-start; `off` / `0` / `false` par band (default on) |
+| `JIN_AGENT_RETENTION_DAYS` | na | retention window (din), default `180` — items + events/runs/reports/jobs/search_memory/tg_candidates |
+| `JIN_AGENT_BACKUP_KEEP` | na | `data/backups/` me rakhne wale backups, default `7` |
+| `JIN_AGENT_REPORT_DAYS` | na | `data/reports/` retention (din), default `90` |
+| `JIN_AGENT_MAX_ROUNDS` | na | research rounds ki cap, default `5` |
+| `JIN_AGENT_REQUIRE_CHAT_ID` | na | `1` par unset `TELEGRAM_CHAT_ID` reject (default off = allow-all) |
 | `GROQ_API_KEY` | na | Roman Urdu translation / related search ke liye |
 | `LLM_PROVIDER` | na | `custom` |
 | `LLM_ENDPOINT` | na | `https://api.groq.com/openai/v1` |

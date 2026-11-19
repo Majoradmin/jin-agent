@@ -26,6 +26,9 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
+# Real executor class ka private alias — tests ``tb.ThreadPoolExecutor`` ko fake
+# se replace karte hain, magar control-dispatch ka guard asli class par bana rahe.
+_ThreadPoolExecutor = ThreadPoolExecutor
 try:
     import socks  # PySocks
     _SOCKS_AVAILABLE = True
@@ -46,8 +49,34 @@ POLL_OFFSET = 0
 MAX_COMMAND_LEN = 64
 
 # Telegram ek hi chat par ~1 message/second ki limit rakhta hai. Chunks ke
-# darmiyan chhota intezar (second) 429 flood rokta hai. 0 = intezar band.
-SEND_DELAY = max(0.0, float(os.environ.get("JIN_AGENT_SEND_DELAY") or 0.5))
+# darmiyan intezar (second) 429 flood rokta hai. Default 1.0 s (pehle 0.5 s
+# tha — FadeHost par 429 storm). 0 = intezar band. Env JIN_AGENT_SEND_DELAY.
+def send_delay() -> float:
+    try:
+        return max(0.0, float(os.environ.get("JIN_AGENT_SEND_DELAY") or 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+SEND_DELAY = send_delay()
+
+
+def max_rounds() -> int:
+    """Research rounds ki cap (env ``JIN_AGENT_MAX_ROUNDS``, default 5)."""
+    try:
+        return max(1, int(str(os.environ.get("JIN_AGENT_MAX_ROUNDS", "5") or 5)))
+    except (TypeError, ValueError):
+        return 5
+
+
+def require_chat_id() -> bool:
+    """Opt-in: unset ``telegram_chat_id`` par bhi allow-all na ho.
+
+    Default off (purana allow-all first-run behaviour barqarar). Production me
+    ``JIN_AGENT_REQUIRE_CHAT_ID=1`` set karein.
+    """
+    return str(os.environ.get("JIN_AGENT_REQUIRE_CHAT_ID", "") or "").strip().lower() \
+        in ("1", "true", "yes", "on")
 
 
 def _telegram_retry_after(exc: urllib.error.HTTPError) -> int:
@@ -149,6 +178,8 @@ _research_session = 0
 _research_threads: set[threading.Thread] = set()
 _research_threads_lock = threading.Lock()
 _SOCKS_SCOPE_LOCK = threading.Lock()
+# Poll failure observability: /status me dikhta hai (cap 0 = unlimited).
+_poll_failures = 0
 
 
 def update_workers() -> int:
@@ -198,6 +229,21 @@ def _unregister_research_thread(t: threading.Thread) -> None:
 def _active_research_threads() -> list[threading.Thread]:
     with _research_threads_lock:
         return list(_research_threads)
+
+
+def _submit_control(pool, fn, *args, **kwargs):
+    """``/stop`` / ``/status`` ko dedicated short-lived thread par bhejo.
+
+    Do busy research workers hone par bhi ``/stop`` foran kaam kare — pool ki
+    queue me nahi atkega. Real ``ThreadPoolExecutor`` par naya daemon thread
+    chalu hota hai; injected/fake pool (tests) par ``submit`` hi use hota hai.
+    """
+    if isinstance(pool, _ThreadPoolExecutor):
+        t = threading.Thread(target=fn, args=args, kwargs=kwargs, daemon=True,
+                             name="jin-control")
+        t.start()
+        return t
+    return pool.submit(fn, *args, **kwargs)
 
 
 def _cancel_research(join_timeout: float = 1.0) -> None:
@@ -281,11 +327,16 @@ def send_chunks(api, chat_id: int, text: str, delay: float | None = None) -> int
 
 
 def is_owner(chat_id: int | None, cfg: dict | None = None) -> bool:
-    """Sirf wohi chat allowed (telegram_chat_id). Unset = allow-all (first run)."""
+    """Sirf wohi chat allowed (telegram_chat_id).
+
+    Unset = allow-all (first run) — magar ``JIN_AGENT_REQUIRE_CHAT_ID=1`` on
+    ho to unset par reject (production opt-in). Default raw behaviour tests
+    ke mutabiq barqarar hai.
+    """
     cfg = cfg or config.load()
     raw = str(cfg.get("telegram_chat_id") or "").strip()
     if not raw:
-        return True
+        return not require_chat_id()
     try:
         return int(chat_id or -1) == int(raw)
     except ValueError:
@@ -709,10 +760,13 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         api.send(chat_id, "🛑 Research rok di gayi. Naya /research karne se phir shuru hoga.")
         return {"ok": True, "action": "stop"}
     if cmd == "status":
-        api.send(chat_id, "Status: JIN Agent chal raha hai (policy " + str(cfg.get("policy_id") or "SAHULAT-SAFE-SERVICE-v1") + ").")
-        return {"ok": True, "action": "status"}
+        api.send(chat_id, "Status: JIN Agent chal raha hai (policy " +
+                          str(cfg.get("policy_id") or "SAHULAT-SAFE-SERVICE-v1") +
+                          f"). Poll failures: {_poll_failures}.")
+        return {"ok": True, "action": "status", "poll_failures": int(_poll_failures)}
     if cmd == "sources":
-        api.send(chat_id, "Sources register open hai (22 official/legal sources). /research <sawal> se detail.")
+        api.send(chat_id, f"Sources register open hai ({len(policy.register())} official/legal sources). "
+                          f"/research <sawal> se detail.")
         return {"ok": True, "action": "sources"}
     if cmd in ("channels", "tgsearch"):
         if cmd == "tgsearch" or arg:
@@ -820,6 +874,11 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             used_sources = row.get("used_sources") or []
             used_channels = row.get("used_channels") or []
             round_no = int(row.get("round_no") or 1) + (1 if advance else 0)
+            if advance and round_no > max_rounds():
+                limit = max_rounds()
+                api.send(chat_id, f"🛑 Aur sources nahi mile. Round limit ({limit}) "
+                                  f"chuki — naya /research shuru karein.")
+                return {"ok": False, "action": "research", "error": "max rounds"}
         header = ("🔍 Research chal rahi hai... (30-60 seconds lag sakte hain)\n"
                   "🛑 Rokne ke liye /stop likhein") if round_no <= 1 else \
                  (f"🔁 Round {round_no}: naye sources/channels try ho rahe hain "
@@ -984,6 +1043,7 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
     2) par dispatch hota hai — telegram flood par thread storm nahi. Pool ka
     shutdown clean hai (pending tasks cancel).
     """
+    global _poll_failures
     cfg = cfg or config.load()
     api = api or _api(token, cfg)
     stop = stop or type("S", (), {"is_set": lambda self: False})()
@@ -1031,6 +1091,7 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
     # Ab: backoff, counter, aur JIN_AGENT_MAX_POLL_FAILURES (0 = unlimited, purana
     # behaviour) ke baad process exit -> watchdog/supervisor restart karega.
     fail_count = 0
+    _poll_failures = 0
     max_fail = max_poll_failures()
     if max_fail:
         print(f"[bot] poll failure cap: {max_fail} (0 = unlimited)", flush=True)
@@ -1041,6 +1102,7 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 updates = api.get_updates(offset, POLL_TIMEOUT) or []
             except Exception as exc:
                 fail_count += 1
+                _poll_failures = fail_count
                 delay = min(5 * (2 ** min(fail_count - 1, 4)), 60)  # 5, 10, 20, 40, 60s
                 print(f"[bot] get_updates fail #{fail_count} "
                       f"({type(exc).__name__}: {exc}); {delay}s baad retry", flush=True)
@@ -1053,6 +1115,7 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
             if fail_count:
                 print(f"[bot] get_updates wapas chal gaya (failures: {fail_count})", flush=True)
                 fail_count = 0
+                _poll_failures = 0
             last_id = offset
             for u in updates:
                 mid = int((u.get("update_id") or 0))
@@ -1089,9 +1152,16 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 if not is_owner(chat_id, cfg):
                     continue
                 # Bounded pool: dispatch loop ko block nahi karta aur flood par
-                # threads ki tadad env cap ke andar rehti hai.
+                # threads ki tadad env cap ke andar rehti hai. /stop aur /status
+                # ke liye dedicated thread — busy research workers ke peeche
+                # nahi atkte (2 busy workers par bhi /stop foran chalta hai).
                 try:
-                    pool.submit(dispatch, chat_id, text, cfg=cfg, api=api)
+                    cmd_name, _ = parse_command(text)
+                    if cmd_name in ("stop", "status"):
+                        _submit_control(pool, dispatch, chat_id, text,
+                                        cfg=cfg, api=api)
+                    else:
+                        pool.submit(dispatch, chat_id, text, cfg=cfg, api=api)
                 except Exception:
                     time.sleep(2)
             if updates:
@@ -1115,4 +1185,7 @@ def status(cfg: dict | None = None) -> dict:
         "chat_id_set": bool(str(cfg.get("telegram_chat_id") or "").strip()),
         "llm": cfg.get("llm") or {},
         "tor_mode": cfg.get("tor_mode") or "links_only",
+        "poll_failures": int(_poll_failures),
+        "max_rounds": max_rounds(),
+        "send_delay": send_delay(),
     }
