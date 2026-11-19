@@ -1,0 +1,77 @@
+id,feature,area,priority,status,notes,source
+F01,/start + /help menu,onboarding,must,done,"6 commands + misaal; purane aliases bhi likhe hain","telegram_bot.py:108,1270"
+F02,Bot API "/" command menu,onboarding,should,done,"setMyCommands startup par best-effort (6 commands)","telegram_bot.py:132,341"
+F03,Seedha matn = /research,research,must,done,"link/@handle matn = /addchannel",telegram_bot.py:316
+F04,/research <query>,research,must,done,"web + saved channels parallel","telegram_bot.py:1443,1091"
+F05,/research --deep,dark-web,should,done,"deep engine links report ke saath; onion sirf display","telegram_bot.py:332,1449"
+F06,Live progress stages,research,must,done,"Plan/Sources/Fetch/Verify/Brief edit-in-place","telegram_bot.py:1647,1522"
+F07,Progress 3s throttle,research,should,done,"Telegram 20/min ke andar",telegram_bot.py:1522
+F08,BLUF message,reporting,must,done,"<=1000 chars + 3-5 findings + confidence + trace",telegram_bot.py:1550
+F09,Report file (sendDocument),reporting,must,done,"md file; caption <=1024; chat flood se bachao","telegram_bot.py:966,1766"
+F10,Query-term HTML highlight,reporting,should,done,"report/bluf me <b>; entity-safe","telegram_bot.py:389, highlight.py:180"
+F11,Report chunk fallback,reporting,should,done,"4096-char balanced HTML chunks","telegram_bot.py:1780, highlight.py:236"
+F12,Confidence gate for file,reporting,must,done,"threshold default 0.6; low = warning","telegram_bot.py:1734,1751"
+F13,Honest absence states,reporting,must,done,"ok/no_results/fetch_failed/partial/blocked alag payam","telegram_bot.py:1742-1778"
+F14,"Mil gaya / Nahi mila" gate,research,should,done,"inline buttons + memory row","telegram_bot.py:1165,1189"
+F15,Retry rounds with skip,research,should,done,"purane sources/channels + failed skip","telegram_bot.py:1876,1655"
+F16,Round limit,research,should,done,"default 5; env JIN_AGENT_MAX_ROUNDS","telegram_bot.py:67,1626"
+F17,Related-query expansion,research,could,done,"'Nahi mila' par llm.related_queries n=3","telegram_bot.py:1664, llm.py:203"
+F18,/stop,research,must,done,"session invalidate + thread join; control pool exempt","telegram_bot.py:1276,284"
+F19,/new context reset,research,should,done,"memory reset + pending gates clear",telegram_bot.py:1372
+F20,/search saved channels,search,must,done,"t.me/s/<ch>?q= public preview; 8 ch x 6 posts","telegram_bot.py:1242, channels.py:732"
+F21,/channels list + links,channels,must,done,"active + t.me links; max 20",telegram_bot.py:479
+F22,/channels add confirm gate,channels,must,done,"add:ok callback; save + probe","telegram_bot.py:1231,1202"
+F23,/channels rm (archive),channels,must,done,"status=archived; hard delete nahi",channels.py:198
+F24,/channels --all,channels,should,done,"dead/archived bhi",telegram_bot.py:1328
+F25,Channel health digest,channels,should,done,"alive magar khamosh >30 din",telegram_bot.py:1458
+F26,Channel auto-discovery,channels,must,done,"web site:t.me/s + archive/preview harvest",channels.py:614
+F27,Liveness probe + scoring,channels,must,done,"log-scale score 0-10; >=4 auto-add","channels.py:400,465"
+F28,Dead channel archive + TTL,channels,should,done,"dead_ttl default 30 din","channels.py:136,198"
+F29,Stale channel marking,channels,could,done,"stale TTL + status",channels.py:166
+F30,/explore [topic],explore,must,done,"discovery + scored archive + digest","telegram_bot.py:1430, scheduler.py:45"
+F31,Explore cards + gate,explore,must,done,"per-item aur bulk keep/skip","telegram_bot.py:617,716,683"
+F32,Site memory (tg_sites),explore,should,done,"explore keep = add_site",channels.py:215
+F33,/status agent+explore block,status,must,done,"channels/sites/sources/last explore/pending",telegram_bot.py:784
+F34,Poll failure observability,status,should,done,"/status me count; backoff; exit cap","telegram_bot.py:811,1971"
+F35,Scheduler 8 jobs,scheduler,must,done,"feeds/telegram/papers/digest/watchlist/retention/discovery/explore","scheduler.py:15,70"
+F36,Firehose ingest,scheduler,must,done,"sab adapters, dedupe, no rank",scheduler.py:27
+F37,Daily digest,reporting,should,done,"archive-based + Telegram alert",orchestrator.py:258
+F38,Watchlist alerts,scheduler,should,done,"term search + notify + last_hit",scheduler.py:89
+F39,Retention + backup,ops,must,done,"items/ops tables prune; SQLite backup; keep 7","store.py:599,736"
+F40,Per-query search memory,memory,must,done,"used sources/channels + stats",searchmemory.py
+F41,Failed-channel negative memory,memory,should,done,"TTL default 7 din",searchmemory.py:66
+F42,Memory audit,memory,could,done,"duplicates/conflicts/stale",telegram_bot.py:1480
+F43,/memory,memory,should,done,"recent 6",telegram_bot.py:1368
+F44,Dark/deep web links-only,dark-web,should,done,"Ahmia links; kabhi fetch nahi","policy.py:18, adapters.py AhmiaAdapter"
+F45,Policy block gate,policy,must,done,"BLOCK_PATTERNS; official links; run blocked","policy.py:201, orchestrator.py:74"
+F46,SSRF allowlist,policy,must,done,"host allowlist + private/IP/onion block","policy.py:34,136"
+F47,Legal source register,policy,must,done,"45 entries URL+date+tier+trust",policy.py:58
+F48,Adapters breadth,retrieval,must,done,"27 adapters (7 RSS + 20)",adapters.py:1182
+F49,FTS5 archive search,search,must,done,"items_fts + triggers; LIKE fallback","store.py:156,317"
+F50,Canonical dedup + near-dup,retrieval,should,done,"URL canonical + title jaccard","canonical.py, verifier.py:115"
+F51,Cross-verification,verification,should,done,">=2 independent sources boost",verifier.py:84
+F52,Repeated-claim detection,verification,could,done,"cross-channel/cross-source/same-channel",verifier.py:158
+F53,Confidence aggregate + caps,verification,must,done,"cross 0.99/verified 0.80/single 0.60",verifier.py:194
+F54,Citation audit,verification,must,done,"provenance_pct + fabricated count",verifier.py:255
+F55,Per-run trace JSON,observability,should,done,"data/runs/<id>.json query/plan/tools/tokens",orchestrator.py:25
+F56,Token accounting,observability,should,done,"usage/budget/cost","llm.py:93, orchestrator.py:169"
+F57,Redacted JSON logs,observability,must,done,"bot token/LLM key patterns; RotatingFileHandler",logging_setup.py:92
+F58,Metrics + health API,observability,must,done,"/api/health + /api/metrics","server.py:44,139,145"
+F59,Web console,ui,should,done,"7 tabs; loopback default","web/index.html:25-32"
+F60,CLI,ops,should,done,"status/run/search/digest/eval/batch/schedule/serve/ci-gate/...",__main__.py
+F61,Hosted supervisor,ops,should,done,"console+bot auto-restart",supervisor.py
+F62,Watchdog,ops,could,done,"process watchdog",watchdog.py
+F63,Eval harness,qa,should,done,"25-query offline harness",evaluator.py:132
+F64,CI gate,qa,must,done,"compile+import+tests+eval; exit 0 only all-pass",ci_gate.py
+F65,Group rate limit,safety,should,done,"per-chat 20/min; stop/status exempt",telegram_bot.py:1570
+F66,SOCKS5 proxy,safety,could,partial,"optional PySocks; 1 test skip",telegram_bot.py:823
+F67,Telegram chat allowlist,safety,should,partial,"is_owner; default allow-all agar unset (warning)","telegram_bot.py:1947,444"
+F68,Foreign-source translation,research,could,partial,"llm.translate_text; LLM off to md hi",telegram_bot.py:1723
+F69,PDF/HTML export,reporting,should,missing,"sirf .md file; PDF/HTML nahi",briefer.py:347
+F70,Multi-turn chat context,memory,should,missing,"sirf per-query search_memory; conversation history nahi",searchmemory.py
+F71,Confirmed external actions (Act),actions,should,missing,"mail/calendar/write nahi; sirf research/channels",-
+F72,Media/OCR inputs,memory,could,out-of-scope,"koi upload/OCR adapter nahi",-
+F73,Private channel scrape,telegram,should,out-of-scope,"sirf public t.me/s preview (policy)","channels.py:8-11"
+F74,Dark-web fetch/crawl,dark-web,should,out-of-scope,"links-only policy",policy.py:18
+F75,Multi-user auth,safety,should,out-of-scope,"single-owner chat model",telegram_bot.py:444
+F76,Mobile app,ui,could,out-of-scope,"Telegram bot + web console hi hai",-
