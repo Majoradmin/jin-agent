@@ -1048,9 +1048,11 @@ def source_health(sources: list[dict] | None = None) -> dict:
     Purana hisaab overlap karta tha: ``status == "ok"`` magar ``fail_count > 0``
     wala source ok aur fail dono buckets me gina jata tha (live bot ne
     `45 ok / 1 fail (total 45)` dikhaya tha). Ab har source sirf ek bucket me:
-    ``disabled`` (enabled falsy) pehle, phir status ke mutabiq ``failed`` /
-    ``stale`` / ``ok``. ``auto`` (adapter wired) aur ``registry-only`` alag
-    honest ginatī hai — dono ka total hamesha ``len(sources)`` ke barabar.
+    ``disabled`` (auto magar enabled falsy) pehle, phir status ke mutabiq
+    ``failed`` / ``stale`` / ``ok``. ``registry-only`` (adapter ke baghair)
+    sources buckets me nahi — wo alag honest gincha jati hain, is liye
+    buckets ka total hamesha ``auto`` ke barabar hota hai. Wo ``disabled``
+    nahi hain; user ne band nahi kiye, adapter mojood nahi.
     """
     if sources is None:
         try:
@@ -1062,10 +1064,10 @@ def source_health(sources: list[dict] | None = None) -> dict:
     failed: list[dict] = []
     stale: list[dict] = []
     for s in sources:
-        if s.get("auto"):
-            auto += 1
-        else:
+        if not s.get("auto"):
             registry_only += 1
+            continue
+        auto += 1
         if not s.get("enabled"):
             buckets["disabled"] += 1
             continue
@@ -1111,8 +1113,8 @@ def format_status_text(cfg: dict | None = None) -> str:
         f"• Sites memory: {sites.get('total', 0)} "
         f"(is hafte {sites.get('week', 0)})",
         f"• Sources: {health['total']} total — {health['auto']} auto / "
-        f"{health['registry_only']} registry-only | "
-        f"{b['ok']} ok / {b['failed']} failed / {b['stale']} stale / "
+        f"{health['registry_only']} registry-only (adapter ke baghair) | "
+        f"auto: {b['ok']} ok / {b['failed']} failed / {b['stale']} stale / "
         f"{b['disabled']} disabled",
         f"• Explore: last {last or 'kabhi nahi'} · "
         f"scope {last_scope or 'n/a'} · pending candidates {pending}",

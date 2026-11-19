@@ -4,8 +4,9 @@ Live bug (2026-11-19): bot ne `45 ok / 1 fail (total 45)` dikhaya — aik
 source (status ok, fail_count>0) dono buckets me gina gaya tha. Ye tests
 regression ke tor par us overlap ko rokti hain.
 
-Store `enabled` ko `auto` se seed karta hai, is liye 19 registry-only
-sources disabled bucket me hain — 26 auto hi enabled hain.
+Store `enabled` ko `auto` se seed karta hai. Registry-only sources
+(adapter ke baghair) alag ginche jate hain — wo `disabled` nahi hain,
+is liye buckets ka total hamesha `auto` (26) ke barabar hota hai.
 """
 
 import os
@@ -31,13 +32,13 @@ class TestSourceHealth(unittest.TestCase):
         h = tb.source_health()
         b = h["buckets"]
         self.assertEqual(h["total"], 45)
-        self.assertEqual(sum(b.values()), h["total"])
+        self.assertEqual(sum(b.values()), h["auto"])   # buckets sirf auto sources
         self.assertEqual(h["auto"], 26)
         self.assertEqual(h["registry_only"], 19)
         self.assertEqual(h["auto"] + h["registry_only"], h["total"])
-        # Seed state: 26 auto enabled (ok), 19 registry-only disabled.
+        # Seed state: 26 auto enabled (ok), 19 registry-only alag ginche.
         self.assertEqual(b["ok"], 26)
-        self.assertEqual(b["disabled"], 19)
+        self.assertEqual(b["disabled"], 0)
 
     def test_disabled_bucket(self):
         before = tb.source_health()["buckets"]["disabled"]
@@ -45,20 +46,20 @@ class TestSourceHealth(unittest.TestCase):
         b = tb.source_health()["buckets"]
         self.assertEqual(b["disabled"], before + 1)
         self.assertEqual(b["ok"], 25)
-        self.assertEqual(sum(b.values()), 45)
+        self.assertEqual(sum(b.values()), 26)          # auto sources ka total
         # Fail bhi hone par disabled hi jeetta hai (ek bucket).
         store.touch_source("gsmarena", False, "wajah")
         b2 = tb.source_health()["buckets"]
         self.assertEqual(b2["disabled"], before + 1)
         self.assertEqual(b2["failed"], 0)
-        self.assertEqual(sum(b2.values()), 45)
+        self.assertEqual(sum(b2.values()), 26)
 
     def test_failed_source_name_and_error_in_status(self):
         before = len(tb.source_health()["failed"])
         store.touch_source("android-bulletin", False, "HTTP 503 gateway timeout")
         h = tb.source_health()
         self.assertEqual(h["buckets"]["failed"], before + 1)
-        self.assertEqual(sum(h["buckets"].values()), h["total"])
+        self.assertEqual(sum(h["buckets"].values()), h["auto"])
         text = tb.format_status_text()
         self.assertIn("Android Security Bulletin", text)
         self.assertIn("HTTP 503 gateway timeout", text)
@@ -73,7 +74,7 @@ class TestSourceHealth(unittest.TestCase):
         b = h["buckets"]
         self.assertEqual(len(h["failed"]), before)
         self.assertEqual(b["failed"], before)
-        self.assertEqual(sum(b.values()), h["total"])
+        self.assertEqual(sum(b.values()), h["auto"])
         self.assertFalse(any(s.get("key") == "9to5google" for s in h["failed"]))
 
     def test_stale_source_shown_with_name(self):
@@ -82,7 +83,7 @@ class TestSourceHealth(unittest.TestCase):
                         " last_error='verification 30 din purana' WHERE key='samsung-smr'")
         h = tb.source_health()
         self.assertEqual(h["buckets"]["stale"], 1)
-        self.assertEqual(sum(h["buckets"].values()), h["total"])
+        self.assertEqual(sum(h["buckets"].values()), h["auto"])
         self.assertIn("Samsung Security (SMR)", tb.format_status_text())
 
 
