@@ -62,14 +62,18 @@ class TestBotHelpers(unittest.TestCase):
                           api=api, research=fake_research)
         self.assertTrue(res["ok"])
         self.assertEqual(res["action"], "research")
-        # 1 progress + 2 report chunks + 1 'mil gaya?' question
-        self.assertEqual(len(api.sent), 4)
+        # 1 progress + 3 report chunks + 1 'mil gaya?' question
+        # (5000-char report ab limit ke andar 3 chunks me aata hai)
+        self.assertEqual(len(api.sent), 5)
         self.assertIn("Research chal rahi hai", api.sent[0][1])
         self.assertIn("# Research Brief", api.sent[1][1])
-        self.assertIn("mil gayi", api.sent[3][1])
+        for _, text, _ in api.sent[1:-1]:
+            self.assertLessEqual(len(text), 4096)
+        last = api.sent[-1]
+        self.assertIn("mil gayi", last[1])
         # inline buttons attach hain
-        self.assertIsNotNone(api.sent[3][2])
-        self.assertIn("done", api.sent[3][2][0][0]["callback_data"])
+        self.assertIsNotNone(last[2])
+        self.assertIn("done", last[2][0][0]["callback_data"])
 
     def test_dispatch_research_requires_query(self):
         api = FakeAPI()

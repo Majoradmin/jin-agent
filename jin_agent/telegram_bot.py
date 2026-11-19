@@ -45,6 +45,28 @@ POLL_TIMEOUT = 30
 POLL_OFFSET = 0
 MAX_COMMAND_LEN = 64
 
+# Telegram ek hi chat par ~1 message/second ki limit rakhta hai. Chunks ke
+# darmiyan chhota intezar (second) 429 flood rokta hai. 0 = intezar band.
+SEND_DELAY = max(0.0, float(os.environ.get("JIN_AGENT_SEND_DELAY") or 0.5))
+
+
+def _telegram_retry_after(exc: urllib.error.HTTPError) -> int:
+    """Telegram 429 ke jawab se retry_after (second) nikalo; na ho to 0."""
+    try:
+        data = json.loads(exc.read().decode())
+        ra = (data.get("parameters") or {}).get("retry_after")
+        if ra:
+            return max(1, int(ra))
+    except Exception:
+        pass
+    try:
+        hdr = exc.headers.get("Retry-After") if exc.headers else None
+        if hdr:
+            return max(1, int(hdr))
+    except Exception:
+        pass
+    return 0
+
 # Per-update worker pool: har update ke liye naya thread kholna unbounded hota
 # hai (telegram flood par thread storm). Is liye pool bounded hai. Default
 # chhota rakha hai taake ek waqt me zyada research parallel na chale; env
@@ -215,6 +237,14 @@ def split_text(text: str, limit: int = SEND_CHUNK_LIMIT) -> list[str]:
     out, buf = [], ""
     for para in str(text or "").split("\n"):
         add = para + "\n" if para else ""
+        # Aik hi lambri line (bina newline) bhi todi jaye, warna Telegram
+        # "message too long" (400) deta hai.
+        while len(add) > limit:
+            if buf.strip():
+                out.append(buf)
+                buf = ""
+            out.append(add[:limit])
+            add = add[limit:]
         if len(buf) + len(add) > limit and buf.strip():
             out.append(buf)
             buf = add
@@ -222,7 +252,32 @@ def split_text(text: str, limit: int = SEND_CHUNK_LIMIT) -> list[str]:
             buf += add
     if buf.strip():
         out.append(buf)
-    return [c for c in (x if x.endswith("\n") else x + "\n" for x in out) if c.strip()]
+    raw = [c for c in (x if x.endswith("\n") else x + "\n" for x in out) if c.strip()]
+    # trailing newline add hone ke baad bhi har chunk limit ke andar ho.
+    final: list[str] = []
+    for c in raw:
+        while len(c) > limit:
+            final.append(c[:limit])
+            c = c[limit:]
+        if c.strip():
+            final.append(c)
+    return final
+
+
+def send_chunks(api, chat_id: int, text: str, delay: float | None = None) -> int:
+    """Text ko Telegram chunks me bhejo, har chunk ke baad chhota intezar.
+
+    429 flood (FadeHost console par thread storm) ka asli hal: chunks ek ke
+    baad ek bina waqt ke. Return: bheje gaye chunks ki tadad.
+    """
+    d = SEND_DELAY if delay is None else max(0.0, float(delay))
+    sent = 0
+    for i, chunk in enumerate(split_text(text)):
+        if i and d > 0:
+            time.sleep(d)
+        api.send(chat_id, chunk)
+        sent += 1
+    return sent
 
 
 def is_owner(chat_id: int | None, cfg: dict | None = None) -> bool:
@@ -466,9 +521,22 @@ def _api(token: str, cfg: dict | None = None):
             req = urllib.request.Request(
                 self.base + path, data=body,
                 headers={"Content-Type": "application/json"}, method="POST")
-            with _socks_scope(cfg):
-                with opener.open(req, timeout=timeout) as r:
-                    return json.loads(r.read().decode())
+            # Telegram rate limit (429) par retry_after se dobara koshish. Pehle
+            # ye HTTPError ban kar thread ko mar deta tha (FadeHost console log:
+            # "HTTP Error 429: Too Many Requests" -> Thread-278/280/287 storm).
+            for attempt in range(1, 4):
+                try:
+                    with _socks_scope(cfg):
+                        with opener.open(req, timeout=timeout) as r:
+                            return json.loads(r.read().decode())
+                except urllib.error.HTTPError as exc:
+                    if exc.code != 429 or attempt >= 3:
+                        raise
+                    wait = _telegram_retry_after(exc) or min(5 * attempt, 60)
+                    print(f"[bot] Telegram 429 (rate limit) — {wait}s baad retry "
+                          f"({attempt}/2)", flush=True)
+                    time.sleep(wait)
+            return {}
 
         def _checked(self, res: dict, what: str) -> dict:
             # Telegram ok:false (409 conflict, 429 flood, 400) pehle ignore hota
@@ -662,13 +730,11 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
                 api.send(chat_id, f"❌ Channel search fail: {type(exc).__name__}: "
                                   f"{util.truncate(str(exc), 200)}")
                 return {"ok": False, "action": "tgsearch", "error": "search failed"}
-            for chunk in split_text(format_tg_results(res)):
-                api.send(chat_id, chunk)
+            send_chunks(api, chat_id, format_tg_results(res))
             return {"ok": True, "action": "tgsearch", "query": arg,
                     "count": len(res.get("items") or [])}
         rows = channels_mod.list_channels("active")
-        for chunk in split_text(format_channels(rows)):
-            api.send(chat_id, chunk)
+        send_chunks(api, chat_id, format_channels(rows))
         return {"ok": True, "action": "channels", "count": len(rows)}
     if cmd == "addchannel":
         handle = channels_mod.clean_handle(arg)
@@ -714,17 +780,14 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         api.send(chat_id, f"🗄️ @{handle} archive kar diya (delete nahi hua).")
         return {"ok": True, "action": "rmchannel", "channel": handle}
     if cmd == "engines":
-        for chunk in split_text(format_engines()):
-            api.send(chat_id, chunk)
+        send_chunks(api, chat_id, format_engines())
         return {"ok": True, "action": "engines", "count": len(TG_SEARCH_ENGINES)}
     if cmd in ("deep", "darkweb"):
-        for chunk in split_text(format_deep(arg)):
-            api.send(chat_id, chunk)
+        send_chunks(api, chat_id, format_deep(arg))
         return {"ok": True, "action": "deep", "count": len(DEEP_ENGINES)}
     if cmd == "memory":
         rows = memory_mod.recent(chat_id, 6)
-        for chunk in split_text(format_memory(rows)):
-            api.send(chat_id, chunk)
+        send_chunks(api, chat_id, format_memory(rows))
         return {"ok": True, "action": "memory", "count": len(rows)}
     if cmd == "research":
         if not arg:
@@ -833,10 +896,12 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
         except Exception:
             final_md = md
         chunks = split_text(final_md)
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             if not _session_active(session):
                 api.send(chat_id, "🛑 Report rok di gayi.")
                 break
+            if i and SEND_DELAY > 0:
+                time.sleep(SEND_DELAY)
             api.send(chat_id, chunk)
 
         # Memory: kaunse sources/channels is round me use hue
