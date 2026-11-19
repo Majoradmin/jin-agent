@@ -54,6 +54,29 @@ ALLOWED_HOSTS = frozenset({
     "op.europa.eu", "data.worldbank.org", "www.oecd.org", "www.cdc.gov",
     "www.nasa.gov", "ourworldindata.org", "pmc.ncbi.nlm.nih.gov",
     "www.imf.org",
+    # P40 key-free engine list (jo engine block/key wale nahi bhi hain, unke
+    # hosts bhi allowlisted hain — seedha link display/verification ke liye)
+    # Web
+    "www.mojeek.com", "search.marginalia.nu", "marginalia-search.com",
+    "searx.be", "gibiru.com",
+    "www.ecosia.org", "www.qwant.com", "www.startpage.com", "swisscows.com",
+    "presearch.com",
+    # Regional
+    "yandex.ru", "www.baidu.com", "www.sogou.com", "search.naver.com",
+    "search.daum.net", "search.yahoo.com", "search.yahoo.co.jp",
+    "search.seznam.cz", "nova.rambler.ru",
+    # Academic
+    "api.semanticscholar.org", "doaj.org", "www.ebi.ac.uk",
+    "api.biorxiv.org", "api.unpaywall.org", "api.core.ac.uk",
+    "api.base-search.net",
+    # Patents
+    "worldwide.espacenet.com", "patentscope.wipo.int", "api.uspto.gov",
+    # OSS
+    "gitlab.com", "codeberg.org", "sourceforge.net", "huggingface.co",
+    "api.stackexchange.com", "pypi.org", "registry.npmjs.org", "crates.io",
+    # Archive / News / Social / TG dirs
+    "openlibrary.org", "gutendex.com", "www.googleapis.com", "news.yahoo.com",
+    "public.api.bsky.app", "mastodon.social", "tgstat.com", "telemetr.io",
 })
 
 # key, name, url, tier, category, trust, auto_fetch, notes
@@ -107,6 +130,64 @@ SOURCE_REGISTER = [
     {"key": "ourworldindata", "name": "Our World in Data", "url": "https://ourworldindata.org/", "tier": "T3", "category": "Science", "trust": 0.8, "auto": False, "notes": "P2.1 research data visualisation. Registry-only: no adapter yet."},
     {"key": "pmc", "name": "PubMed Central", "url": "https://pmc.ncbi.nlm.nih.gov/", "tier": "T1", "category": "Science", "trust": 0.9, "auto": False, "notes": "P2.1 open-access full-text archive. Registry-only: no adapter yet."},
     {"key": "imf", "name": "IMF", "url": "https://www.imf.org/", "tier": "T1", "category": "World", "trust": 0.8, "auto": False, "notes": "P2.1 official IMF data/publications. Registry-only: no adapter yet."},
+    # P40 - key-free engine list. Live check 2026-11-19 (JIN-Agent UA).
+    # auto=True sirf woh engine jis ka keyless adapter asli results deta hai;
+    # blocked (anomaly/429/captcha/Cloudflare/JS) ya key wale auto=False + wajah.
+    # --- Web ---
+    {"key": "mojeek", "name": "Mojeek", "url": "https://www.mojeek.com/search", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 keyless HTML search. Live: anti-bot captcha page — auto=False."},
+    {"key": "marginalia", "name": "Marginalia Search", "url": "https://search.marginalia.nu/search", "tier": "T1", "category": "World", "trust": 0.7, "auto": False, "notes": "P40 keyless HTML search. Live: 302 -> JS shell (parser drift) — auto=False."},
+    {"key": "searx-be", "name": "searx.be", "url": "https://searx.be/search", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 metasearch. Live: captcha — auto=False."},
+    {"key": "gibiru", "name": "Gibiru", "url": "https://gibiru.com/results.html", "tier": "T1", "category": "World", "trust": 0.55, "auto": False, "notes": "P40 keyless HTML search. Live: JS shell, 0 parseable result — auto=False."},
+    {"key": "ecosia", "name": "Ecosia", "url": "https://www.ecosia.org/search", "tier": "T1", "category": "World", "trust": 0.65, "auto": False, "notes": "P40 keyless HTML search. Live: HTTP 403 Cloudflare — auto=False."},
+    {"key": "qwant", "name": "Qwant", "url": "https://www.qwant.com/", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 keyless HTML search. Live: JS-rendered, parser ko result nahi — auto=False."},
+    {"key": "startpage", "name": "Startpage", "url": "https://www.startpage.com/sp/search", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 keyless HTML search. Live: Anubis anti-bot challenge — auto=False."},
+    {"key": "swisscows", "name": "Swisscows", "url": "https://swisscows.com/en/web", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 keyless HTML search. Live: JS shell, 0 result — auto=False."},
+    {"key": "presearch", "name": "Presearch", "url": "https://presearch.com/search", "tier": "T1", "category": "World", "trust": 0.5, "auto": False, "notes": "P40 keyless HTML search. Live: HTTP 530 — auto=False."},
+    # --- Regional ---
+    {"key": "yandex", "name": "Yandex Search", "url": "https://yandex.ru/yandsearch", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 regional keyless. Live: SmartCaptcha — auto=False."},
+    {"key": "baidu", "name": "Baidu Search", "url": "https://www.baidu.com/s", "tier": "T1", "category": "World", "trust": 0.55, "auto": False, "notes": "P40 regional keyless. Live: JS-rendered, 0 parseable result — auto=False."},
+    {"key": "sogou", "name": "Sogou Search", "url": "https://www.sogou.com/web", "tier": "T1", "category": "World", "trust": 0.55, "auto": False, "notes": "P40 regional keyless. Live: JS shell — auto=False."},
+    {"key": "naver", "name": "Naver Search", "url": "https://search.naver.com/search.naver", "tier": "T1", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 regional keyless. Live: ad-heavy HTML (ader.naver.com), results noisy — auto=False."},
+    {"key": "daum", "name": "Daum Search", "url": "https://search.daum.net/search", "tier": "T1", "category": "World", "trust": 0.55, "auto": False, "notes": "P40 regional keyless. Live: ad-heavy HTML — auto=False."},
+    {"key": "yahoo", "name": "Yahoo Search", "url": "https://search.yahoo.com/search", "tier": "T1", "category": "World", "trust": 0.65, "auto": False, "notes": "P40 keyless HTML search. Live: HTTP 500 — auto=False."},
+    {"key": "yahoojp", "name": "Yahoo! Japan Search", "url": "https://search.yahoo.co.jp/search", "tier": "T1", "category": "World", "trust": 0.65, "auto": True, "notes": "P40 keyless HTML search; parser yahoo/nav links exclude karta hai. Live: asli results."},
+    {"key": "seznam", "name": "Seznam.cz Search", "url": "https://search.seznam.cz/", "tier": "T1", "category": "World", "trust": 0.6, "auto": True, "notes": "P40 keyless HTML search; parser shopping/nav exclude karta hai. Live: asli results."},
+    {"key": "rambler", "name": "Rambler Nova", "url": "https://nova.rambler.ru/search", "tier": "T1", "category": "World", "trust": 0.5, "auto": False, "notes": "P40 regional keyless. Live: 0 parseable result — auto=False."},
+    # --- Academic ---
+    {"key": "semanticscholar", "name": "Semantic Scholar API", "url": "https://api.semanticscholar.org/graph/v1/paper/search", "tier": "T1", "category": "Science", "trust": 0.85, "auto": False, "notes": "P40 keyless academic API. Live: HTTP 429 rate limit (key optional) — auto=False."},
+    {"key": "doaj", "name": "DOAJ Articles", "url": "https://doaj.org/api/search/articles", "tier": "T1", "category": "Science", "trust": 0.85, "auto": True, "notes": "P40 keyless open-access article API. Live: JSON results."},
+    {"key": "europepmc", "name": "Europe PMC", "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search", "tier": "T1", "category": "Science", "trust": 0.9, "auto": True, "notes": "P40 keyless Europe PMC REST. Live: JSON results."},
+    {"key": "biorxiv", "name": "bioRxiv", "url": "https://api.biorxiv.org/details/biorxiv", "tier": "T1", "category": "Science", "trust": 0.85, "auto": False, "notes": "P40 preprint API sirf recent-papers feed hai (query search nahi; 30 items/call) — auto=False."},
+    {"key": "unpaywall", "name": "Unpaywall", "url": "https://api.unpaywall.org/v2/", "tier": "T1", "category": "Science", "trust": 0.85, "auto": False, "notes": "P40 academic OA API. Email required (key-like) — auto=False."},
+    {"key": "core", "name": "CORE API", "url": "https://api.core.ac.uk/v3/search/works", "tier": "T1", "category": "Science", "trust": 0.85, "auto": False, "notes": "P40 academic aggregator. Live: HTTP 429 / API key required — auto=False."},
+    {"key": "base-search", "name": "BASE Search", "url": "https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi", "tier": "T1", "category": "Science", "trust": 0.8, "auto": False, "notes": "P40 academic aggregator. Live: access denied (IP/UA) — auto=False."},
+    # --- Patents ---
+    {"key": "espacenet", "name": "Espacenet", "url": "https://worldwide.espacenet.com/searchResults", "tier": "T2", "category": "Science", "trust": 0.8, "auto": False, "notes": "P40 patent search. Live: HTTP 403 Cloudflare — auto=False."},
+    {"key": "patentscope", "name": "WIPO PatentScope", "url": "https://patentscope.wipo.int/search/en/result.jsf", "tier": "T2", "category": "Science", "trust": 0.8, "auto": False, "notes": "P40 patent search. Live: JS/session-driven — auto=False."},
+    {"key": "uspto", "name": "USPTO Patent API", "url": "https://api.uspto.gov/api/v1/patent/applications/search", "tier": "T2", "category": "Science", "trust": 0.85, "auto": False, "notes": "P40 patent API. Live: HTTP 401 (API key) — auto=False."},
+    # --- OSS ---
+    {"key": "gitlab", "name": "GitLab Projects", "url": "https://gitlab.com/api/v4/projects", "tier": "T1", "category": "Tools & Reverse Engineering", "trust": 0.8, "auto": True, "notes": "P40 keyless GitLab API. Live: JSON results."},
+    {"key": "codeberg", "name": "Codeberg", "url": "https://codeberg.org/api/v1/repos/search", "tier": "T1", "category": "Tools & Reverse Engineering", "trust": 0.7, "auto": False, "notes": "P40 keyless Forgejo API. Live: HTTP 429 — auto=False."},
+    {"key": "sourceforge", "name": "SourceForge", "url": "https://sourceforge.net/directory/", "tier": "T1", "category": "Tools & Reverse Engineering", "trust": 0.6, "auto": False, "notes": "P40 keyless HTML directory. Live: nav-only HTML, 0 result — auto=False."},
+    {"key": "huggingface", "name": "Hugging Face Models", "url": "https://huggingface.co/api/models", "tier": "T1", "category": "Tools & Reverse Engineering", "trust": 0.75, "auto": True, "notes": "P40 keyless HF API. Live: JSON results."},
+    {"key": "stackexchange", "name": "Stack Exchange API", "url": "https://api.stackexchange.com/2.3/search/advanced", "tier": "T1", "category": "Tools & Reverse Engineering", "trust": 0.75, "auto": True, "notes": "P40 keyless Stack Exchange API. Live: JSON results."},
+    {"key": "pypi", "name": "PyPI", "url": "https://pypi.org/pypi", "tier": "T3", "category": "Tools & Reverse Engineering", "trust": 0.75, "auto": False, "notes": "P40 package index. Koi keyless search API nahi (per-package JSON only) — auto=False."},
+    {"key": "npm", "name": "npm Registry", "url": "https://registry.npmjs.org/-/v1/search", "tier": "T1", "category": "Tools & Reverse Engineering", "trust": 0.7, "auto": True, "notes": "P40 keyless npm search. Live: JSON results."},
+    {"key": "crates", "name": "crates.io", "url": "https://crates.io/api/v1/crates", "tier": "T1", "category": "Tools & Reverse Engineering", "trust": 0.7, "auto": True, "notes": "P40 keyless crates search. Live: JSON results."},
+    # --- Archive ---
+    {"key": "archive-search", "name": "Internet Archive Search", "url": "https://archive.org/advancedsearch.php", "tier": "T1", "category": "World", "trust": 0.75, "auto": True, "notes": "P40 keyless archive metadata API. Live: JSON results."},
+    {"key": "openlibrary", "name": "Open Library", "url": "https://openlibrary.org/search.json", "tier": "T1", "category": "World", "trust": 0.75, "auto": True, "notes": "P40 keyless book search. Live: JSON results."},
+    {"key": "gutendex", "name": "Gutendex", "url": "https://gutendex.com/books/", "tier": "T1", "category": "World", "trust": 0.7, "auto": False, "notes": "P40 keyless Gutenberg API. Live: read timeout — auto=False."},
+    {"key": "googlebooks", "name": "Google Books API", "url": "https://www.googleapis.com/books/v1/volumes", "tier": "T1", "category": "World", "trust": 0.75, "auto": False, "notes": "P40 keyless Books API. Live: HTTP 429 quota — auto=False."},
+    # --- News ---
+    {"key": "bing-news", "name": "Bing News", "url": "https://www.bing.com/news/search", "tier": "T1", "category": "World", "trust": 0.7, "auto": True, "notes": "P40 keyless news HTML. Live: asli results."},
+    {"key": "yahoo-news", "name": "Yahoo News", "url": "https://news.yahoo.com/search", "tier": "T1", "category": "World", "trust": 0.65, "auto": False, "notes": "P40 keyless news HTML. Live: HTTP 404 — auto=False."},
+    # --- Social ---
+    {"key": "bsky", "name": "Bluesky Public API", "url": "https://public.api.bsky.app/xrpc/", "tier": "T2", "category": "World", "trust": 0.6, "auto": False, "notes": "P40 public ATProto API. Live: search endpoint 501 — auto=False."},
+    {"key": "mastodon", "name": "Mastodon Search", "url": "https://mastodon.social/api/v2/search", "tier": "T2", "category": "World", "trust": 0.55, "auto": False, "notes": "P40 federated search. Live: unauthenticated search empty — auto=False."},
+    # --- TG dirs ---
+    {"key": "tgstat", "name": "TGStat", "url": "https://tgstat.com/search", "tier": "T2", "category": "Telecom", "trust": 0.5, "auto": False, "notes": "P40 Telegram directory. Live: JS app shell, 0 result — auto=False."},
+    {"key": "telemetr", "name": "Telemetr", "url": "https://telemetr.io/search", "tier": "T2", "category": "Telecom", "trust": 0.5, "auto": False, "notes": "P40 Telegram directory. Live: HTTP 403 Cloudflare — auto=False."},
 ]
 
 TRUST_LABELS = ((0.9, "Official"), (0.8, "Verified"), (0.6, "Reported"),
