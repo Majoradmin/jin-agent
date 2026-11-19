@@ -14,6 +14,7 @@ crashes a run: it returns a structured diagnostic.
 from __future__ import annotations
 
 import html
+from html.parser import HTMLParser
 import json
 import re
 import time
@@ -22,7 +23,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import (canonical, config, logging_setup, metrics, policy, ratelimit,
                snapshots, util)
@@ -1169,6 +1170,407 @@ class PubMedAdapter(Adapter):
         return parse_pubmed(ids_text, summary)[:limit]
 
 
+# --------------------------------------------------------------------------
+# P40: key-free engine list (data-driven, stdlib-only parsers)
+# --------------------------------------------------------------------------
+
+class _LinkCollector(HTMLParser):
+    """<a href> + anchor text jama karo (HTML search results nikalne ke liye)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.links: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._buf: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a" and self._href is None:
+            self._href = dict(attrs).get("href")
+            self._buf = []
+
+    def handle_data(self, data):
+        if self._href is not None:
+            self._buf.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._href is not None:
+            text = " ".join("".join(self._buf).split())
+            self.links.append((self._href, text))
+            self._href = None
+            self._buf = []
+
+
+def parse_html_links(text, source, source_key, query, cfg, exclude_hosts=(),
+                     min_text=14, limit=25, category="World", trust=0.6,
+                     tier="T1") -> list[dict]:
+    """HTML search page se result links — apni site/nav links exclude."""
+    parser = _LinkCollector()
+    try:
+        parser.feed(str(text or ""))
+    except Exception:
+        pass
+    ex = [str(h).lower().lstrip(".") for h in (exclude_hosts or ())]
+    out, seen = [], set()
+    for href, raw in parser.links:
+        href = str(href or "").strip()
+        if not href.startswith(("http://", "https://")):
+            continue
+        host = (urllib.parse.urlsplit(href).hostname or "").lower().lstrip(".")
+        if not host:
+            continue
+        if any(host == e or host.endswith("." + e) for e in ex):
+            continue
+        title = util.clean_text(raw, 240)
+        if len(title) < int(min_text):
+            continue
+        if title.lower().startswith(("http://", "https://", "www.")):
+            continue
+        if href in seen:
+            continue
+        seen.add(href)
+        out.append({
+            "title": title, "url": href, "source": source,
+            "source_key": source_key, "published": "", "excerpt": "",
+            "body": "", "category": category, "trust": trust, "tier": tier,
+            "kind": "web-search", "link_only": False,
+        })
+        if len(out) >= int(limit):
+            break
+    return out
+
+
+def parse_json_rows(text, source, source_key, query, cfg, rows_path=(),
+                    title_key="title", url_key="url", excerpt_key="",
+                    date_key="", limit=25, category="World", trust=0.7,
+                    tier="T1") -> list[dict]:
+    """JSON search API — rows_path ke andar list, title/url keys se items."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    rows = data
+    for key in rows_path:
+        if not isinstance(rows, dict):
+            return []
+        rows = rows.get(key) or []
+    if not isinstance(rows, list):
+        return []
+    out = []
+    for row in rows[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        title = util.truncate(str(row.get(title_key) or "").strip(), 240)
+        url = str(row.get(url_key) or "").strip()
+        if not title or not url.startswith(("http://", "https://")):
+            continue
+        out.append({
+            "title": title, "url": url, "source": source,
+            "source_key": source_key,
+            "published": util.parse_date(row.get(date_key)),
+            "excerpt": util.clean_text(row.get(excerpt_key) or "", 600),
+            "body": "", "category": category, "trust": trust, "tier": tier,
+            "kind": "web-search", "link_only": False,
+        })
+    return out
+
+
+def _engine_item(title, url, source, source_key, excerpt="", published="",
+                 category="World", trust=0.7, tier="T1") -> dict:
+    return {
+        "title": util.truncate(title, 240), "url": url, "source": source,
+        "source_key": source_key, "published": util.parse_date(published),
+        "excerpt": util.clean_text(excerpt, 600), "body": "",
+        "category": category, "trust": trust, "tier": tier,
+        "kind": "web-search", "link_only": False,
+    }
+
+
+def parse_doaj_rows(text, source, source_key, query, cfg, limit=25,
+                    category="Science", trust=0.85, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for row in (data.get("results") or [])[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        bib = row.get("bibjson") or {}
+        title = str(bib.get("title") or "").strip()
+        links = bib.get("link") or []
+        url = str((links[0] or {}).get("url") or "").strip() if links else ""
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    bib.get("abstract") or "", category=category,
+                                    trust=trust, tier=tier))
+    return out
+
+
+def parse_europepmc_rows(text, source, source_key, query, cfg, limit=25,
+                         category="Science", trust=0.9, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    rows = ((data.get("resultList") or {}).get("result") or [])[:max(1, int(limit))]
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get("title") or "").strip()
+        doi = str(row.get("doi") or "").strip()
+        url = ("https://doi.org/" + doi) if doi else ""
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    row.get("authorString") or "",
+                                    row.get("firstPublicationDate"),
+                                    category, trust, tier))
+    return out
+
+
+def parse_gitlab_rows(text, source, source_key, query, cfg, limit=25,
+                      category="Tools & Reverse Engineering", trust=0.8,
+                      tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for row in data[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get("path_with_namespace") or row.get("name") or "").strip()
+        url = str(row.get("web_url") or "").strip()
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    row.get("description") or "",
+                                    category=category, trust=trust, tier=tier))
+    return out
+
+
+def parse_huggingface_rows(text, source, source_key, query, cfg, limit=25,
+                           category="Tools & Reverse Engineering", trust=0.75,
+                           tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for row in data[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        mid = str(row.get("id") or row.get("modelId") or "").strip()
+        if mid:
+            out.append(_engine_item(mid, "https://huggingface.co/" + mid,
+                                    source, source_key,
+                                    ",".join(row.get("tags") or [])[:200],
+                                    category=category, trust=trust, tier=tier))
+    return out
+
+
+def parse_npm_rows(text, source, source_key, query, cfg, limit=25,
+                   category="Tools & Reverse Engineering", trust=0.7,
+                   tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for row in (data.get("objects") or [])[:max(1, int(limit))]:
+        pkg = row.get("package") or {}
+        name = str(pkg.get("name") or "").strip()
+        if not name:
+            continue
+        links = pkg.get("links") or {}
+        url = str(links.get("repository") or
+                  "https://www.npmjs.com/package/" + name).strip()
+        out.append(_engine_item(name, url, source, source_key,
+                                pkg.get("description") or "",
+                                category=category, trust=trust, tier=tier))
+    return out
+
+
+def parse_crates_rows(text, source, source_key, query, cfg, limit=25,
+                      category="Tools & Reverse Engineering", trust=0.7,
+                      tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for row in (data.get("crates") or [])[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or row.get("id") or "").strip()
+        cid = str(row.get("id") or "").strip()
+        url = ("https://crates.io/crates/" + cid) if cid else ""
+        if name and url:
+            out.append(_engine_item(name, url, source, source_key,
+                                    row.get("description") or "",
+                                    category=category, trust=trust, tier=tier))
+    return out
+
+
+def parse_archive_rows(text, source, source_key, query, cfg, limit=25,
+                       category="World", trust=0.75, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    docs = (data.get("response") or {}).get("docs") or []
+    out = []
+    for row in docs[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        ident = str(row.get("identifier") or "").strip()
+        title = str(row.get("title") or ident).strip()
+        url = ("https://archive.org/details/" + ident) if ident else ""
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    category=category, trust=trust, tier=tier))
+    return out
+
+
+def parse_openlibrary_rows(text, source, source_key, query, cfg, limit=25,
+                           category="World", trust=0.75, tier="T1", **_):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for row in (data.get("docs") or [])[:max(1, int(limit))]:
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get("title") or "").strip()
+        key = str(row.get("key") or "").strip()
+        url = ("https://openlibrary.org" + key) if key else ""
+        if title and url:
+            out.append(_engine_item(title, url, source, source_key,
+                                    ", ".join(row.get("author_name") or [])[:200],
+                                    category=category, trust=trust, tier=tier))
+    return out
+
+
+_PARSERS = {
+    "doaj": parse_doaj_rows,
+    "europepmc": parse_europepmc_rows,
+    "gitlab": parse_gitlab_rows,
+    "huggingface": parse_huggingface_rows,
+    "npm": parse_npm_rows,
+    "crates": parse_crates_rows,
+    "archive-search": parse_archive_rows,
+    "openlibrary": parse_openlibrary_rows,
+}
+
+
+class SimpleEngineAdapter(Adapter):
+    """P40 keyless engine — URL template + parser kind (stdlib-only)."""
+
+    def __init__(self, key, name, url_template, kind, pconfig=None,
+                 category="World", trust=0.6, tier="T1", frequency=60,
+                 enabled=True):
+        self.key, self.name = key, name
+        self.url_template = url_template
+        self.kind = kind
+        self.pconfig = dict(pconfig or {})
+        self.category, self.trust, self.tier = category, trust, tier
+        self.frequency = frequency
+        self.enabled = bool(enabled)
+
+    def build(self, query, days, limit, cfg):
+        q = urllib.parse.quote(str(query or "")[:200])
+        n = str(min(25, max(3, int(limit or 10))))
+        end = datetime.now(timezone.utc).date()
+        start = end - timedelta(days=min(14, max(1, int(days or 7))))
+        return (self.url_template.replace("{q}", q).replace("{n}", n)
+                .replace("{from}", start.isoformat())
+                .replace("{to}", end.isoformat()))
+
+    def parse(self, text, query, cfg):
+        if self.kind == "html":
+            return parse_html_links(text, self.name, self.key, query, cfg,
+                                    category=self.category, trust=self.trust,
+                                    tier=self.tier, **self.pconfig)
+        if self.kind == "json":
+            return parse_json_rows(text, self.name, self.key, query, cfg,
+                                   category=self.category, trust=self.trust,
+                                   tier=self.tier, **self.pconfig)
+        fn = _PARSERS.get(self.kind)
+        if not fn:
+            return []
+        return fn(text, self.name, self.key, query, cfg,
+                  category=self.category, trust=self.trust, tier=self.tier,
+                  **self.pconfig)
+
+
+# (key, name, url_template, parser kind, parser config, category, trust,
+#  tier, auto) — auto=False engines ka adapter nahi banta (registry-only).
+SIMPLE_ENGINES = [
+    # Web
+    ("marginalia", "Marginalia Search",
+     "https://search.marginalia.nu/search?query={q}", "html",
+     {"exclude_hosts": ("marginalia.nu", "github.com", "discord.com",
+                        "discord.gg", "creativecommons.org", "ip2location.com"),
+      "min_text": 15}, "World", 0.7, "T1", False),
+    ("yahoojp", "Yahoo! Japan Search",
+     "https://search.yahoo.co.jp/search?p={q}", "html",
+     {"exclude_hosts": ("yahoo.co.jp", "yahoo-net.jp"), "min_text": 15},
+     "World", 0.65, "T1", True),
+    ("seznam", "Seznam.cz Search", "https://search.seznam.cz/?q={q}", "html",
+     {"exclude_hosts": ("seznam.cz", "o-seznam.cz", "zbozi.cz", "alza.cz",
+                        "youtube.com", "google.com"), "min_text": 15},
+     "World", 0.6, "T1", True),
+    ("bing-news", "Bing News", "https://www.bing.com/news/search?q={q}", "html",
+     {"exclude_hosts": ("bing.com", "microsoft.com"), "min_text": 15},
+     "World", 0.7, "T1", True),
+    # Academic
+    ("doaj", "DOAJ Articles",
+     "https://doaj.org/api/search/articles/{q}?pageSize={n}", "doaj", {},
+     "Science", 0.85, "T1", True),
+    ("europepmc", "Europe PMC",
+     "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={q}"
+     "&format=json&pageSize={n}", "europepmc", {}, "Science", 0.9, "T1", True),
+    ("biorxiv", "bioRxiv",
+     "https://api.biorxiv.org/details/biorxiv/{from}/{to}", "biorxiv", {},
+     "Science", 0.85, "T1", False),
+    # OSS
+    ("gitlab", "GitLab Projects",
+     "https://gitlab.com/api/v4/projects?search={q}&per_page={n}", "gitlab", {},
+     "Tools & Reverse Engineering", 0.8, "T1", True),
+    ("huggingface", "Hugging Face Models",
+     "https://huggingface.co/api/models?search={q}&limit={n}", "huggingface",
+     {}, "Tools & Reverse Engineering", 0.75, "T1", True),
+    ("stackexchange", "Stack Exchange API",
+     "https://api.stackexchange.com/2.3/search/advanced?order=desc"
+     "&sort=relevance&q={q}&site=stackoverflow&pagesize={n}", "json",
+     {"rows_path": ("items",), "title_key": "title", "url_key": "link",
+      "excerpt_key": "body"}, "Tools & Reverse Engineering", 0.75, "T1", True),
+    ("npm", "npm Registry",
+     "https://registry.npmjs.org/-/v1/search?text={q}&size={n}", "npm", {},
+     "Tools & Reverse Engineering", 0.7, "T1", True),
+    ("crates", "crates.io",
+     "https://crates.io/api/v1/crates?q={q}&per_page={n}", "crates", {},
+     "Tools & Reverse Engineering", 0.7, "T1", True),
+    # Archive
+    ("archive-search", "Internet Archive Search",
+     "https://archive.org/advancedsearch.php?q={q}&fl[]=identifier&fl[]=title"
+     "&rows={n}&output=json", "archive-search", {}, "World", 0.75, "T1", True),
+    ("openlibrary", "Open Library",
+     "https://openlibrary.org/search.json?q={q}&limit={n}", "openlibrary", {},
+     "World", 0.75, "T1", True),
+]
+
+SIMPLE_ADAPTERS = [
+    SimpleEngineAdapter(key=k, name=n, url_template=u, kind=kind, pconfig=pc,
+                        category=cat, trust=tr, tier=tier, enabled=auto)
+    for (k, n, u, kind, pc, cat, tr, tier, auto) in SIMPLE_ENGINES if auto
+]
+
+
 RSS_FEEDS = [
     ("gsmarena", "GSMArena", "https://www.gsmarena.com/rss-news-reviews.php3", "Mobile & Firmware", 0.7),
     ("xda", "XDA Developers", "https://www.xda-developers.com/feed/", "Tools & Reverse Engineering", 0.6),
@@ -1187,7 +1589,7 @@ ADAPTERS: list[Adapter] = [RSSAdapter(*row) for row in RSS_FEEDS] + [
     GoogleNewsTopicAdapter(), WaybackAdapter(), GitHubSearchAdapter(),
     NVDAdapter(), SitemapAdapter(), BraveSearchAdapter(), BingSearchAdapter(),
     TelegramAdapter(), AhmiaAdapter(), PubMedAdapter(),
-]
+] + SIMPLE_ADAPTERS
 BY_KEY = {a.key: a for a in ADAPTERS}
 
 
