@@ -293,7 +293,8 @@ class TestAdaptersMocked(unittest.TestCase):
 class TestRegistryAndSafety(unittest.TestCase):
     def test_adapter_and_register_counts(self):
         self.assertEqual(len(adapters.ADAPTERS), 27)
-        self.assertEqual(len(policy.register()), 33)
+        # P2.1: 12 legal/public institutional sources (33 -> 45).
+        self.assertEqual(len(policy.register()), 45)
 
     def test_new_hosts_allowlisted(self):
         for url in ("https://www.reddit.com/r/android/search.json",

@@ -110,7 +110,8 @@ class TestBoundaries(unittest.TestCase):
 
     def test_adapter_and_register_counts(self):
         self.assertEqual(len(adapters.ADAPTERS), 27)
-        self.assertEqual(len(policy.register()), 33)
+        # P2.1: 12 legal/public institutional sources (33 -> 45).
+        self.assertEqual(len(policy.register()), 45)
 
     def test_onion_fetch_prohibited_in_code(self):
         self.assertFalse(policy.check_url("http://abcdefghijklmnop.onion/x")[0])
