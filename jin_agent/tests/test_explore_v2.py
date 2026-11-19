@@ -261,7 +261,7 @@ class TestDiscoveryQuery(unittest.TestCase):
     def test_run_discovery_uses_query_for_web_and_harvest(self):
         seen = {}
 
-        def fake_web(query, cfg=None):
+        def fake_web(query, cfg=None, info=None):
             seen["web"] = query
             return ["web_ch"]
 

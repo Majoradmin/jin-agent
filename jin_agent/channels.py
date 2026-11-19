@@ -23,6 +23,7 @@ volume + text richness + subscribers + topic keyword relevance.
 
 from __future__ import annotations
 
+import base64
 import concurrent.futures
 import json
 import math
@@ -39,6 +40,15 @@ HANDLE_RE = re.compile(r"(?:t\.me|telegram\.me)/(?:s/)?@?([A-Za-z0-9_]{3,40})")
 EXCLUDE_HANDLES = {"joinchat", "share", "proxy", "addstickers", "addlist",
                    "contact", "todo", "setlanguage", "premium", "telegram",
                    "telegramtips", "tdesktop", "android", "ios", "macos"}
+
+# P39: channel discovery ke liye keyless search engines (kram maloom).
+# Bing pehle (DDG abhi anti-bot anomaly deta hai), phir DDG html, phir DDG lite.
+BING_SEARCH_URL = "https://www.bing.com/search?q="
+DDG_HTML_URL = "https://html.duckduckgo.com/html/?q="
+DDG_LITE_URL = "https://lite.duckduckgo.com/lite/?q="
+BING_RESULT_RE = re.compile(r'<li class="b_algo"')
+BING_TOKEN_RE = re.compile(r"u=a1([A-Za-z0-9_\-]+)")
+DDG_UDDG_RE = re.compile(r"uddg=([^&\"']+)")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tg_channels (
@@ -65,6 +75,11 @@ CREATE TABLE IF NOT EXISTS tg_sites (
   source TEXT NOT NULL DEFAULT '',
   topic TEXT NOT NULL DEFAULT '',
   added_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS tg_discovery_state (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -249,6 +264,31 @@ def site_counts() -> dict:
             "week": int(wk[0]) if wk else 0}
 
 
+def save_discovery_state(state: dict) -> None:
+    """Aakhri discovery ka hisaab (``/status`` ke liye) — additive, local."""
+    ensure_table()
+    with store.session() as con:
+        con.execute(
+            "INSERT OR REPLACE INTO tg_discovery_state(key, value, updated_at) "
+            "VALUES('last', ?, ?)",
+            (json.dumps(state, ensure_ascii=False)[:4000], util.epoch()))
+
+
+def last_discovery_state() -> dict:
+    """Aakhri discovery ka hisaab; na ho to {}."""
+    ensure_table()
+    with store.session() as con:
+        row = con.execute(
+            "SELECT value, updated_at FROM tg_discovery_state WHERE key='last'"
+        ).fetchone()
+    if not row:
+        return {}
+    try:
+        return json.loads(row["value"] or "{}")
+    except ValueError:
+        return {}
+
+
 def add_candidates(handles: list[str]) -> int:
     """Discovery pool me naye handles (existing/manual ko chhor kar)."""
     ensure_table()
@@ -343,17 +383,47 @@ def harvest_archive(cfg: dict | None = None, query: str = "") -> list[str]:
     return out[:400]
 
 
-def web_search_candidates(query: str, cfg: dict | None = None) -> list[str]:
-    """Public search engine HTML par site:t.me/s search. Sirf public GET."""
-    cfg = cfg or config.load()
-    q = urllib.parse.quote("site:t.me/s " + str(query)[:120])
+def decode_bing_url(token: str) -> str:
+    """Bing ``ck/a`` token (urlsafe base64) ko asli URL me decode karo.
+
+    Bing result links ``https://www.bing.com/ck/a?...&u=a1<token>`` me encoded
+    hote hain. Token urlsafe base64 hai (padding kabhi-kabhi ghair-mukammal).
+    """
+    s = str(token or "").strip()
+    if not s:
+        return ""
+    s += "=" * (-len(s) % 4)
     try:
-        html = adapters.fetch("https://html.duckduckgo.com/html/?q=" + q, cfg)
+        raw = base64.b64decode(s, altchars=b"-_", validate=True)
+        return raw.decode("utf-8", "replace")
     except Exception:
-        return []
+        return ""
+
+
+def parse_bing_html(html: str) -> list[str]:
+    """Bing HTML se t.me handles — pehle ``ck/a`` decode, phir raw links."""
     out, seen = [], set()
-    # DDG result links uddg=<urlencoded> wrapping par hote hain
-    for m in re.finditer(r"uddg=([^&\"']+)", html):
+    for m in BING_TOKEN_RE.finditer(str(html or "")):
+        for h in extract_handles(decode_bing_url(m.group(1))):
+            if h not in seen:
+                seen.add(h)
+                out.append(h)
+    for h in extract_handles(html):
+        if h not in seen:
+            seen.add(h)
+            out.append(h)
+    return out
+
+
+def bing_has_results(html: str) -> bool:
+    """Bing ne asli results diye? Anti-bot anomaly page par ``b_algo`` nahi hota."""
+    return bool(BING_RESULT_RE.search(str(html or "")))
+
+
+def parse_ddg_html(html: str) -> list[str]:
+    """DDG html results (``uddg=`` wrapping) se t.me handles."""
+    out, seen = [], set()
+    for m in DDG_UDDG_RE.finditer(str(html or "")):
         try:
             target = urllib.parse.unquote(m.group(1))
         except Exception:
@@ -362,12 +432,105 @@ def web_search_candidates(query: str, cfg: dict | None = None) -> list[str]:
             if h not in seen:
                 seen.add(h)
                 out.append(h)
-    # kabhi kabhi raw t.me/s/ handle page text me bhi hota hai
     for h in extract_handles(html):
         if h not in seen:
             seen.add(h)
             out.append(h)
-    return out[:60]
+    return out
+
+
+def web_search_probe(query: str, cfg: dict | None = None) -> dict:
+    """Search engines ko kram se azmo: Bing -> DDG html -> DDG lite.
+
+    Anti-bot "anomaly" page (Bing par ``b_algo`` 0 / DDG par ``uddg=`` 0) par
+    us engine ko chhor kar agle par jao. Returns
+    ``{"handles", "engine", "candidates", "anomaly", "error", "tried"}``.
+    """
+    cfg = cfg or config.load()
+    q = urllib.parse.quote("t.me/s " + str(query)[:120])
+    ddg_q = urllib.parse.quote("site:t.me/s " + str(query)[:120])
+    engines = (
+        ("bing", BING_SEARCH_URL + q, "bing"),
+        ("ddg-html", DDG_HTML_URL + ddg_q, "ddg-html"),
+        ("ddg-lite", DDG_LITE_URL + ddg_q, "ddg-lite"),
+    )
+    tried: list[dict] = []
+    saw_anomaly = False
+    saw_results = False
+    for name, url, kind in engines:
+        try:
+            html = adapters.fetch(url, cfg)
+        except Exception as exc:
+            tried.append({"engine": name, "ok": False,
+                          "error": type(exc).__name__})
+            continue
+        if kind == "bing":
+            handles = parse_bing_html(html)
+            anomaly = not bing_has_results(html)
+        elif kind == "ddg-html":
+            handles = parse_ddg_html(html)
+            anomaly = not handles
+        else:
+            handles = extract_handles(html)
+            anomaly = not handles
+        tried.append({"engine": name, "ok": True, "handles": len(handles),
+                      "anomaly": bool(anomaly)})
+        if anomaly:
+            saw_anomaly = True
+            continue
+        saw_results = True
+        if handles:
+            return {"handles": handles[:60], "engine": name,
+                    "candidates": len(handles), "anomaly": False,
+                    "error": "", "tried": tried}
+        # results to mila magar t.me handle nahi — agla engine azmo
+    if saw_results:
+        error = "results me t.me channel nahi mila"
+    elif saw_anomaly:
+        error = "search engine ne results nahi diye (anti-bot)"
+    else:
+        error = "kisi engine ne results nahi diye"
+    return {"handles": [], "engine": "", "candidates": 0,
+            "anomaly": saw_anomaly, "error": error, "tried": tried}
+
+
+def merge_web_probe(infos: list[dict]) -> dict:
+    """Kai search probes (neutral rotation) ka ik hisaab."""
+    infos = [i for i in (infos or []) if isinstance(i, dict)]
+    if not infos:
+        return {"engine": "", "candidates": 0, "anomaly": False,
+                "error": "", "tried": []}
+    engine = ""
+    for i in infos:
+        if i.get("engine"):
+            engine = str(i["engine"])
+            break
+    error = ""
+    for i in infos:
+        if i.get("error"):
+            error = str(i["error"])
+    return {
+        "engine": engine,
+        "candidates": sum(int(i.get("candidates") or 0) for i in infos),
+        "anomaly": all(bool(i.get("anomaly")) for i in infos),
+        "error": error,
+        "tried": [t for i in infos for t in (i.get("tried") or [])],
+    }
+
+
+def web_search_candidates(query: str, cfg: dict | None = None,
+                          info: dict | None = None) -> list[str]:
+    """Public search engine HTML par t.me/s search (Bing -> DDG fallback).
+
+    ``info`` dict diya ho to us me probe ka hisaab (engine/anomaly/error)
+    bhar diya jata hai — ``run_discovery`` honest status ke liye istemal karta
+    hai. Anti-bot anomaly par khali list, agla engine apne aap azmo.
+    """
+    probe = web_search_probe(query, cfg)
+    if isinstance(info, dict):
+        info.clear()
+        info.update(probe)
+    return probe["handles"]
 
 
 # --------------------------------------------------------------------------
@@ -643,18 +806,26 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
     known = {r["channel"] for r in list_channels()}
     manual = {clean_handle(c) for c in (cfg.get("telegram_channels") or [])}
     candidates: list[str] = []
+    web_infos: list[dict] = []
 
     # 1) web search (bootstrap) - offline me skip
     if not offline and bool(cfg.get("channel_discovery_web", True)):
+        info: dict = {}
         if q:
             # topic-driven: sirf us topic ki search
-            candidates.extend(web_search_candidates(q, cfg))
+            candidates.extend(web_search_candidates(q, cfg, info))
+            web_infos.append(info)
         else:
             topics = cfg.get("topics") or TOPIC_KEYWORDS
             kw = topics[int(time.time() // 3600) % len(topics)]
-            candidates.extend(web_search_candidates(str(kw), cfg))
+            candidates.extend(web_search_candidates(str(kw), cfg, info))
+            web_infos.append(info)
+            info = {}
             candidates.extend(web_search_candidates(
-                TOPIC_KEYWORDS[int(time.time() // 3600) % len(TOPIC_KEYWORDS)], cfg))
+                TOPIC_KEYWORDS[int(time.time() // 3600) % len(TOPIC_KEYWORDS)],
+                cfg, info))
+            web_infos.append(info)
+    web_info = merge_web_probe(web_infos)
 
     # 2) archive harvest (offline-safe) - query filter ke saath
     candidates.extend(harvest_archive(cfg, query=q))
@@ -708,10 +879,24 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
 
     out = {"query": q, "candidates": len(candidates), "probed": len(summaries),
            "added": added, "dead": dead, "rechecked": rechecked,
-           "counts": counts()}
+           "counts": counts(), "web_search": web_info}
     store.add_event("channel_discovery",
                     f"added={len(added)} dead={len(dead)} "
+                    f"engine={web_info.get('engine') or 'n/a'} "
+                    f"candidates={len(candidates)} "
                     f"active={out['counts']['active']}")
+    try:
+        save_discovery_state({
+            "ts": util.epoch(), "query": q,
+            "engine": web_info.get("engine") or "",
+            "candidates": len(candidates), "probed": len(summaries),
+            "added": len(added), "dead": len(dead),
+            "anomaly": bool(web_info.get("anomaly")),
+            "error": web_info.get("error") or "",
+            "tried": web_info.get("tried") or [],
+        })
+    except Exception:
+        pass
     return out
 
 
