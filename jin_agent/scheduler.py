@@ -57,6 +57,10 @@ def explore(topic: str, cfg: dict | None = None, offline: bool = True) -> dict:
         key=lambda r: (r.get("score") or 0, r.get("confidence") or 0),
         reverse=True)[:10]
     out = orchestrator.digest(cfg)
+    store.add_event("explore", f"topic={util.truncate(topic, 60)} "
+                                f"added={len(discovery.get('added') or [])} "
+                                f"dead={len(discovery.get('dead') or [])} "
+                                f"active={discovery.get('counts', {}).get('active', 0)}")
     return {"topic": topic, "query": topic, "discovery": discovery,
             "scored": scored,
             "digest": str((out.get("saved") or {}).get("md") or ""),

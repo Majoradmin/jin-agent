@@ -59,6 +59,13 @@ CREATE TABLE IF NOT EXISTS tg_candidates (
   found_at INTEGER NOT NULL DEFAULT 0,
   probed_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS tg_sites (
+  url TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT '',
+  topic TEXT NOT NULL DEFAULT '',
+  added_at INTEGER NOT NULL DEFAULT 0
+);
 """
 
 TOPIC_KEYWORDS = [
@@ -201,6 +208,43 @@ def remove_channel(channel: str) -> dict:
     return {"channel": clean, "status": "archived"}
 
 
+# --------------------------------------------------------------------------
+# Sites memory (explore confirm gate) — archive-not-delete, local table
+# --------------------------------------------------------------------------
+
+def add_site(url: str, title: str = "", source: str = "",
+             topic: str = "") -> dict:
+    """Explore ke site/source ko memory me rakho (dobara rakhna = no-op)."""
+    url = str(url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise ValueError("Site URL ghalat hai")
+    ensure_table()
+    with store.session() as con:
+        con.execute(
+            "INSERT OR IGNORE INTO tg_sites(url, title, source, topic, added_at) "
+            "VALUES(?,?,?,?,?)",
+            (url, str(title or "")[:200], str(source or "")[:80],
+             str(topic or "")[:120], util.epoch()))
+        row = con.execute("SELECT * FROM tg_sites WHERE url=?", (url,)).fetchone()
+    return dict(row)
+
+
+def list_sites(limit: int = 50) -> list[dict]:
+    ensure_table()
+    with store.session() as con:
+        rows = con.execute(
+            "SELECT * FROM tg_sites ORDER BY added_at DESC LIMIT ?",
+            (max(1, int(limit)),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def site_counts() -> dict:
+    ensure_table()
+    with store.session() as con:
+        row = con.execute("SELECT COUNT(*) FROM tg_sites").fetchone()
+    return {"total": int(row[0]) if row else 0}
+
+
 def add_candidates(handles: list[str]) -> int:
     """Discovery pool me naye handles (existing/manual ko chhor kar)."""
     ensure_table()
@@ -217,6 +261,15 @@ def add_candidates(handles: list[str]) -> int:
                 (clean, util.epoch()))
             n += cur.rowcount
     return n
+
+
+def pending_candidates() -> int:
+    """Un-probed candidate handles ki tadad (``/status`` ka explore block)."""
+    ensure_table()
+    with store.session() as con:
+        row = con.execute(
+            "SELECT COUNT(*) FROM tg_candidates WHERE probed_at=0").fetchone()
+    return int(row[0]) if row else 0
 
 
 def take_candidates(limit: int) -> list[str]:

@@ -23,6 +23,8 @@ def cmd_run(args):
     print(json.dumps(out["metrics"], ensure_ascii=False, indent=2))
     if out.get("saved"):
         print("\nSaved: " + str(out["saved"].get("md")))
+    if out.get("trace_path"):
+        print("\nTrace: " + str(out["trace_path"]))
     return 0 if out["ok"] else 1
 
 

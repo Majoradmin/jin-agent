@@ -39,9 +39,24 @@ def _write_trace(payload: dict) -> str:
 
 def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         keys: list[str] | None = None, cfg: dict | None = None,
-        save: bool = True, skip_sources: list[str] | None = None) -> dict:
-    """Execute one research run. Default is OFFLINE (deterministic, no network)."""
+        save: bool = True, skip_sources: list[str] | None = None,
+        on_stage=None) -> dict:
+    """Execute one research run. Default is OFFLINE (deterministic, no network).
+
+    ``on_stage(name, detail)`` optional progress callback — Telegram bot is
+    har stage par wahi status message edit karta hai (Plan → Sources → Fetch →
+    Verify → Brief). Callback kabhi run ko crash nahi karta.
+    """
     log = _log()
+
+    def _stage(name: str, detail: str = "") -> None:
+        if on_stage is None:
+            return
+        try:
+            on_stage(name, detail)
+        except Exception:
+            pass
+
     cfg = dict(cfg or config.load())
     if skip_sources:
         cfg["skip_sources"] = [str(s) for s in skip_sources]
@@ -57,6 +72,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     gate = policy.classify(query)
 
     if gate["verdict"] == "blocked":
+        _stage("Plan", "blocked")
         audit = verifier.citation_audit([])
         metrics = {"blocked": True, "sources_ok": 0, "sources_failed": 0,
                    "items": 0, "changes_sources": 0,
@@ -79,7 +95,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
             metrics_lib.inc("reports_total")
         log.info("run blocked", extra={"fields": {"query": util.truncate(query, 80),
                                                  "policy": policy.POLICY_ID}})
-        _write_trace({"run_id": run_id, "query": query, "mode": "offline",
+        trace_path = _write_trace({"run_id": run_id, "query": query, "mode": "offline",
                       "blocked": True, "started_at": started_iso,
                       "finished_at": util.now_iso(),
                       "duration_ms": metrics["duration_ms"],
@@ -92,11 +108,15 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         return {"ok": True, "blocked": True, "gate": gate, "items": [],
                 "diagnostics": [], "plan": {"calls": [], "source": "none"},
                 "audit": audit, "metrics": metrics, "report": built,
-                "saved": saved, "run_id": run_id, "changes": empty_changes}
+                "saved": saved, "run_id": run_id, "changes": empty_changes,
+                "trace_path": trace_path}
 
     plan_result = planner.plan(query, cfg)
+    _stage("Plan", f"{len(plan_result.get('calls') or [])} tools")
     ctx = {"cfg": cfg, "offline": not live, "query": query}
+    _stage("Sources", " ".join(str(c.get('tool')) for c in (plan_result.get('calls') or []))[:80])
     executed = planner.execute(plan_result, ctx)
+    _stage("Fetch", f"{len(executed.get('items') or [])} raw items")
 
     normalized: list[dict] = []
     for raw in executed["items"]:
@@ -110,6 +130,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     ingest = store.upsert_items(normalized)             # firehose: store everything
 
     items = verifier.cross_check([verifier.verify(rec) for rec in normalized])
+    _stage("Verify", f"{len(normalized)} normalized · {len(items)} verified")
     # "sab kuch store, best kuch report": archive keeps every source record,
     # but the brief prints one row per story instead of the same headline N times.
     pool = ranker.rank(items, query, max(limit * 3, limit))
@@ -169,6 +190,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     }
     built = briefer.build(query, ranked, diagnostics, cfg, plan_result, audit,
                           metrics, duration_ms, "live" if live else "offline")
+    _stage("Brief", f"{len(ranked)} findings")
     saved = briefer.save(built, query, metrics) if save else {}
     store.finish_run(run_id, metrics, len(ranked), sources_ok, sources_failed)
     store.add_event("research", f"query={util.truncate(query, 80)} items={len(ranked)} "
@@ -184,7 +206,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         "mode": "live" if live else "offline", "items": len(ranked),
         "sources_ok": sources_ok, "sources_failed": sources_failed,
         "duration_ms": duration_ms, "query": util.truncate(query, 80)}})
-    _write_trace({"run_id": run_id, "query": query,
+    trace_path = _write_trace({"run_id": run_id, "query": query,
                   "mode": "live" if live else "offline",
                   "blocked": False, "started_at": started_iso,
                   "finished_at": util.now_iso(), "duration_ms": duration_ms,
@@ -201,6 +223,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         "items": ranked, "diagnostics": diagnostics, "plan": plan_result,
         "tool_text": executed["tool_text"], "audit": audit, "metrics": metrics,
         "report": built, "saved": saved, "run_id": run_id, "changes": changes,
+        "trace_path": trace_path,
     }
 
 
