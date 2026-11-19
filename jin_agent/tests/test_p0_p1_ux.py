@@ -69,6 +69,14 @@ class TestHelpAndRouting(unittest.TestCase):
             self.assertIn("/" + cmd, tb.HELP_TEXT)
         self.assertEqual(tb.HELP_TEXT.count("Misal:"), 6)
 
+    def test_help_lists_remaining_commands(self):
+        self.assertIn("Baqi commands:", tb.HELP_TEXT)
+        for cmd in ("report", "addchannel", "rmchannel", "tgsearch", "engines",
+                    "deep", "dork", "memory", "digest", "alerts", "reports",
+                    "schedule", "channelhealth", "memoryaudit", "selftest",
+                    "new", "stop"):
+            self.assertIn("/" + cmd, tb.HELP_TEXT)
+
     def test_plain_text_becomes_research(self):
         self.assertEqual(tb.route_plain_text("firmware unlock"), "/research firmware unlock")
         self.assertEqual(tb.route_plain_text(""), "")
