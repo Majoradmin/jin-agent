@@ -292,10 +292,12 @@ class TestAdaptersMocked(unittest.TestCase):
 
 class TestRegistryAndSafety(unittest.TestCase):
     def test_adapter_and_register_counts(self):
-        self.assertEqual(len(adapters.ADAPTERS), 27)
+        # P40: +12 keyless engine adapters (27 -> 39).
+        self.assertEqual(len(adapters.ADAPTERS), 39)
         # P2.1: 12 legal/public institutional sources (33 -> 45).
         # P39: +1 keyless Bing HTML search (45 -> 46).
-        self.assertEqual(len(policy.register()), 46)
+        # P40: +46 key-free engine list (46 -> 92).
+        self.assertEqual(len(policy.register()), 92)
 
     def test_new_hosts_allowlisted(self):
         for url in ("https://www.reddit.com/r/android/search.json",

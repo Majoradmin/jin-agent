@@ -6,7 +6,7 @@ regression ke tor par us overlap ko rokti hain.
 
 Store `enabled` ko `auto` se seed karta hai. Registry-only sources
 (adapter ke baghair) alag ginche jate hain — wo `disabled` nahi hain,
-is liye buckets ka total hamesha `auto` (27) ke barabar hota hai.
+is liye buckets ka total hamesha `auto` (39) ke barabar hota hai.
 """
 
 import os
@@ -25,19 +25,19 @@ class TestSourceHealth(unittest.TestCase):
     def test_auto_registry_breakdown_in_text(self):
         text = tb.format_status_text()
         self.assertIn("Sources:", text)
-        self.assertIn("46 total", text)
-        self.assertIn("27 auto / 19 registry-only", text)
+        self.assertIn("92 total", text)
+        self.assertIn("39 auto / 53 registry-only", text)
 
     def test_buckets_cover_every_source_once(self):
         h = tb.source_health()
         b = h["buckets"]
-        self.assertEqual(h["total"], 46)
+        self.assertEqual(h["total"], 92)
         self.assertEqual(sum(b.values()), h["auto"])   # buckets sirf auto sources
-        self.assertEqual(h["auto"], 27)
-        self.assertEqual(h["registry_only"], 19)
+        self.assertEqual(h["auto"], 39)
+        self.assertEqual(h["registry_only"], 53)
         self.assertEqual(h["auto"] + h["registry_only"], h["total"])
-        # Seed state: 27 auto enabled (ok), 19 registry-only alag ginche.
-        self.assertEqual(b["ok"], 27)
+        # Seed state: 39 auto enabled (ok), 53 registry-only alag ginche.
+        self.assertEqual(b["ok"], 39)
         self.assertEqual(b["disabled"], 0)
 
     def test_disabled_bucket(self):
@@ -45,14 +45,14 @@ class TestSourceHealth(unittest.TestCase):
         store.set_source_enabled("gsmarena", False)   # auto source band karo
         b = tb.source_health()["buckets"]
         self.assertEqual(b["disabled"], before + 1)
-        self.assertEqual(b["ok"], 26)
-        self.assertEqual(sum(b.values()), 27)          # auto sources ka total
+        self.assertEqual(b["ok"], 38)
+        self.assertEqual(sum(b.values()), 39)          # auto sources ka total
         # Fail bhi hone par disabled hi jeetta hai (ek bucket).
         store.touch_source("gsmarena", False, "wajah")
         b2 = tb.source_health()["buckets"]
         self.assertEqual(b2["disabled"], before + 1)
         self.assertEqual(b2["failed"], 0)
-        self.assertEqual(sum(b2.values()), 27)
+        self.assertEqual(sum(b2.values()), 39)
 
     def test_failed_source_name_and_error_in_status(self):
         before = len(tb.source_health()["failed"])
