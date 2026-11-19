@@ -147,7 +147,7 @@ parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
 | `logging_setup.py`, `metrics.py`, `ci_gate.py` | JSON-lines logs (redacted), in-memory metrics, offline CI gate |
 | `server.py`, `web/` | Loopback Agent Console |
 | `canonical.py`, `snapshots.py`, `ratelimit.py` | URL canonical dedup, page change detection, per-host rate limits |
-| `tests/` | 311 offline tests |
+| `tests/` | 494 offline tests (1 skipped) |
 | `PHASES.md` | P13–P27 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.
