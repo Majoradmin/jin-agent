@@ -37,7 +37,7 @@ except ImportError:
     _SOCKS_AVAILABLE = False
 
 from . import (VERSION, channels as channels_mod, config, llm, orchestrator,
-               policy, scheduler, searchmemory as memory_mod, util, verifier)
+               policy, scheduler, searchmemory as memory_mod, store, util, verifier)
 
 
 class BotAPIError(RuntimeError):
@@ -117,6 +117,14 @@ HELP_TEXT = (
     "/deep [keyword] - dark/deep web search engines ke links\n"
     "/memory - pehle use ho chuke sources (rounds)\n"
     "/explore [topic] - channels/sources explore + scored digest\n"
+    "/new - naya context (purana research memory band)\n"
+    "/digest - daily digest (local archive)\n"
+    "/alerts - recent alerts\n"
+    "/reports - recent reports\n"
+    "/schedule - scheduler intervals\n"
+    "/channelhealth - channel health (alive magar khamosh)\n"
+    "/memoryaudit - memory duplicate/conflict/stale scan\n"
+    "/selftest - parser-drift selftest\n"
     "/help - yeh menu\n\n"
     "Har report ke baad bot poochta hai: mil gaya ya nahi. 'Nahi mila' par naye "
     "sources/channels try hote hain (purane skip). Policy SAHULAT-SAFE-SERVICE-v1; "
@@ -182,6 +190,13 @@ _research_threads_lock = threading.Lock()
 _SOCKS_SCOPE_LOCK = threading.Lock()
 # Poll failure observability: /status me dikhta hai (cap 0 = unlimited).
 _poll_failures = 0
+# Confirmation-gated actions: chat_id -> pending payload (ADR-006/008 pattern).
+_pending_add: dict[int, str] = {}
+# Progress edit-in-place (StatusTracker pattern): chat_id -> message_id.
+_STATUS_MESSAGES: dict[int, int] = {}
+# Group/chat rate limit: chat_id -> sliding window of dispatch timestamps.
+_GROUP_HITS: dict[int, list[float]] = {}
+GROUP_RATE_LIMIT = 20
 
 
 def update_workers() -> int:
@@ -312,7 +327,28 @@ def split_text(text: str, limit: int = SEND_CHUNK_LIMIT) -> list[str]:
     return final
 
 
-def send_chunks(api, chat_id: int, text: str, delay: float | None = None) -> int:
+def _html_escape(text: str) -> str:
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def markdown_to_html(text: str) -> str:
+    """briefer markdown -> Telegram HTML (``parse_mode='HTML'``).
+
+    Pehle escape, phir bold/italic/link/code/bullet convert. Headings
+    (``#``) plain text ki tarah rehte hain (backward-compatible chunking).
+    """
+    html = _html_escape(text)
+    html = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
+                  lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', html)
+    html = re.sub(r"`([^`]+)`", lambda m: f"<code>{m.group(1)}</code>", html)
+    html = re.sub(r"\*\*([^*]+)\*\*", lambda m: f"<b>{m.group(1)}</b>", html)
+    html = re.sub(r"\*([^*]+)\*", lambda m: f"<i>{m.group(1)}</i>", html)
+    html = re.sub(r"(?m)^- ", "• ", html)
+    return html
+
+
+def send_chunks(api, chat_id: int, text: str, delay: float | None = None,
+                parse_mode: str | None = None) -> int:
     """Text ko Telegram chunks me bhejo, har chunk ke baad chhota intezar.
 
     429 flood (FadeHost console par thread storm) ka asli hal: chunks ek ke
@@ -323,7 +359,13 @@ def send_chunks(api, chat_id: int, text: str, delay: float | None = None) -> int
     for i, chunk in enumerate(split_text(text)):
         if i and d > 0:
             time.sleep(d)
-        api.send(chat_id, chunk)
+        if parse_mode:
+            try:
+                api.send(chat_id, chunk, parse_mode=parse_mode)
+            except TypeError:  # purana/fake API jis me parse_mode nahi
+                api.send(chat_id, chunk)
+        else:
+            api.send(chat_id, chunk)
         sent += 1
     return sent
 
@@ -689,13 +731,25 @@ def _api(token: str, cfg: dict | None = None):
                 raise BotAPIError(f"{what}: {code} {desc}".strip())
             return res
 
-        def send(self, chat_id: int, text: str, buttons=None) -> dict:
+        def send(self, chat_id: int, text: str, buttons=None,
+                 parse_mode: str | None = None) -> dict:
             payload = {
                 "chat_id": int(chat_id), "text": str(text),
                 "disable_web_page_preview": True}
             if buttons:
                 payload["reply_markup"] = {"inline_keyboard": buttons}
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
             return self._checked(self._post("/sendMessage", payload, 60), "sendMessage")
+
+        def edit(self, chat_id: int, message_id: int, text: str,
+                 parse_mode: str | None = None) -> dict:
+            payload = {"chat_id": int(chat_id), "message_id": int(message_id),
+                       "text": str(text)}
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
+            return self._checked(self._post("/editMessageText", payload, 60),
+                                 "editMessageText")
 
         def answer_callback(self, callback_id: str, text: str = "") -> dict:
             payload = {"callback_query_id": str(callback_id),
@@ -780,7 +834,8 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
     except Exception as exc:
         return {"ok": False, "sources": [], "channels": [],
                 "failed_channels": [], "report_path": "", "confidence": 0.0,
-                "confidence_label": "n/a",
+                "confidence_label": "n/a", "absence_kind": "fetch_failed",
+                "items": [],
                 "markdown": f"❌ Research error: {type(exc).__name__}: "
                             f"{util.truncate(str(exc), 300)}"}
     finally:
@@ -792,7 +847,7 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
     if out.get("blocked"):
         return {"ok": False, "sources": [], "channels": [],
                 "failed_channels": [], "report_path": "", "confidence": 0.0,
-                "confidence_label": "n/a",
+                "confidence_label": "n/a", "absence_kind": "blocked", "items": [],
                 "markdown": "⛔ Request block hua policy ke hisaab se. Detail: "
                             + json.dumps(out.get("gate") or {}, ensure_ascii=False)}
     md = str((out.get("report") or {}).get("markdown")
@@ -804,13 +859,22 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
     sources = [str(d.get("key")) for d in (out.get("diagnostics") or [])
                if int(d.get("count") or 0) > 0]
     metrics = out.get("metrics") or {}
+    items = list(out.get("items") or [])
+    sources_failed = sum(1 for d in (out.get("diagnostics") or []) if not d.get("ok"))
+    if not items:
+        absence = "fetch_failed" if sources_failed else "no_results"
+    elif sources_failed:
+        absence = "partial"
+    else:
+        absence = "ok"
     return {"ok": True, "markdown": md, "sources": sources,
             "channels": list(tg.get("channels") or []), "error": "",
             "failed_channels": [str(f.get("channel")) for f in (tg.get("failed") or [])
                                 if f.get("channel")],
             "report_path": str((out.get("saved") or {}).get("md") or ""),
             "confidence": float(metrics.get("confidence") or 0.0),
-            "confidence_label": str(metrics.get("confidence_label") or "n/a")}
+            "confidence_label": str(metrics.get("confidence_label") or "n/a"),
+            "absence_kind": absence, "items": items}
 
 
 def after_report_buttons(row_id: int) -> list[list[dict]]:
@@ -828,6 +892,15 @@ def parse_callback(data: str) -> tuple[int, str]:
     return int(m.group(1)), m.group(2)
 
 
+def parse_action_callback(data: str) -> tuple[str, str]:
+    """``add:ok:<handle>`` / ``add:no`` -> (action, handle). Ghalat = ('', '')."""
+    m = re.fullmatch(r"add:(ok|no)(?::([A-Za-z0-9_]{3,40}))?",
+                     str(data or "").strip())
+    if not m:
+        return "", ""
+    return m.group(1), (m.group(2) or "")
+
+
 def ask_after_report(row: dict, sources: int, channels: int) -> str:
     return ("❓ Aapko ye information mil gayi?\n\n"
             f"Round {row.get('round_no') or 1}: {sources} engines + "
@@ -840,6 +913,35 @@ def ask_after_report(row: dict, sources: int, channels: int) -> str:
 # --------------------------------------------------------------------------
 # Command dispatch (chat -> action)
 # --------------------------------------------------------------------------
+
+def _addchannel_now(chat_id: int, handle: str, cfg: dict, api,
+                    probe=None) -> dict:
+    """Confirm ke baad channel save + probe + khabar (shared helper)."""
+    try:
+        channels_mod.add_channel(handle, origin="manual",
+                                 note="user ne bot se add kiya (confirmed)")
+    except Exception as exc:
+        api.send(chat_id, f"❌ Channel add nahi hua: {util.truncate(str(exc), 150)}")
+        return {"ok": False, "action": "addchannel", "error": "add failed"}
+    try:
+        info = (probe or channels_mod.check_channel)(handle, cfg) or {}
+    except Exception:
+        info = {}
+    alive = bool(info.get("alive"))
+    title = str(info.get("title") or "").strip()
+    subs = str(info.get("subscribers") or "").strip()
+    bits = [b for b in (title, (subs + " subs") if subs else "",
+                        f"{info.get('post_count') or 0} recent posts"
+                        if alive else "public preview nahi mila") if b]
+    head = "✅ Channel save ho gaya" if alive else \
+           "⚠️ Channel save hua, magar public preview nahi mila"
+    api.send(chat_id, f"{head}: @{handle}\n"
+                      f"{' · '.join(bits)}\n"
+                      f"🔗 https://t.me/{handle}\n\n"
+                      f"Ab /tgsearch <keyword> se iske andar search karein.")
+    return {"ok": True, "action": "addchannel", "channel": handle,
+            "alive": alive}
+
 
 def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             research=None, probe=None, tg_search=None) -> dict:
@@ -910,30 +1012,14 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
                               "/addchannel https://t.me/durov\n"
                               "ya channel ka koi post yahan forward kar dein.")
             return {"ok": False, "action": "addchannel", "error": "handle required"}
-        try:
-            channels_mod.add_channel(handle, origin="manual",
-                                     note="user ne bot se add kiya")
-        except Exception as exc:
-            api.send(chat_id, f"❌ Channel add nahi hua: {util.truncate(str(exc), 150)}")
-            return {"ok": False, "action": "addchannel", "error": "add failed"}
-        try:
-            info = (probe or channels_mod.check_channel)(handle, cfg) or {}
-        except Exception:
-            info = {}
-        alive = bool(info.get("alive"))
-        title = str(info.get("title") or "").strip()
-        subs = str(info.get("subscribers") or "").strip()
-        bits = [b for b in (title, (subs + " subs") if subs else "",
-                            f"{info.get('post_count') or 0} recent posts"
-                            if alive else "public preview nahi mila") if b]
-        head = "✅ Channel save ho gaya" if alive else \
-               "⚠️ Channel save hua, magar public preview nahi mila"
-        api.send(chat_id, f"{head}: @{handle}\n"
-                          f"{' · '.join(bits)}\n"
-                          f"🔗 https://t.me/{handle}\n\n"
-                          f"Ab /tgsearch <keyword> se iske andar search karein.")
-        return {"ok": True, "action": "addchannel", "channel": handle,
-                "alive": alive}
+        # Confirmation gate (ADR-006/008): pehle pending + ✅/❌ button.
+        _pending_add[int(chat_id)] = handle
+        buttons = [[{"text": "✅ Confirm", "callback_data": f"add:ok:{handle}"},
+                    {"text": "❌ Cancel", "callback_data": "add:no"}]]
+        api.send(chat_id, f"➕ Channel add karein?\n\n@{handle}\nhttps://t.me/{handle}\n\n"
+                          f"Save karne ke liye ✅ dabayein (cancel ❌).", buttons=buttons)
+        return {"ok": True, "action": "addchannel_pending", "channel": handle,
+                "pending": True}
     if cmd == "rmchannel":
         handle = channels_mod.clean_handle(arg)
         if not handle:
@@ -956,6 +1042,62 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         rows = memory_mod.recent(chat_id, 6)
         send_chunks(api, chat_id, format_memory(rows))
         return {"ok": True, "action": "memory", "count": len(rows)}
+    if cmd == "new":
+        try:
+            closed = memory_mod.reset_chat(chat_id)
+        except Exception:
+            closed = 0
+        _pending_add.pop(int(chat_id), None)
+        _STATUS_MESSAGES.pop(int(chat_id), None)
+        api.send(chat_id, f"🌱 Naya context shuru — {closed} purana research band kar "
+                          f"diya. Naya /research foran shuru ho jayega.")
+        return {"ok": True, "action": "new", "closed": int(closed)}
+    if cmd == "digest":
+        try:
+            out = orchestrator.digest(cfg)
+        except Exception as exc:
+            api.send(chat_id, f"❌ Digest fail: {type(exc).__name__}: "
+                              f"{util.truncate(str(exc), 150)}")
+            return {"ok": False, "action": "digest", "error": "digest failed"}
+        path = str((out.get("saved") or {}).get("md") or "")
+        send_chunks(api, chat_id, f"📔 Daily digest tayyar "
+                                  f"({out['report']['facts_count']} items).\n"
+                                  f"Local report: {path or 'n/a'}")
+        return {"ok": True, "action": "digest",
+                "items": int(out["report"]["facts_count"]), "path": path}
+    if cmd == "alerts":
+        rows = [e for e in store.list_events(30) if e.get("kind") == "alert"]
+        if not rows:
+            api.send(chat_id, "🔔 Koi alert nahi.")
+        else:
+            send_chunks(api, chat_id, "🔔 Recent alerts:\n" + "\n".join(
+                f"• {util.truncate(e.get('detail') or '', 120)}" for e in rows[:10]))
+        return {"ok": True, "action": "alerts", "count": len(rows)}
+    if cmd == "reports":
+        rows = store.list_reports(10)
+        if not rows:
+            api.send(chat_id, "📄 Koi report nahi.")
+        else:
+            send_chunks(api, chat_id, "📄 Recent reports:\n" + "\n".join(
+                f"• {util.truncate(r.get('title') or '', 80)} — {r.get('path') or ''}"
+                for r in rows))
+        return {"ok": True, "action": "reports", "count": len(rows)}
+    if cmd == "schedule":
+        sch = cfg.get("schedule") or {}
+        lines = ["⏰ Schedule (minutes):"] + [f"• {k}: {v}" for k, v in sorted(sch.items())]
+        api.send(chat_id, "\n".join(lines))
+        return {"ok": True, "action": "schedule"}
+    if cmd == "channelhealth":
+        send_chunks(api, chat_id, format_channel_health())
+        return {"ok": True, "action": "channelhealth"}
+    if cmd == "memoryaudit":
+        out = memory_mod.audit()
+        send_chunks(api, chat_id, format_memory_audit(out))
+        return {"ok": True, "action": "memoryaudit", **out}
+    if cmd == "selftest":
+        res = channels_mod.parser_selftest()
+        send_chunks(api, chat_id, format_selftest(res))
+        return {"ok": True, "action": "selftest", "ok": bool(res.get("ok"))}
     if cmd == "explore":
         topic = arg.strip() or "mobile firmware security tools"
         try:
@@ -975,6 +1117,99 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         return _send_research(chat_id, arg, cfg=cfg, api=api, research=research)
     api.send(chat_id, "Maaf kijiye, yeh command samajh nahi aaya. /help use kijiye.")
     return {"ok": False, "action": "unknown", "error": "unknown command"}
+
+
+def format_channel_health() -> str:
+    """Channel health digest — "alive magar khamosh" (last_post_at purana)."""
+    counts = channels_mod.counts()
+    rows = channels_mod.list_channels("active")
+    quiet = []
+    for row in rows:
+        age = channels_mod._age_days(row.get("last_post_at") or "")
+        if age > 30:
+            quiet.append((str(row.get("channel") or ""), int(age),
+                          str(row.get("last_post_at") or "")))
+    lines = [f"🩺 Channel health: {counts.get('active', 0)} active / "
+             f"{counts.get('dead', 0)} dead / {counts.get('archived', 0)} archived / "
+             f"{counts.get('stale', 0)} stale"]
+    if quiet:
+        lines += ["", "⚠️ Alive magar khamosh (last post > 30 din):"]
+        for handle, age, last in quiet[:10]:
+            lines.append(f"• @{handle} — {age} din ({last[:10]})")
+    else:
+        lines += ["", "✅ Saare active channels fresh hain (last post <= 30 din)."]
+    return "\n".join(lines)
+
+
+def format_memory_audit(out: dict) -> str:
+    out = out or {}
+    lines = ["🧾 Memory audit:", "",
+             f"• duplicates: {len(out.get('duplicates') or [])}",
+             f"• conflicts: {len(out.get('conflicts') or [])}",
+             f"• stale active: {len(out.get('stale') or [])}"]
+    for row in (out.get("duplicates") or [])[:5]:
+        lines.append(f"  - dup: {util.truncate(str(row.get('query') or ''), 70)} "
+                     f"({row.get('count')} rows)")
+    for row in (out.get("conflicts") or [])[:5]:
+        lines.append(f"  - conflict: {util.truncate(str(row.get('query') or ''), 70)}")
+    for row in (out.get("stale") or [])[:5]:
+        lines.append(f"  - stale: {util.truncate(str(row.get('query') or ''), 70)} "
+                     f"({row.get('age_days')} din)")
+    return "\n".join(lines)
+
+
+def format_selftest(res: dict) -> str:
+    res = res or {}
+    ok = bool(res.get("ok"))
+    lines = [f"🧪 Parser selftest: {'PASS' if ok else 'FAIL'}", ""]
+    for check in res.get("checks") or []:
+        mark = "✅" if check.get("ok") else "❌"
+        lines.append(f"{mark} {check.get('name', '')}: {check.get('detail', '')}")
+    return "\n".join(lines)
+
+
+def _status_supported(api) -> bool:
+    return hasattr(api, "edit")
+
+
+def _edit_status(chat_id: int, api, text: str) -> bool:
+    """Progress ko naye message ki jagah wahi message edit karke dikhao."""
+    mid = _STATUS_MESSAGES.get(int(chat_id))
+    if not mid:
+        return False
+    try:
+        return bool(api.edit(chat_id, mid, text))
+    except Exception:
+        return False
+
+
+def _bluf_text(query: str, out: dict, confidence: float, label: str,
+               sources: list, channels: list, kind: str = "ok") -> str:
+    """BLUF — TL;DR + 3-5 key findings, <=1000 chars (poori report file me)."""
+    items = []
+    for it in (out.get("items") or [])[:5]:
+        title = util.truncate(str(it.get("title") or "").strip(), 100)
+        if title:
+            items.append("• " + title)
+    body = "\n".join(items[:5]) if items else "• Koi key finding nahi mili."
+    note = {"partial": " (partial — kuch sources fail)"}.get(kind, "")
+    text = (f"📌 Report tayyar hai{note} — {util.truncate(query, 70)}\n\n"
+            f"{body}\n\nConfidence: {label} ({confidence}) · "
+            f"{len(sources)} engines · {len(channels)} channels")
+    return text[:1000]
+
+
+def _group_allowed(chat_id: int, limit: int | None = None) -> bool:
+    """Per-chat sliding-window rate limit (default 20/min)."""
+    lim = GROUP_RATE_LIMIT if limit is None else max(1, int(limit))
+    now = time.monotonic()
+    hits = [t for t in _GROUP_HITS.get(int(chat_id), []) if now - t < 60.0]
+    if len(hits) >= lim:
+        _GROUP_HITS[int(chat_id)] = hits
+        return False
+    hits.append(now)
+    _GROUP_HITS[int(chat_id)] = hits
+    return True
 
 
 def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
@@ -1012,7 +1247,11 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                   f"({len(used_sources)} engines + {len(used_channels)} channels skip)...\n"
                   "🛑 Rokne ke liye /stop likhein")
         try:
-            api.send(chat_id, header)
+            header_res = api.send(chat_id, header)
+            if _status_supported(api) and isinstance(header_res, dict):
+                mid = int((header_res.get("result") or {}).get("message_id") or 0)
+                if mid:
+                    _STATUS_MESSAGES[int(chat_id)] = mid
         except Exception:
             pass
 
@@ -1075,10 +1314,12 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             report_path = str(out.get("report_path") or "")
             confidence = float(out.get("confidence") or 0.0)
             confidence_label = str(out.get("confidence_label") or "n/a")
+            absence_kind = str(out.get("absence_kind") or "ok")
         else:
             md, sources, channels_used = str(out or ""), [], []
             failed_new, report_path = [], ""
             confidence, confidence_label = 0.0, "n/a"
+            absence_kind = "ok"
         if not md.strip():
             md = "❌ Report khali rahi. /research dobara try karein."
 
@@ -1099,11 +1340,23 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             caption = (f"📄 JIN Agent Brief — {util.truncate(query, 80)}\n"
                        f"Confidence: {confidence_label} ({confidence})\n"
                        f"{len(sources)} engines · {len(channels_used)} channels")
-            if confidence >= threshold:
+            if absence_kind == "no_results":
+                api.send(chat_id, "🔍 Koi result nahi mila — sources live the magar is "
+                                  "query par kuch nahi aaya. Chhota keyword ya /explore "
+                                  "try karein.")
+                delivered = True
+            elif absence_kind == "fetch_failed":
+                api.send(chat_id, "⚠️ Fetch fail hua — sources reach nahi hue; report "
+                                  "incomplete. Detail local console par hai.")
+                delivered = True
+            elif confidence >= threshold:
                 try:
-                    api.send(chat_id, f"✅ Report tayyar hai — {len(sources)} engines, "
-                                      f"{len(channels_used)} channels. "
-                                      f"Confidence: {confidence_label} ({confidence}).")
+                    _edit_status(chat_id, api,
+                                 f"✅ Report tayyar hai — {util.truncate(query, 60)}")
+                    bluf = _bluf_text(query, out if isinstance(out, dict) else {},
+                                      confidence, confidence_label, sources,
+                                      channels_used, absence_kind)
+                    api.send(chat_id, bluf)
                     if SEND_DELAY > 0:
                         time.sleep(SEND_DELAY)
                     api.send_document(chat_id, report_path, caption=caption)
@@ -1120,14 +1373,18 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                 except Exception:
                     pass
         if not delivered:
-            chunks = split_text(final_md)
+            html = markdown_to_html(final_md)
+            chunks = split_text(html)
             for i, chunk in enumerate(chunks):
                 if not _session_active(session):
                     api.send(chat_id, "🛑 Report rok di gayi.")
                     break
                 if i and SEND_DELAY > 0:
                     time.sleep(SEND_DELAY)
-                api.send(chat_id, chunk)
+                try:
+                    api.send(chat_id, chunk, parse_mode="HTML")
+                except TypeError:  # fake/purana API — plain text fallback
+                    api.send(chat_id, chunk)
 
         # Memory: kaunse sources/channels is round me use hue
         try:
@@ -1137,11 +1394,22 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             else:
                 row = memory_mod.begin(chat_id, query)
                 row = memory_mod.remember(row["id"], sources, channels_used)
-            if row and row.get("id") and failed_new:
-                try:
-                    memory_mod.remember_failed(row["id"], failed_new)
-                except Exception:
-                    pass
+            if row and row.get("id"):
+                if failed_new:
+                    try:
+                        memory_mod.remember_failed(row["id"], failed_new)
+                    except Exception:
+                        pass
+                for src in sources:
+                    try:
+                        memory_mod.note_source_stat(row["id"], src, "cited")
+                    except Exception:
+                        pass
+                if advance:
+                    try:
+                        memory_mod.remember_rejected(row["id"], [query])
+                    except Exception:
+                        pass
             row = row or {"id": 0, "round_no": round_no}
         except Exception:
             row = {"id": 0, "round_no": round_no}
@@ -1170,6 +1438,17 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
             api.answer_callback(callback_id)
         except Exception:
             pass
+    act, handle = parse_action_callback(data)
+    if act in ("ok", "no"):
+        if act == "no":
+            _pending_add.pop(int(chat_id), None)
+            api.send(chat_id, "❌ Channel add cancel ho gaya.")
+            return {"ok": True, "action": "addchannel_cancel"}
+        target = handle or _pending_add.pop(int(chat_id), None)
+        if not target:
+            api.send(chat_id, "Purana confirmation hai. Dobara /addchannel karein.")
+            return {"ok": False, "action": "addchannel", "error": "expired"}
+        return _addchannel_now(chat_id, target, cfg, api)
     row_id, action = parse_callback(data)
     if not row_id:
         api.send(chat_id, "Purana button hai. Naya /research karein.")
@@ -1326,8 +1605,12 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 # threads ki tadad env cap ke andar rehti hai. /stop aur /status
                 # ke liye dedicated thread — busy research workers ke peeche
                 # nahi atkte (2 busy workers par bhi /stop foran chalta hai).
+                cmd_name, _ = parse_command(text)
+                # Per-chat group rate limit (default 20/min); control commands
+                # (stop/status) is se exempt taa ke roknay ka raasta khula rahe.
+                if cmd_name not in ("stop", "status") and not _group_allowed(chat_id):
+                    continue
                 try:
-                    cmd_name, _ = parse_command(text)
                     if cmd_name in ("stop", "status"):
                         _submit_control(pool, dispatch, chat_id, text,
                                         cfg=cfg, api=api)
