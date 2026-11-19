@@ -482,4 +482,91 @@ local path. stdlib-only, `is_owner` default allow-all aur loopback unchanged.
 
 **RESULT: PHASE 32 — READY**
 
+**PHASE REVIEW — PHASE 32: READY**
+
+---
+
+## 26. PHASE REVIEW — PHASE 33 — Query-Term Highlight, Beginner Buckets + 12 Legal Sources (2.9.0)
+
+**TASK:** User ka muksad: "report jo milti hai wo keyword highlight kar ky mily" —
+report/BLUF me query ke lafz highlight hon, magar HTML tags/URLs/entities ko
+nuqsan na pohonche. Saath hi report ki 12 variti categories beginner ke liye
+4 buckets me samjh di jayen, aur legal/public institutional sources register
+me shamil hon.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `highlight.py` | Naya module (309 lines): `terms(query, limit=20)`; `highlight_html(html, terms)` — **sirf text nodes** me `<b>` wrap; tags, attributes, URLs aur entities nahi chhoote; case-insensitive; har term pehli occurrence par **ek dafa**; `split_html(html, limit=4096)` — entity-safe, tag-balanced chunks |
+| `briefer.py` | `CATEGORY_BUCKETS` — 12 variti categories ko 4 beginner buckets me group; `bucket_for()` (na-maloom category → Watchlist); `BUCKET_ORDER`; report me `### Bucket` headings |
+| `policy.py` | `SOURCE_REGISTER` me 12 legal/public institutional sources — 33 → **45** |
+| `tests/test_highlight.py` | 28 naye tests (terms, text-node-only highlight, entity/tag safety, chunk balance) |
+| `tests/test_buckets.py` | 8 naye tests (bucket mapping + report rendering) |
+| `tests/test_adapters_v2.py`, `tests/test_governance.py` | register count assert 33 → 45 |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ naye `test_highlight` 28/28, `test_buckets` 8/8 green; `len(policy.register()) == 45`
+assert pass. Suite is marhale ke aakhir par **494 tests OK (1 skipped)**.
+
+**RESULT:** `highlight.py` (query-term highlight + entity-safe chunking), report
+ki 4 beginner buckets, aur register ka 12 legal/public sources (45) ka kaam
+mukammal. `7395aac` ne `highlight.py` docstring ki typo bhi theek ki.
+
+**PHASE REVIEW — PHASE 33: READY**
+
+---
+
+## 27. PHASE REVIEW — PHASE 34 — Explore v2: Topic-Driven Discovery + Scope Cards (2.9.0)
+
+**TASK:** `/explore` ko topic-driven banaya jaye — koi hardcoded niche default
+na ho, aur user 4 scope (Telegram / Open web / Open source / Deep web) me
+filtered cards dekhe. Deep-web (onion) links sirf display hon, fetch kabhi nahi.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `scheduler.py` | `explore(topic="", scope="all")` — topic khaali ho to `_rotating_topic()` (`config.TOPICS` se har ghanta rotate; koi hardcoded niche default nahi); `scope` = `all \| tg \| web \| oss \| deep`; `is_oss_item` (arXiv/Crossref/OpenAlex/GitHub), `is_deep_item` (onion/ahmia — links only), `is_web_item`; `firehose(query="")` bhi neutral |
+| `channels.py` | `run_discovery(cfg, offline, query=topic)` — discovery query ke mutabiq |
+| `telegram_bot.py` | `EXPLORE_SCOPES` (🌐 Sab / 🐦 Telegram / 🌐 Open web / 📚 Open source / 🕶️ Deep web); `explore_scope_buttons()`; `_explore_groups()` 4 scope-group; `format_explore_cards_v2()` — **ek hi message**, deduped cards + clickable links + score; `_EXPLORE_PENDING` (topic/scope hash); `_filter_groups()` — scope button par sirf us group; status block |
+| `tests/test_explore_v2.py` | 14 naye tests (topic required, dedupe, 4 scopes, onion links-only) |
+| `tests/test_p0_p1_ux.py` | Explore regression align |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ `test_explore_v2` 14/14 green; onion items par `links_only` behavior assert
+pass (fetch nahi hota).
+
+**RESULT:** `/explore` ab topic-driven + neutral scheduler defaults ke saath;
+ek deduped card message, 4 scope buttons aur status block; deep-web sirf
+display. Stdlib-only, local-only, policy barqarar.
+
+**PHASE REVIEW — PHASE 34: READY**
+
+---
+
+## 28. PHASE REVIEW — PHASE 35 — BLUF/Report Me Query-Term Highlight Wiring (2.9.0)
+
+**TASK:** Highlight module ko Telegram BLUF aur final report me wire karna —
+user ko jis lafz se search kiya, report me wahi lafz `<b>` se nazar aaye, magar
+message hargiz adhura (broken HTML) na bane.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `telegram_bot.py` | `_highlight_html(text, query)` — markdown → HTML, phir `highlight.highlight_html(..., highlight.terms(query))`; **sirf text nodes** me highlight; koi masla ho to escape-only HTML fallback (kabhi adhura message nahi); BLUF (`send parse_mode="HTML"`, purana/fake API par plain fallback) aur final report dono me wiring; report ke liye `highlight.split_html()` se entity-safe + tag-balanced chunks |
+| `tests/test_highlight_wiring.py` | 5 naye tests (BLUF/report highlight wiring, fallback, chunk safety) |
+| `tests/test_telegram_bot.py` | Highlight wiring ke mutabiq update |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ `test_highlight_wiring` 5/5 green; full suite **494 tests OK (1 skipped)**.
+
+**RESULT:** BLUF aur report dono me query terms `<b>` se highlight hote hain —
+tags/attributes/URLs/entities me nahi; report hamesha entity-safe, balanced
+chunks me bheja jata hai. `VERSION` `2.9.0` par barqarar; stdlib-only,
+local-only, Sahulat policy barqarar.
+
+**PHASE REVIEW — PHASE 35: READY**
+
 ---
