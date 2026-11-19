@@ -135,5 +135,39 @@ class TestDeploymentConfig(unittest.TestCase):
         self.assertTrue((BASE / "DEPLOY.md").is_file())
 
 
+class TestStdoutMirror(unittest.TestCase):
+    """Hosted console sirf process stdout dekhta hai (FadeHost).
+
+    `data/logs/*.log` console me kabhi nahi dikhta — is liye supervisor aur
+    child lines ko stdout par bhi mirror karna lazmi hai, warna console khali
+    rehta hai aur lagta hai bot mar gaya.
+    """
+
+    def test_log_mirrors_to_stdout(self):
+        import contextlib
+        import io
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            supervisor._log("console-mirror-probe")
+        out = buf.getvalue()
+        self.assertIn("console-mirror-probe", out)
+        self.assertTrue(out.endswith("\n"))
+
+    def test_pump_mirrors_child_output(self):
+        import contextlib
+        import io
+        import os as _os
+        import tempfile as _tf
+
+        r, w = _os.pipe()
+        _os.write(w, b"child-line-alpha\n")
+        _os.close(w)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            supervisor._pump(open(r, "rb"), Path(_tf.mkdtemp()) / "child.log")
+        self.assertIn("child-line-alpha", buf.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

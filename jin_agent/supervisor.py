@@ -40,9 +40,24 @@ def _log_file() -> Path:
         return Path("supervisor.log")
 
 
+def _emit(line: str) -> None:
+    """Line ko process stdout par bhi mirror karo.
+
+    Hosted consoles (FadeHost) sirf process ka stdout/stderr dekhte hain —
+    `data/logs/*.log` unhein kabhi nahi dikhta. Is liye har line stdout par
+    bhi jaye, warna console khali rehta hai aur lagta hai bot mar gaya.
+    """
+    try:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
 def _log(msg: str) -> None:
     line = "%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg)
     ok = logging_setup.bounded_append(_log_file(), line)
+    _emit(line)
     if not ok:
         # Log dir na likhne par supervisor bhi anahq na ho.
         try:
@@ -55,7 +70,9 @@ def _pump(pipe, path: Path) -> None:
     """Child stdout/stderr ko bounded log me pump karo (har line par rotate)."""
     try:
         for raw in iter(pipe.readline, b""):
-            logging_setup.bounded_append(path, raw.decode("utf-8", "replace"))
+            text = raw.decode("utf-8", "replace")
+            logging_setup.bounded_append(path, text)
+            _emit(text)
     except Exception:
         pass
     finally:
