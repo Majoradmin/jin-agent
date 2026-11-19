@@ -39,6 +39,13 @@ class TestDetect(unittest.TestCase):
         self.assertTrue(cc.is_followup("  aur   phir "))
         self.assertFalse(cc.is_followup(""))
 
+    def test_short_new_topic_is_not_followup(self):
+        # Chhota magar NAWA topic — pichhle sawal se nahi jurna chahiye
+        # (``/deep firmware security`` bug ka regression).
+        self.assertFalse(cc.is_followup("firmware security"))
+        self.assertFalse(cc.is_followup("python for beginners"))
+        self.assertFalse(cc.is_followup("samsung knox"))
+
     def test_long_text_without_hint_is_not_followup(self):
         self.assertFalse(cc.is_followup(
             "mediatek preloader scatter DA file ka exact version kya hai"))

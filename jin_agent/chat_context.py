@@ -13,7 +13,6 @@ import re
 
 from . import store
 
-MAX_FOLLOWUP_WORDS = 4
 # "aur" jaise lafz word-boundary par — "suraj" / "meraun" jaisay lafz na match hon.
 _HINT_RE = re.compile(
     r"(?:\b(?:aur|more|continue|phir|then)\b|iske\s+baare\s+me|uske\s+baare\s+me)",
@@ -22,16 +21,17 @@ _HINT_RE = re.compile(
 
 
 def is_followup(text: str) -> bool:
-    """Chhota matn (<=4 words) YA follow-up lafz → pichhla context munasib.
+    """Follow-up **lafz** (``aur`` / ``iske baare me`` / ``more`` / ``phir``) par
+    hi True — sirf chhota hona kafi nahi.
 
-    Note: ye sirf *pehfiyat* hai — asli context ``attach`` me check hota hai,
-    is liye bina history wale chhote sawal bhi query ko as-is chhod dete hain.
+    Waja: ``/deep firmware security`` ya ``/research python for beginners`` jaisa
+    chhota magar **naya** topic bhi pichhle sawal se jud jata tha (query
+    pollute ho jati thi). Context sirf tab jodo jab user khud "aur"/"iske baare
+    me" jaisa continuation dare.
     """
     s = " ".join(str(text or "").split())
     if not s:
         return False
-    if len(s.split()) <= MAX_FOLLOWUP_WORDS:
-        return True
     return bool(_HINT_RE.search(s))
 
 
