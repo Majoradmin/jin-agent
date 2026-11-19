@@ -1,4 +1,4 @@
-# JIN Agent 2.6.0
+# JIN Agent 2.9.0
 
 Local, stdlib-only research and intelligence agent. `MobileLab` se alag, khud ka
 package, khud ka SQLite archive aur khud ka loopback console. Koi cloud, koi pip
@@ -39,6 +39,7 @@ ka server `8765` par alag rehta hai; dono aik saath chal sakte hain.
 | `batch <q...> [--live] [--limit]` | Parallel agents: N simultaneous research runs |
 | `schedule [--live]` | Background job scheduler (Ctrl+C se band) |
 | `serve [--port] [--open]` | Agent Console |
+| `supervisor [--port] [--host]` | Console + Telegram bot ek saath (hosted deploy, auto-restart) |
 | `selftest` | Offline `unittest` suite |
 | `ci-gate [--queries N] [--skip-tests]` | Offline release gate: compile/import + poora suite + evaluator quick check; exit 0 sirf all-pass |
 | `changes [--limit N]` | Snapshot change-detection: recent "naya kya aaya" + counts |
@@ -89,6 +90,15 @@ by-design fallback hai.
 - **Health:** `GET /api/health` — DB connectivity, data dir writable, version,
   uptime seconds aur `llm_enabled` (key kabhi return nahi hoti).
 
+## Hosted Deploy (FadeHost / Render / Railway)
+
+Bot akele long polling karta hai aur port nahi kholta — hosted par `supervisor`
+console (HTTP `/api/health`) aur bot ko ek saath, auto-restart ke saath chalata
+hai. Exact steps aur env vars (`JIN_AGENT_HOST`, `PORT`,
+`JIN_AGENT_UPDATE_WORKERS`, proxy vars) ke liye [`DEPLOY.md`](../DEPLOY.md)
+parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
+`JIN_AGENT_HOST` env / `--host` se (explicit opt-in).
+
 ## Boundaries
 
 - Sahulat & Safe Service Policy (`SAHULAT-SAFE-SERVICE-v1`) barqarar: koi Huawei ID / Google FRP / Samsung Knox / MDM / carrier / iCloud bypass automation ya step-by-step tareeqa nahi; koi device write / erase / flash / IMEI operation nahi.
@@ -112,7 +122,7 @@ by-design fallback hai.
 | `logging_setup.py`, `metrics.py`, `ci_gate.py` | JSON-lines logs (redacted), in-memory metrics, offline CI gate |
 | `server.py`, `web/` | Loopback Agent Console |
 | `canonical.py`, `snapshots.py`, `ratelimit.py` | URL canonical dedup, page change detection, per-host rate limits |
-| `tests/` | 225 offline tests |
+| `tests/` | 311 offline tests |
 | `PHASES.md` | P13–P27 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.

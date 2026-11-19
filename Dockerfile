@@ -14,5 +14,10 @@ COPY bot.py ./
 # Data folder (config will be set via environment variables)
 RUN mkdir -p /app/jin_agent/data/reports /app/jin_agent/data/backups
 
-# Startup: run Telegram bot
-CMD ["python", "-m", "jin_agent", "bot"]
+# Console port. Hosted platforms (FadeHost/Render/Railway) ko JIN_AGENT_HOST=0.0.0.0
+# env set karna hota hai; code ka default hamesha loopback (127.0.0.1) rehta hai.
+EXPOSE 8766
+
+# Supervisor: Agent Console (HTTP /api/health) + Telegram bot (long polling)
+# ek saath, auto-restart ke saath. Bot akele port nahi kholta -> 502 hota tha.
+CMD ["python", "-m", "jin_agent", "supervisor"]

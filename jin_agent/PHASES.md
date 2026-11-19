@@ -1,6 +1,6 @@
 # PHASES — JIN Agent P13–P26
 
-**Status:** ALL PHASES READY · **Date:** 2026-11-16 · **Version:** 2.5.0
+**Status:** ALL PHASES READY · **Date:** 2026-11-16 · **Version:** 2.9.0
 **Plan source:** `C:\Users\Rohaani\.local\share\opencode\opencode.db` → `session_message` text part `msg_1c0750351001e5quVqIgT43TAH` = `JIN Agent — Final Plan (plan only)`, 13 sections, phases P13–P22.
 
 ## 1. Approval & Scope

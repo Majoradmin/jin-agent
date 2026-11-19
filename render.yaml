@@ -1,12 +1,17 @@
 services:
-  - type: worker
-    name: jin-agent-bot
+  - type: web
+    name: jin-agent
     runtime: python
     plan: free
     region: oregon
+    healthCheckPath: /api/health
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m jin_agent bot
+    # Supervisor: console (health check) + Telegram bot, auto-restart ke saath.
+    startCommand: python -m jin_agent supervisor
     envVars:
+      # Console ko reverse proxy ke samne exposed karne ka explicit opt-in.
+      - key: JIN_AGENT_HOST
+        value: 0.0.0.0
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
@@ -19,3 +24,5 @@ services:
         value: https://api.groq.com/openai/v1
       - key: LLM_MODEL
         value: llama-3.3-70b-versatile
+      - key: JIN_AGENT_UPDATE_WORKERS
+        value: "2"

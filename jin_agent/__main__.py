@@ -165,6 +165,12 @@ def cmd_bot(args):
     return 0
 
 
+def cmd_supervisor(args):
+    from . import supervisor
+    return supervisor.run(port=args.port, host=args.host,
+                          interval=args.interval, max_backoff=args.max_backoff)
+
+
 def cmd_watchdog(args):
     from . import watchdog
     return watchdog.main(interval=getattr(args, "interval", 10),
@@ -209,6 +215,16 @@ def build_parser():
     cg2.set_defaults(fn=cmd_changes)
     bt = sub.add_parser("bot", help="Telegram bot long-polling front-end")
     bt.set_defaults(fn=cmd_bot)
+    sp = sub.add_parser("supervisor",
+                        help="Console + Telegram bot ek saath (hosted deploy)")
+    sp.add_argument("--port", type=int,
+                    default=int(os.environ.get("PORT", "8766") or 8766))
+    sp.add_argument("--host", default=None,
+                    help="console bind host — default JIN_AGENT_HOST env ya "
+                         "127.0.0.1 (loopback)")
+    sp.add_argument("--interval", type=int, default=10)
+    sp.add_argument("--max-backoff", type=int, default=300)
+    sp.set_defaults(fn=cmd_supervisor)
     wd = sub.add_parser("watchdog", help="Bot supervisor: crash par auto-restart")
     wd.add_argument("--interval", type=int, default=10)
     wd.add_argument("--max-backoff", type=int, default=300)
