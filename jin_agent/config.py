@@ -126,6 +126,13 @@ def backups_dir() -> Path:
     return p
 
 
+def runs_dir() -> Path:
+    """Per-run trace JSON files (Hermes trace.py pattern)."""
+    p = data_dir() / "runs"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def load() -> dict:
     cfg = copy.deepcopy(DEFAULT)
     try:

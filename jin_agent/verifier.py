@@ -155,6 +155,42 @@ def _cluster_match(item: dict, best: dict[str, dict]):
     return None
 
 
+def repeated_claims(items: list[dict]) -> list[dict]:
+    """≥2 occurrences wale claims — cross-channel vs same-channel alag label.
+
+    Competitor pattern (ashishki): dobara dhoondne se pehle dekho ke wo claim
+    pehle mili thi; aur agar dobara mili to alag channel/source se hai ya nahi.
+    """
+    groups: dict[str, list[dict]] = {}
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        key = (item.get("fingerprint") or item.get("guid")
+               or canonical.dedupe_key(item) or str(item.get("title") or ""))
+        if not key:
+            continue
+        groups.setdefault(str(key), []).append(item)
+    out: list[dict] = []
+    for key, rows in groups.items():
+        if len(rows) < 2:
+            continue
+        channels = sorted({str(r.get("channel") or "") for r in rows
+                           if (r.get("channel") or "").strip()})
+        sources = sorted({str(r.get("source_key") or r.get("source") or "")
+                          for r in rows if (r.get("source_key") or r.get("source"))})
+        if len(channels) >= 2:
+            label = "cross-channel"
+        elif len(sources) >= 2:
+            label = "cross-source"
+        else:
+            label = "same-channel"
+        out.append({"key": key[:80], "count": len(rows),
+                    "title": str(rows[0].get("title") or "")[:120],
+                    "channels": channels, "sources": sources, "label": label})
+    out.sort(key=lambda r: r["count"], reverse=True)
+    return out
+
+
 def aggregate_confidence(items: list[dict]) -> dict:
     """Report-level confidence — competitor pattern (per-claim score + hard caps).
 

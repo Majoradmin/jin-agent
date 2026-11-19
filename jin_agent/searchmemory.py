@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS search_memory (
   used_sources TEXT NOT NULL DEFAULT '[]',
   used_channels TEXT NOT NULL DEFAULT '[]',
   failed_channels TEXT NOT NULL DEFAULT '[]',
+  rejected_ideas TEXT NOT NULL DEFAULT '[]',
+  source_stats TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'active',
   created_at INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL DEFAULT 0
@@ -54,9 +56,11 @@ def ensure_table() -> None:
         con.executescript(SCHEMA)
         # Purani DB migration: failed_channels column add karo.
         cols = {r[1] for r in con.execute("PRAGMA table_info(search_memory)")}
-        if "failed_channels" not in cols:
-            con.execute("ALTER TABLE search_memory "
-                        "ADD COLUMN failed_channels TEXT NOT NULL DEFAULT '[]'")
+        for name, ddl in (("failed_channels", "TEXT NOT NULL DEFAULT '[]'"),
+                          ("rejected_ideas", "TEXT NOT NULL DEFAULT '[]'"),
+                          ("source_stats", "TEXT NOT NULL DEFAULT '{}'")):
+            if name not in cols:
+                con.execute(f"ALTER TABLE search_memory ADD COLUMN {name} {ddl}")
 
 
 def channel_negative_ttl_days() -> int:
@@ -119,6 +123,51 @@ def remember_failed(row_id: int, channels=None) -> dict | None:
     return get(row_id)
 
 
+def rejected_ideas(row_id: int) -> list[str]:
+    row = get(row_id)
+    return list(row.get("rejected_ideas") or []) if row else []
+
+
+def remember_rejected(row_id: int, ideas=None) -> dict | None:
+    """Jo ideas user ne 'nai mila' par reject kiye — unhe yaad rakho (dobara na doonde)."""
+    row = get(row_id)
+    if not row:
+        return None
+    cur = [str(x) for x in (row.get("rejected_ideas") or [])]
+    for raw in ideas or []:
+        text = str(raw or "").strip()[:200]
+        if text and text not in cur:
+            cur.append(text)
+    with store.session() as con:
+        con.execute("UPDATE search_memory SET rejected_ideas=?, updated_at=? "
+                    "WHERE id=?", (json.dumps(cur), util.epoch(), int(row_id)))
+    return get(row_id)
+
+
+def source_stats(row_id: int) -> dict:
+    row = get(row_id)
+    return dict(row.get("source_stats") or {}) if row else {}
+
+
+def note_source_stat(row_id: int, source: str, kind: str = "cited") -> dict | None:
+    """Per-source counter (acted/cited/skipped/rejected) — suppression memory."""
+    row = get(row_id)
+    if not row:
+        return None
+    key = str(source or "").strip()
+    if not key:
+        return row
+    stats = dict(row.get("source_stats") or {})
+    bucket = stats.setdefault(key, {"acted": 0, "cited": 0,
+                                    "skipped": 0, "rejected": 0})
+    if kind in bucket:
+        bucket[kind] = int(bucket[kind]) + 1
+    with store.session() as con:
+        con.execute("UPDATE search_memory SET source_stats=?, updated_at=? "
+                    "WHERE id=?", (json.dumps(stats), util.epoch(), int(row_id)))
+    return get(row_id)
+
+
 def query_key(query: str) -> str:
     """Normalised key: lowercase, spaces collapsed, 120 chars."""
     return " ".join(str(query or "").lower().split())[:120]
@@ -142,6 +191,14 @@ def _parse_failed(raw) -> list[dict]:
     return [e for e in data if isinstance(e, dict)] if isinstance(data, list) else []
 
 
+def _loads_dict(raw) -> dict:
+    try:
+        data = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _row_to_dict(row) -> dict:
     return {
         "id": int(row["id"]),
@@ -152,6 +209,8 @@ def _row_to_dict(row) -> dict:
         "used_sources": _loads(row["used_sources"]),
         "used_channels": _loads(row["used_channels"]),
         "failed_channels": _parse_failed(row["failed_channels"] or "[]"),
+        "rejected_ideas": _loads(row["rejected_ideas"]),
+        "source_stats": _loads_dict(row["source_stats"]),
         "status": str(row["status"]),
         "created_at": int(row["created_at"] or 0),
         "updated_at": int(row["updated_at"] or 0),
@@ -224,6 +283,56 @@ def reset(row_id: int) -> dict | None:
             "round_no=1, status='active', updated_at=? WHERE id=?",
             (util.epoch(), int(row_id)))
     return get(row_id)
+
+
+def reset_chat(chat_id: int) -> int:
+    """``/new`` — chat ka active context band karo (naya research fresh shuru)."""
+    ensure_table()
+    with store.session() as con:
+        cur = con.execute(
+            "UPDATE search_memory SET status='done', updated_at=? "
+            "WHERE chat_id=? AND status='active'", (util.epoch(), int(chat_id)))
+        return int(cur.rowcount)
+
+
+def audit(stale_days: int | None = None) -> dict:
+    """Memory ka duplicate/conflict/stale scan + audit trail (ashishki pattern)."""
+    ensure_table()
+    if stale_days is None:
+        try:
+            stale_days = int(str(os.environ.get("JIN_AGENT_MEMORY_STALE_DAYS", "30") or 30))
+        except (TypeError, ValueError):
+            stale_days = 30
+    with store.session() as con:
+        rows = con.execute("SELECT * FROM search_memory ORDER BY id DESC").fetchall()
+    now = util.epoch()
+    active: dict[tuple, list[dict]] = {}
+    stale: list[dict] = []
+    for row in rows:
+        d = _row_to_dict(row)
+        if d["status"] != "active":
+            continue
+        active.setdefault((d["chat_id"], d["query_key"]), []).append(d)
+        age = now - int(d.get("updated_at") or 0)
+        if age > stale_days * 86400:
+            stale.append({"id": d["id"], "query": d["query"],
+                          "age_days": int(age // 86400)})
+    duplicates: list[dict] = []
+    conflicts: list[dict] = []
+    for (chat_id, qkey), items in active.items():
+        if len(items) > 1:
+            duplicates.append({"chat_id": chat_id, "query": items[0]["query"],
+                               "count": len(items), "ids": [i["id"] for i in items]})
+            used = {tuple(sorted(i.get("used_sources") or [])) for i in items}
+            if len(used) > 1:
+                conflicts.append({"chat_id": chat_id, "query": items[0]["query"],
+                                  "count": len(items)})
+    try:
+        store.add_event("memory_audit", f"duplicates={len(duplicates)} "
+                                        f"conflicts={len(conflicts)} stale={len(stale)}")
+    except Exception:
+        pass
+    return {"duplicates": duplicates, "conflicts": conflicts, "stale": stale}
 
 
 def recent(chat_id: int, limit: int = 5) -> list[dict]:

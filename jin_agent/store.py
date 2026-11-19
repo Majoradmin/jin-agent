@@ -74,7 +74,10 @@ CREATE TABLE IF NOT EXISTS sources (
   ok_count INTEGER NOT NULL DEFAULT 0,
   fail_count INTEGER NOT NULL DEFAULT 0,
   last_ok TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT ''
+  last_error TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'ok',
+  last_verified_at TEXT NOT NULL DEFAULT '',
+  stale_days INTEGER NOT NULL DEFAULT 30
 );
 CREATE TABLE IF NOT EXISTS watchlist (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,6 +214,13 @@ def init_db() -> dict:
         except sqlite3.OperationalError as exc:
             FTS_ENABLED = False
             FTS_ERROR = str(exc)
+        # Purani DB migration: source lifecycle columns.
+        cols = {r[1] for r in con.execute("PRAGMA table_info(sources)")}
+        for name, ddl in (("status", "TEXT NOT NULL DEFAULT 'ok'"),
+                          ("last_verified_at", "TEXT NOT NULL DEFAULT ''"),
+                          ("stale_days", "INTEGER NOT NULL DEFAULT 30")):
+            if name not in cols:
+                con.execute(f"ALTER TABLE sources ADD COLUMN {name} {ddl}")
         for row in policy.SOURCE_REGISTER:
             con.execute(
                 "INSERT OR IGNORE INTO sources(key,name,tier,trust,enabled) VALUES(?,?,?,?,?)",
@@ -378,18 +388,44 @@ def list_sources() -> list[dict]:
         h = health.get(row["key"], {})
         out.append({**row, "enabled": bool(h.get("enabled", row["auto"])),
                     "ok_count": h.get("ok_count", 0), "fail_count": h.get("fail_count", 0),
-                    "last_ok": h.get("last_ok", ""), "last_error": h.get("last_error", "")})
+                    "last_ok": h.get("last_ok", ""), "last_error": h.get("last_error", ""),
+                    "status": h.get("status", "ok"),
+                    "last_verified_at": h.get("last_verified_at", "")})
     return out
 
 
+def source_stale_days() -> int:
+    """Source lifecycle stale window (din). Default 30, env ``JIN_AGENT_SOURCE_STALE_DAYS``."""
+    try:
+        return max(1, int(str(os.environ.get("JIN_AGENT_SOURCE_STALE_DAYS", "30") or 30)))
+    except (TypeError, ValueError):
+        return 30
+
+
 def touch_source(key: str, ok: bool, error: str = "") -> None:
+    """Source health update — lifecycle status ke saath (ok/verification_failed)."""
     with session() as con:
         if ok:
-            con.execute("UPDATE sources SET ok_count=ok_count+1,last_ok=?,last_error='' WHERE key=?",
-                        (util.now_iso(), key))
+            con.execute("UPDATE sources SET ok_count=ok_count+1,last_ok=?,last_error='',"
+                        "status='ok',last_verified_at=? WHERE key=?",
+                        (util.now_iso(), util.now_iso(), key))
         else:
-            con.execute("UPDATE sources SET fail_count=fail_count+1,last_error=? WHERE key=?",
+            con.execute("UPDATE sources SET fail_count=fail_count+1,last_error=?,"
+                        "status='verification_failed' WHERE key=?",
                         (util.truncate(error, 200), key))
+
+
+def mark_stale_sources(stale_days: int | None = None) -> int:
+    """``ok`` sources jinki aakhri kamyabi verification ``stale_days`` purani ho
+    chuki ho unhe ``stale`` mark karo (ipiton STEWARDSHIP pattern)."""
+    days = source_stale_days() if stale_days is None else max(1, int(stale_days))
+    cutoff = datetime.fromtimestamp(util.epoch() - days * 86400, timezone.utc)
+    cutoff_iso = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    with session() as con:
+        cur = con.execute(
+            "UPDATE sources SET status='stale' WHERE status='ok' "
+            "AND last_verified_at<>'' AND last_verified_at<?", (cutoff_iso,))
+        return int(cur.rowcount)
 
 
 def set_source_enabled(key: str, enabled: bool) -> None:
@@ -599,8 +635,18 @@ def retention(days: int | None = None) -> dict:
     try:
         from . import channels as channels_mod
         pruned["tg_channels_dead"] = channels_mod.cleanup_dead()
+        pruned["tg_channels_stale"] = channels_mod.mark_stale_channels()
     except Exception:
         pruned["tg_channels_dead"] = 0
+        pruned["tg_channels_stale"] = 0
+    try:
+        pruned["sources_stale"] = mark_stale_sources()
+    except Exception:
+        pruned["sources_stale"] = 0
+    try:
+        pruned["traces"] = _prune_traces()
+    except Exception:
+        pruned["traces"] = 0
     vacuum = vacuum_db()
     add_event("retention", f"Removed {removed} articles older than {days} days; "
                            f"pruned={pruned}")
@@ -655,6 +701,33 @@ def _prune_backups(keep: int | None = None) -> int:
         try:
             old.unlink()
             pruned += 1
+        except OSError:
+            continue
+    return pruned
+
+
+def _prune_traces(days: int | None = None) -> int:
+    """``data/runs/`` ke purane per-run trace JSON hatao (default 30 din)."""
+    if days is None:
+        try:
+            days = int(str(os.environ.get("JIN_AGENT_TRACE_DAYS", "30") or 30))
+        except (TypeError, ValueError):
+            days = 30
+    days = max(1, int(days))
+    folder = config.runs_dir()
+    cutoff = util.epoch() - days * 86400
+    try:
+        entries = list(folder.iterdir())
+    except OSError:
+        return 0
+    pruned = 0
+    for path in entries:
+        if path.suffix != ".json":
+            continue
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+                pruned += 1
         except OSError:
             continue
     return pruned

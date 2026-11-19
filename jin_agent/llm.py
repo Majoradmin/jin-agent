@@ -9,6 +9,7 @@ deterministic rule-based path - no model is required to run the agent.
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -78,6 +79,38 @@ def status(cfg: dict | None = None) -> dict:
                               "key_required", "key_present")} | {"endpoint": c["base"]}
 
 
+# Per-run token accounting (Hermes trace.py pattern). Har LLM call apni usage
+# yahan jodta hai; orchestrator run shuru/finish par reset/read karta hai.
+TOKEN_USAGE = {"prompt_tokens": 0, "completion_tokens": 0,
+               "total_tokens": 0, "calls": 0}
+
+
+def reset_tokens() -> None:
+    for key in TOKEN_USAGE:
+        TOKEN_USAGE[key] = 0
+
+
+def token_usage() -> dict:
+    return dict(TOKEN_USAGE)
+
+
+def token_budget() -> int:
+    """Per-run token budget (env ``JIN_AGENT_TOKEN_BUDGET``, default 100000)."""
+    try:
+        return max(0, int(str(os.environ.get("JIN_AGENT_TOKEN_BUDGET", "100000")
+                            or 100000)))
+    except (TypeError, ValueError):
+        return 100_000
+
+
+def cost_per_1m() -> float:
+    """USD per 1M tokens (env ``JIN_AGENT_COST_PER_1M``, default 0)."""
+    try:
+        return max(0.0, float(os.environ.get("JIN_AGENT_COST_PER_1M", "0") or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _post(cfg: dict, messages: list[dict], timeout: float = 30) -> dict:
     c = resolve(cfg)
     if not c["enabled"]:
@@ -94,8 +127,22 @@ def _post(cfg: dict, messages: list[dict], timeout: float = 30) -> dict:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read(1_000_000).decode("utf-8", "replace"))
         text = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        usage = data.get("usage") or {}
+        try:
+            prompt = int(usage.get("prompt_tokens") or 0)
+            completion = int(usage.get("completion_tokens") or 0)
+            total = int(usage.get("total_tokens") or (prompt + completion))
+        except (TypeError, ValueError):
+            prompt = completion = total = 0
+        TOKEN_USAGE["prompt_tokens"] += prompt
+        TOKEN_USAGE["completion_tokens"] += completion
+        TOKEN_USAGE["total_tokens"] += total
+        TOKEN_USAGE["calls"] += 1
         return {"ok": bool(text), "text": text.strip(),
                 "latency_ms": round((time.monotonic() - started) * 1000),
+                "tokens": {"prompt_tokens": prompt,
+                           "completion_tokens": completion,
+                           "total_tokens": total},
                 "error": "" if text else "Model ne khali jawab diya"}
     except Exception as exc:
         return {"ok": False, "text": "",

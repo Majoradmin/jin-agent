@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import math
 import os
 import re
 import time
@@ -139,6 +140,34 @@ def cleanup_dead(threshold_days: int | None = None) -> int:
         cur = con.execute(
             "DELETE FROM tg_channels WHERE status='dead' AND last_checked<?",
             (cutoff,))
+        return int(cur.rowcount)
+
+
+def stale_ttl_days() -> int:
+    """Active channel ke liye 'stale' (khamosh) window (din).
+
+    Default 30, env ``JIN_AGENT_CHANNEL_STALE_DAYS``. Channel alive magar
+    is dauran check nahi hua to ``status='stale'`` mark hota hai.
+    """
+    try:
+        return max(1, int(str(os.environ.get("JIN_AGENT_CHANNEL_STALE_DAYS", "30")
+                               or 30)))
+    except (TypeError, ValueError):
+        return 30
+
+
+def mark_stale_channels(ttl_days: int | None = None) -> int:
+    """Active channels jinki aakhri check ``ttl_days`` purani ho chuki ho.
+
+    ``status='stale'`` mark karo (delete nahi — registry bounded rehta hai).
+    """
+    ensure_table()
+    ttl = stale_ttl_days() if ttl_days is None else max(1, int(ttl_days))
+    cutoff = util.epoch() - ttl * 86400
+    with store.session() as con:
+        cur = con.execute(
+            "UPDATE tg_channels SET status='stale' "
+            "WHERE status='active' AND last_checked<?", (cutoff,))
         return int(cur.rowcount)
 
 
@@ -280,13 +309,9 @@ def web_search_candidates(query: str, cfg: dict | None = None) -> list[str]:
 # Liveness probe + scoring
 # --------------------------------------------------------------------------
 
-def probe(channel: str, cfg: dict | None = None) -> dict:
-    """PUBLIC t.me/s/<channel> preview fetch -> alive/dead + stats."""
-    cfg = cfg or config.load()
+def parse_preview(html: str, channel: str) -> dict:
+    """Preview HTML ko parse karo (network-free) — selftest bhi isi se guzarta hai."""
     clean = clean_handle(channel)
-    if not clean:
-        raise ValueError("Channel handle ghalat hai")
-    html = adapters.fetch(f"https://t.me/s/{clean}", cfg)
     posts = re.findall(r'data-post="[^"]+"', html)
     title = ""
     m = re.search(r'og:title" content="([^"]{1,120})"', html)
@@ -319,49 +344,109 @@ def probe(channel: str, cfg: dict | None = None) -> dict:
     }
 
 
-def score(rec: dict, cfg: dict | None = None) -> int:
-    """Informative score 0-10 (koi language filter NAHI - aap ki request)."""
+def probe(channel: str, cfg: dict | None = None) -> dict:
+    """PUBLIC t.me/s/<channel> preview fetch -> alive/dead + stats."""
     cfg = cfg or config.load()
-    s = 0
-    last = rec.get("last_post_at") or ""
-    # recency: ISO "YYYY-MM-DD HH:MM" string-compare kaam karta hai
+    clean = clean_handle(channel)
+    if not clean:
+        raise ValueError("Channel handle ghalat hai")
+    html = adapters.fetch(f"https://t.me/s/{clean}", cfg)
+    return parse_preview(html, clean)
+
+
+# Parser-drift selftest fixture (known markers) — HTML structure badalne par ye
+# fail hota hai, taake parser drift deploy se pehle pakde jaye.
+SELFTEST_HTML = (
+    '<meta property="og:title" content="Selftest Channel">'
+    '<meta property="og:description" content="1.2K subscribers">'
+    '<div data-post="selftest/1"></div><div data-post="selftest/2"></div>'
+    '<time datetime="2026-11-18T10:00:00+00:00"></time>'
+    '<div class="tgme_widget_message_text">Firmware news</div>'
+)
+
+
+def parser_selftest() -> dict:
+    """Parser invariants ki network-free selftest (drift gate)."""
+    rec = parse_preview(SELFTEST_HTML, "selftest_ch")
+    sc = score(rec, config.load())
+    checks = [
+        {"name": "title", "ok": rec["title"] == "Selftest Channel",
+         "detail": rec["title"][:40]},
+        {"name": "posts", "ok": rec["post_count"] >= 2,
+         "detail": str(rec["post_count"])},
+        {"name": "subscribers", "ok": "1.2" in rec["subscribers"],
+         "detail": rec["subscribers"]},
+        {"name": "last_post", "ok": bool(rec["last_post_at"]),
+         "detail": rec["last_post_at"]},
+        {"name": "score_range", "ok": 0 <= sc <= 10, "detail": str(sc)},
+    ]
+    return {"ok": all(c["ok"] for c in checks), "checks": checks}
+
+
+def _age_days(last_post_at: str) -> int:
+    """``last_post_at`` (ISO) se din; na ho to 9999."""
+    import datetime
+    if not last_post_at:
+        return 9999
     try:
-        import datetime
-        age_days = 9999
-        if last:
-            dt = datetime.datetime.fromisoformat(last.strip().replace(" ", "T"))
-            age_days = max(0, int((datetime.datetime.now(datetime.UTC)
-                                   - dt.replace(tzinfo=datetime.UTC)).total_seconds() // 86400))
-        if age_days <= 2:
-            s += 4
-        elif age_days <= 7:
-            s += 3
-        elif age_days <= 14:
-            s += 2
-        elif age_days <= 30:
-            s += 1
+        dt = datetime.datetime.fromisoformat(str(last_post_at).strip().replace(" ", "T"))
+        return max(0, int((datetime.datetime.now(datetime.UTC)
+                           - dt.replace(tzinfo=datetime.UTC)).total_seconds() // 86400))
     except Exception:
-        pass
-    posts = int(rec.get("post_count") or 0)
-    if posts >= 10:
-        s += 2
-    elif posts >= 5:
-        s += 1
-    if int(rec.get("avg_text_len") or 0) >= 80:
-        s += 1
-    subs = str(rec.get("subscribers") or "").lower()
+        return 9999
+
+
+def _subscribers_value(raw: str) -> float:
+    subs = str(raw or "").lower()
     try:
         val = float(re.sub(r"[^\d.]", "", subs) or 0)
-        if "m" in subs:
-            val *= 1_000_000
-        elif "k" in subs:
-            val *= 1_000
-        if val >= 10_000:
-            s += 2
-        elif val >= 1_000:
-            s += 1
-    except Exception:
-        pass
+    except ValueError:
+        return 0.0
+    if "m" in subs:
+        val *= 1_000_000
+    elif "k" in subs:
+        val *= 1_000
+    return val
+
+
+def score(rec: dict, cfg: dict | None = None) -> int:
+    """Informative score 0-10 — LOG-SCALE (tgden/chatcrawler methodology).
+
+    Linear thresholds (posts>=10 +2, subs>=10k +2) bade channels ko
+    over-reward karte the. Ab activity aur subscribers ``lg(1+x)`` par
+    scale hote hain, taake 1M-subs channel 10k-subs se sirf thoda behtar
+    awe. Recency/topic/text signals wahi rehte hain.
+    """
+    cfg = cfg or config.load()
+    s = 0.0
+    age_days = _age_days(rec.get("last_post_at") or "")
+    if age_days <= 2:
+        s += 4
+    elif age_days <= 7:
+        s += 3
+    elif age_days <= 14:
+        s += 2
+    elif age_days <= 30:
+        s += 1
+    # activity: log-scale (posts 30 din preview se), 0.6*lg(1+posts30d)
+    posts = int(rec.get("post_count") or 0)
+    s += min(3.0, 0.8 * math.log1p(max(0, posts)))
+    # subscribers: log-scale thresholds
+    val = _subscribers_value(rec.get("subscribers") or "")
+    if val >= 1_000_000:
+        s += 3.0
+    elif val >= 100_000:
+        s += 2.5
+    elif val >= 10_000:
+        s += 2.0
+    elif val >= 1_000:
+        s += 1.2
+    elif val >= 100:
+        s += 0.6
+    elif val > 0:
+        s += 0.3 * math.log1p(val) / math.log(101)
+    if int(rec.get("avg_text_len") or 0) >= 80:
+        s += 1
     # topic relevance: keywords title ya (offline me) channel name par
     title = (str(rec.get("title") or "") + " " + str(rec.get("channel") or "")).lower()
     topics = [str(t).lower() for t in (cfg.get("topics") or [])]
@@ -376,7 +461,37 @@ def score(rec: dict, cfg: dict | None = None) -> int:
         if any(w in title for w in words):
             s += 1
             break
-    return max(0, min(10, s))
+    return max(0, min(10, round(s)))
+
+
+def channel_signs(rec: dict, cfg: dict | None = None) -> dict:
+    """Positive signals ka hisaab (kam-az-kam-3-signs gate).
+
+    Returns ``{"signs": int, "recent": bool, "topic_match": bool}``.
+    """
+    cfg = cfg or config.load()
+    age_days = _age_days(rec.get("last_post_at") or "")
+    recent = age_days <= 30
+    title = (str(rec.get("title") or "") + " " + str(rec.get("channel") or "")).lower()
+    kws = {"firmware", "android", "security", "gsm", "osint", "ai", "tech",
+           "news", "mobile", "telecom", "hack", "cyber", "mod", "rom"}
+    topic_match = any(kw in title for kw in kws)
+    if not topic_match:
+        for t in [str(x).lower() for x in (cfg.get("topics") or [])]:
+            words = [w for w in re.findall(r"[a-z]{4,}", t)]
+            if any(w in title for w in words):
+                topic_match = True
+                break
+    signs = sum([
+        bool(rec.get("alive")),
+        int(rec.get("post_count") or 0) > 0,
+        _subscribers_value(rec.get("subscribers") or "") > 0,
+        bool(recent),
+        int(rec.get("avg_text_len") or 0) >= 80,
+        bool(topic_match),
+    ])
+    return {"signs": int(signs), "recent": bool(recent),
+            "topic_match": bool(topic_match)}
 
 
 def check_channel(channel: str, cfg: dict | None = None) -> dict:
@@ -404,9 +519,21 @@ def check_channel(channel: str, cfg: dict | None = None) -> dict:
         return {"channel": clean, "alive": False, "status": "dead",
                 "score": 0, "error": type(exc).__name__, "harvested": []}
     sc = score(rec, cfg)
-    status = "active" if rec["alive"] else "dead"
-    note = ("auto-discovered liveness check" if rec["alive"]
-            else f"dead: {rec['post_count']} posts on preview")
+    info = channel_signs(rec, cfg)
+    if not rec["alive"]:
+        status = "dead"
+        note = f"dead: {rec['post_count']} posts on preview"
+    elif not info["recent"]:
+        # 30-din rule: preview zinda ho magar aakhri post 30 din se purani.
+        age = _age_days(rec.get("last_post_at") or "")
+        status = "dead"
+        note = f"dead: aakhri post {age} din purani (30-din rule)"
+    elif info["signs"] < 3:
+        status = "insufficient_data"
+        note = f"insufficient_data: sirf {info['signs']} positive signs"
+    else:
+        status = "active"
+        note = "auto-discovered liveness check"
     with store.session() as con:
         con.execute(
             "INSERT OR IGNORE INTO tg_channels(channel, status, origin, added_at) "

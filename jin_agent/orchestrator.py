@@ -6,6 +6,7 @@ crashes a run and never produces a fabricated news item.
 
 from __future__ import annotations
 
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -21,6 +22,21 @@ def _log():
     return logging_setup.get_logger("orchestrator")
 
 
+def _write_trace(payload: dict) -> str:
+    """Per-run trace JSON (``data/runs/<id>.json``) — Hermes trace.py pattern.
+
+    Query, plan, tool calls, sources, tokens, duration, confidence. Best-effort:
+    disk fail hone par run crash nahi hota.
+    """
+    try:
+        path = config.runs_dir() / f"{int(payload.get('run_id') or 0)}.json"
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2,
+                                   default=str), encoding="utf-8")
+        return str(path)
+    except (OSError, TypeError, ValueError):
+        return ""
+
+
 def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         keys: list[str] | None = None, cfg: dict | None = None,
         save: bool = True, skip_sources: list[str] | None = None) -> dict:
@@ -31,8 +47,13 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         cfg["skip_sources"] = [str(s) for s in skip_sources]
     query = str(query or "").strip()[: util.clamp(cfg.get("max_query_chars"), 100, 8000, 4000)]
     started = time.monotonic()
+    started_iso = util.now_iso()
     store.init_db()
     run_id = store.record_run(query, "live" if live else "offline")
+    try:
+        llm.reset_tokens()
+    except Exception:
+        pass
     gate = policy.classify(query)
 
     if gate["verdict"] == "blocked":
@@ -40,6 +61,8 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         metrics = {"blocked": True, "sources_ok": 0, "sources_failed": 0,
                    "items": 0, "changes_sources": 0,
                    "confidence": 0.0, "confidence_label": "n/a",
+                   "tokens": llm.token_usage(), "token_budget": llm.token_budget(),
+                   "token_cost_usd": 0.0, "budget_exceeded": False,
                    "duration_ms": round((time.monotonic() - started) * 1000)}
         empty_changes = {"since": None, "generated_at": util.now_iso(),
                          "sources": [], "total": 0,
@@ -56,6 +79,15 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
             metrics_lib.inc("reports_total")
         log.info("run blocked", extra={"fields": {"query": util.truncate(query, 80),
                                                  "policy": policy.POLICY_ID}})
+        _write_trace({"run_id": run_id, "query": query, "mode": "offline",
+                      "blocked": True, "started_at": started_iso,
+                      "finished_at": util.now_iso(),
+                      "duration_ms": metrics["duration_ms"],
+                      "plan": {"calls": [], "source": "none"}, "tools": [],
+                      "diagnostics": [], "metrics": metrics,
+                      "confidence": 0.0, "confidence_label": "n/a",
+                      "tokens": llm.token_usage(),
+                      "saved": (saved or {}).get("md", "")})
         metrics_lib.persist()      # summary ko final state par likho
         return {"ok": True, "blocked": True, "gate": gate, "items": [],
                 "diagnostics": [], "plan": {"calls": [], "source": "none"},
@@ -108,10 +140,16 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     sources_failed = sum(1 for d in diagnostics if not d.get("ok"))
     duration_ms = round((time.monotonic() - started) * 1000)
     confidence = verifier.aggregate_confidence(ranked)
+    tokens = llm.token_usage()
     metrics = {
         "items": len(ranked), "raw_items": len(executed["items"]),
         "confidence": confidence["value"],
         "confidence_label": confidence["label"],
+        "tokens": tokens,
+        "token_cost_usd": round(tokens["total_tokens"] / 1_000_000
+                                * llm.cost_per_1m(), 4),
+        "token_budget": llm.token_budget(),
+        "budget_exceeded": tokens["total_tokens"] > llm.token_budget(),
         "unique_stories": len(ranked), "duplicate_rows_merged": merged_away,
         "off_topic_dropped": off_topic_dropped,
         "dedupe_rate_pct": round(100.0 * (1 - len(normalized) / len(executed["items"])), 1)
@@ -146,6 +184,17 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         "mode": "live" if live else "offline", "items": len(ranked),
         "sources_ok": sources_ok, "sources_failed": sources_failed,
         "duration_ms": duration_ms, "query": util.truncate(query, 80)}})
+    _write_trace({"run_id": run_id, "query": query,
+                  "mode": "live" if live else "offline",
+                  "blocked": False, "started_at": started_iso,
+                  "finished_at": util.now_iso(), "duration_ms": duration_ms,
+                  "plan": plan_result,
+                  "tools": [c["tool"] for c in plan_result["calls"]],
+                  "diagnostics": diagnostics, "metrics": metrics,
+                  "confidence": confidence["value"],
+                  "confidence_label": confidence["label"],
+                  "tokens": llm.token_usage(),
+                  "saved": (saved or {}).get("md", ""), "changes": changes})
     metrics_lib.persist()          # throttled auto-persist ke baad final summary
     return {
         "ok": True, "blocked": False, "gate": gate, "query": query,

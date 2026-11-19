@@ -177,6 +177,14 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                     )
             if len(categories[category]) > 5:
                 lines += [f"_Is category mein mazid {len(categories[category]) - 5} items archive mein hain._", ""]
+        repeated = verifier.repeated_claims(items)
+        if repeated:
+            lines += ["## Repeated Claims", ""]
+            for row in repeated[:8]:
+                where = ", ".join(row["channels"][:3]) or ", ".join(row["sources"][:3]) or "-"
+                lines.append(f"- {row['label']} · {row['count']}× · "
+                             f"{util.truncate(row['title'], 90)} ({where})")
+            lines.append("")
         lines += ["## Recommendations", ""]
         recs = []
         for category in sorted(categories):
@@ -251,6 +259,7 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
     markdown = _markdown(query, items, diagnostics, cfg, plan_result, audit,
                          metrics, duration_ms, mode, blocked)
     confidence = verifier.aggregate_confidence(items)
+    repeated = verifier.repeated_claims(items)
     structured = {
         "query": query, "date_checked": util.now_iso(), "mode": mode,
         "policy_id": policy.POLICY_ID, "tor_mode": cfg.get("tor_mode"),
@@ -258,7 +267,7 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
         "tools": [c["tool"] for c in (plan_result or {}).get("calls", [])],
         "items": items, "diagnostics": diagnostics, "audit": audit,
         "metrics": metrics, "blocked": blocked or None,
-        "confidence": confidence,
+        "confidence": confidence, "repeated_claims": repeated,
     }
     return {
         "title": f"JIN Agent Brief - {util.truncate(query, 60)}",
@@ -271,6 +280,7 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
         "categories": sorted({i.get("category", "") for i in items}),
         "confidence": confidence["value"],
         "confidence_label": confidence["label"],
+        "repeated_claims": repeated,
     }
 
 
