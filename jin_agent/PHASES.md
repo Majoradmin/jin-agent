@@ -1,4 +1,4 @@
-# PHASES — JIN Agent P13–P40
+# PHASES — JIN Agent P13–P41
 
 **Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
 **Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
@@ -716,5 +716,52 @@ openlibrary/yahoojp/bing-news) → 120 items, sab diagnostics ok.
 aur FRP/FMI/HuaweiID/Knox/MDM patterns untouched.
 
 **PHASE REVIEW — PHASE 40: READY**
+
+---
+
+## 34. PHASE REVIEW — PHASE 41 — Google Dork + Extra Engines (2.9.0)
+
+**TASK:** (1) Google-dork support — `jin_agent/dorks.py` helper, `/dork <query>`,
+`/explore <topic> --dork`, onion dork sirf link, backend live test. (2) Aur
+engines — news RSS / academic / patents / archive-data / web / TG-social.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `dorks.py` (naya) | operators (`site/intitle/inurl/filetype/exclude/build`), presets (tg/pdf/gov/edu/pastebin), `DORK_BACKENDS` registry, `parse_bing_results` (ck/a decode), `render`, `search` (Bing), `onion_link` (link-only), `selftest` |
+| `telegram_bot.py` | `/dork` command, `split_dork_flag` + `/explore <topic> --dork`, `/status` me **Dork** block (1 kaam / 5 blocked), HELP aliases |
+| `policy.py` | 44 naye host + 38 naye SOURCE_REGISTER entries — register 92 → 130 |
+| `adapters.py` | RSS_FEEDS +10 news; naye parser datacite/openaire/hal/usgs/weather/wiby/rightdao/lemmy; `ADAPTERS` 39 → 57 |
+| `tests/test_dorks.py` (naya) | 18 tests: operators, backend flags, parser, render, command, status |
+| `tests/test_p41_engines.py` (naya) | 12 tests: allowlist, auto/blocked flags, parsers |
+| counts | `test_adapters_v2`/`test_governance` 57 adapters / 130 register; `test_status_health` 130 total / 57 auto / 73 registry-only |
+
+**DORK BACKEND (live 2026-11-19, JIN-Agent UA):**
+- **kaam karta hai:** Bing (dork qabool, 8 results).
+- **blocked:** Mojeek (captcha), DuckDuckGo Lite (HTTP 202 anomaly), Startpage
+  (Anubis challenge), Ecosia (403 unusual traffic), Google gbv=1 (JS shell, 0 result).
+
+**EXTRA ENGINES (live):**
+- **auto=True (18):** bbc-news, aljazeera, arstechnica, wired, techcrunch,
+  theverge, zdnet, cnet, nytimes, npr (news RSS); datacite, openaire, hal;
+  usgs, weather; wiby, rightdao; lemmy.
+- **auto=False (20):** wapo/reuters/groundnews (404), orcid (profiles only),
+  scilit (403), fatcat (timeout), citeseerx (404), repec/econpapers (form/session),
+  philpapers (403), pubpsych (404), ipaustralia (503), jplatpat (timeout),
+  kipris (refused), commoncrawl (504), loc/worldcat (403 Cloudflare),
+  reliefweb (403 appname), 4cdn/8kun (404).
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **580 tests OK (1 skipped)**. Sab 18 naye auto adapters live chalaye (bbc 32,
+nytimes 42, datacite 25, openaire 24, hal 25, usgs 25, weather 25, wiby 11,
+rightdao 12, lemmy 25). `/dork android security` → 8 live Bing results.
+
+**RESULT:** Register 92 → **130** (57 auto / 73 registry-only); adapters 39 → 57.
+Dork sirf public search + onion link-only. `VERSION` `2.9.0`, `is_owner`,
+`server.py`, `watchdog.py`, onion fetch block aur FRP/FMI/HuaweiID/Knox/MDM/IMEI
+patterns untouched.
+
+**PHASE REVIEW — PHASE 41: READY**
 
 ---
