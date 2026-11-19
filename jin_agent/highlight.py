@@ -180,7 +180,7 @@ def _highlight_text(text: str, ordered: list[str], used: set[str]) -> str:
 def highlight_html(html: str, terms: list[str]) -> str:
     """HTML ke **text nodes** me terms ko ``<b>...</b>`` se wrap karo.
 
-    - HTML pehle se escaped hai; hum isay waisa hi rehte hain (kch unescape nahi).
+    - HTML pehle se escaped hai; hum isay waisa hi rehte hain (kuch unescape nahi).
     - tags ke andar (URL/attributes) replace nahi hota.
     - case-insensitive; har term sirf **ek dafa** (pehli occurrence) wrap hota hai.
     - koi match nahi to html waisa hi lauta aata hai.
