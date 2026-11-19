@@ -1,6 +1,9 @@
-# PHASES — JIN Agent P13–P26
+# PHASES — JIN Agent P13–P35
 
-**Status:** ALL PHASES READY · **Date:** 2026-11-16 · **Version:** 2.9.0
+**Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
+**Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
+hue — ye un-released plan numbers thay. Asli `VERSION` har waqt `2.9.0` hai
+(`jin_agent/__init__.py:10`), is liye saari labels normalize ki gayi hain.
 **Plan source:** `C:\Users\Rohaani\.local\share\opencode\opencode.db` → `session_message` text part `msg_1c0750351001e5quVqIgT43TAH` = `JIN Agent — Final Plan (plan only)`, 13 sections, phases P13–P22.
 
 ## 1. Approval & Scope
@@ -335,7 +338,7 @@ Ye assumptions `config.DEFAULT["assumptions"]` aur `GET /api/status` mein zinda 
 
 ---
 
-## 21. PHASE REVIEW — PHASE 28 — Channel Memory & Health (2.10.0)
+## 21. PHASE REVIEW — PHASE 28 — Channel Memory & Health (2.9.0)
 
 **TASK:** "No working channel" masla: failed/dead channels ka negative memory, channel
 health telemetry, aur dead registry ka TTL cleanup. Competitor patterns (web research):
@@ -361,7 +364,7 @@ ke saath bounded; registry unbounded nahi; stdlib-only, local-only, policy barqa
 
 ---
 
-## 22. PHASE REVIEW — PHASE 29 — Confidence, Report File & Explore (2.10.0)
+## 22. PHASE REVIEW — PHASE 29 — Confidence, Report File & Explore (2.9.0)
 
 **TASK:** Competitor patterns: per-claim confidence + hard caps, report ko chat flood
 ki jagah `sendDocument` file ki shakal me, aur rozana scored digest/explore.
@@ -388,7 +391,7 @@ stdlib-only, local-only, policy barqarar.
 
 ---
 
-## 23. PHASE REVIEW — PHASE 30 — Scoring, Lifecycle, Trace (2.11.0)
+## 23. PHASE REVIEW — PHASE 30 — Scoring, Lifecycle, Trace (2.9.0)
 
 **TASK:** Competitor deep-dive (tgden/chatcrawler, ipiton STEWARDSHIP, maddness,
 ashishki, tsukeno, Hermes) ke P0 gaps: log-scale channel scoring + 30-din dead
@@ -419,7 +422,7 @@ repeated-claim labels; stdlib-only, local-only, policy barqarar.
 
 ---
 
-## 24. PHASE REVIEW — PHASE 31 — BLUF, Honest Absence, Progress Edit, Top-Class Ops (2.11.0)
+## 24. PHASE REVIEW — PHASE 31 — BLUF, Honest Absence, Progress Edit, Top-Class Ops (2.9.0)
 
 **TASK:** Explorer ke "top class" gaps: BLUF (TL;DR + 3-5 findings, poori report
 file), honest absence (no result vs fetch fail vs partial), `/new` context reset,
@@ -467,12 +470,10 @@ purane commands aliases, `/channels add/rm`, `/search`, `/research --deep`,
 | `tests/test_p0_p1_ux.py` | 19 regression tests (commands, routing, gate, stages, trace, explore) |
 
 **VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
-→ **Ran 475 tests — 2 failures** (`test_adapters_v2` / `test_governance` ka
-`len(policy.register()) == 33` ab 45 nahi hai — ye doosre agent ke commit
-`3286bc6` "source register me 12 legal/public institutional sources" ki wajah se
-hai; policy.py aur wo tests is agent ke ownership me hain). Meri files se mutaalliq
-sab tests green: `test_p0_p1_ux` 19/19, `test_telegram_bot`, `test_phase4_topclass`,
-`test_bot_hardening`, `test_lifetime_bot` OK.
+→ **Ran 494 tests — OK (1 skipped)**. `len(policy.register()) == 45` sahi hai
+(P2.1 ke 12 legal/public institutional sources, commit `3286bc6`). `VERSION`
+`2.9.0` par barqarar; `test_p0_p1_ux` 19/19, `test_telegram_bot`,
+`test_phase4_topclass`, `test_bot_hardening`, `test_lifetime_bot` sab green.
 
 **RESULT:** 6-command surface (`/research`, `/search`, `/channels`, `/explore`,
 `/status`, `/help`) + purane aliases; explore cards clickable links ke saath,
