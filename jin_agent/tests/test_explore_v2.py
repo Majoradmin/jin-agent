@@ -284,8 +284,9 @@ class TestDiscoveryQuery(unittest.TestCase):
     def test_scheduler_explore_passes_query_to_discovery(self):
         seen = {}
 
-        def fake_discovery(cfg, offline, query=""):
+        def fake_discovery(cfg, offline, query="", max_add=None):
             seen["query"] = query
+            seen["max_add"] = max_add
             return {"added": [], "dead": [], "counts": {"active": 0}}
 
         with mock.patch.object(scheduler.channels, "run_discovery",
@@ -296,6 +297,50 @@ class TestDiscoveryQuery(unittest.TestCase):
             out = scheduler.explore("python", config.load(), offline=True)
         self.assertEqual(seen.get("query"), "python")
         self.assertEqual(out["topic"], "python")
+
+    def test_scheduler_explore_forwards_max_add(self):
+        seen = {}
+
+        def fake_discovery(cfg, offline, query="", max_add=None):
+            seen["max_add"] = max_add
+            return {"added": [], "dead": [], "counts": {"active": 0}}
+
+        with mock.patch.object(scheduler.channels, "run_discovery",
+                               fake_discovery), \
+             mock.patch.object(scheduler.orchestrator, "digest",
+                               return_value={"saved": {},
+                                             "report": {"facts_count": 0}}):
+            scheduler.run_job("explore",
+                              {"query": "python", "max_add": 15},
+                              config.load(), offline=True)
+        self.assertEqual(seen.get("max_add"), 15)
+
+    def test_run_explore_passes_max_add_15(self):
+        seen = {}
+
+        def fake_job(kind, payload=None, cfg=None, offline=True):
+            seen.update(payload or {})
+            return _res()
+
+        api = FakeAPI()
+        with mock.patch.object(tb.scheduler, "run_job", fake_job):
+            tb._run_explore(42, "android security", "all", config.load(), api)
+        self.assertEqual(seen.get("max_add"), 15)
+
+    def test_fifteen_channel_cards_shown(self):
+        added = [f"ch{i:02d}" for i in range(1, 16)]
+        api = FakeAPI()
+        with mock.patch.object(tb.scheduler, "run_job",
+                               lambda *a, **k: _res(added=added)):
+            res = tb.dispatch(42, "/explore android security",
+                              {"telegram_chat_id": "42"}, api=api)
+        self.assertTrue(res["ok"])
+        cards = api.sent[-1][1]
+        self.assertEqual(cards.count("📡 Telegram"), 1)
+        for h in added:
+            self.assertIn("@" + h, cards)
+        # 16th channel kabhi show nahi hona chahiye
+        self.assertNotIn("@ch16", cards)
 
     def test_scheduler_explore_scope_web_skips_channel_probe(self):
         with mock.patch.object(scheduler.channels, "run_discovery") as rd, \

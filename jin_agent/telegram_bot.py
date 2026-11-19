@@ -808,7 +808,11 @@ EXPLORE_SCOPES = [
     ("oss", "📚 Open source"), ("deep", "🕶️ Deep web"),
 ]
 SCOPE_LABELS = {k: v for k, v in EXPLORE_SCOPES}
-_EXPLORE_GROUP_CAP = {"tg": 6, "web": 5, "oss": 5, "deep": 4}
+# Ek /explore run me 10-15 channels dikhao (user ne 10-15 maanga). Discovery
+# bhi utne hi candidates probe karti hai (EXPLORE_DISCOVERY_MAX_ADD).
+EXPLORE_DISCOVERY_MAX_ADD = 15
+_EXPLORE_GROUP_CAP = {"tg": EXPLORE_DISCOVERY_MAX_ADD, "web": 5, "oss": 5,
+                      "deep": 4}
 
 
 def _explore_topic_hash(topic: str) -> str:
@@ -1105,7 +1109,10 @@ def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
         return {"ok": True, "action": "explore_topics"}
     try:
         # Manual explore: asli discovery (network probes) chalao, topic ke saath.
-        res = scheduler.run_job("explore", {"query": topic, "scope": scope},
+        # max_add=15: ek run me 10-15 channels probe/dikhao.
+        res = scheduler.run_job("explore",
+                                {"query": topic, "scope": scope,
+                                 "max_add": EXPLORE_DISCOVERY_MAX_ADD},
                                 cfg, offline=False)
     except Exception as exc:
         api.send(chat_id, f"❌ Explore fail: {type(exc).__name__}: "
