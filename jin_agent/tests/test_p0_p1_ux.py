@@ -203,6 +203,7 @@ class TestProgressAndTrace(unittest.TestCase):
 class TestExploreGate(unittest.TestCase):
     def tearDown(self):
         tb._EXPLORE_PENDING.pop(42, None)
+        tb._EXPLORE_SHOWN.pop(42, None)
 
     def _res(self):
         return {
@@ -233,7 +234,8 @@ class TestExploreGate(unittest.TestCase):
         channels.add_channel("expch1", origin="auto")
         api = FakeAPI()
         with mock.patch.object(tb.scheduler, "run_job", lambda *a, **k: self._res()):
-            tb.dispatch(42, "/explore", {"telegram_chat_id": "42"}, api=api)
+            tb.dispatch(42, "/explore android security",
+                        {"telegram_chat_id": "42"}, api=api)
         # pehla item skip -> archive
         res = tb.handle_callback(42, "exp:skip:ch:expch1",
                                  {"telegram_chat_id": "42"}, api=api)
@@ -250,13 +252,16 @@ class TestExploreGate(unittest.TestCase):
     def test_explore_bulk_keep(self):
         api = FakeAPI()
         with mock.patch.object(tb.scheduler, "run_job", lambda *a, **k: self._res()):
-            tb.dispatch(42, "/explore", {"telegram_chat_id": "42"}, api=api)
+            tb.dispatch(42, "/explore android security",
+                        {"telegram_chat_id": "42"}, api=api)
         res = tb.handle_callback(42, "exp:keep:all",
                                  {"telegram_chat_id": "42"}, api=api)
         self.assertTrue(res["ok"])
-        self.assertEqual(res["kept"], 2)
+        # channel + site dono memory me (deep links bhi gate me shaamil)
+        self.assertGreaterEqual(res["kept"], 2)
         self.assertTrue(any(r["channel"] == "expch1" for r in channels.list_channels()))
-        self.assertEqual(channels.site_counts()["total"], 1)
+        self.assertTrue(any(s["url"] == "https://example.com/a"
+                            for s in channels.list_sites()))
 
 
 class TestStatusExploreBlock(unittest.TestCase):
@@ -265,7 +270,7 @@ class TestStatusExploreBlock(unittest.TestCase):
         res = tb.dispatch(42, "/status", {"telegram_chat_id": "42"}, api=api)
         self.assertTrue(res["ok"])
         text = api.sent[0][1]
-        self.assertIn("Channels:", text)
+        self.assertIn("Telegram:", text)
         self.assertIn("pending candidates", text)
         self.assertIn("Sources:", text)
         self.assertIn("Explore:", text)
