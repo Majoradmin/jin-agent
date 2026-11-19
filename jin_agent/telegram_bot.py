@@ -1041,6 +1041,46 @@ def last_explore_topic() -> str:
     return m.group(1).strip() if m else ""
 
 
+def source_health(sources: list[dict] | None = None) -> dict:
+    """Sources ka **non-overlapping** health breakdown (P36).
+
+    Purana hisaab overlap karta tha: ``status == "ok"`` magar ``fail_count > 0``
+    wala source ok aur fail dono buckets me gina jata tha (live bot ne
+    `45 ok / 1 fail (total 45)` dikhaya tha). Ab har source sirf ek bucket me:
+    ``disabled`` (enabled falsy) pehle, phir status ke mutabiq ``failed`` /
+    ``stale`` / ``ok``. ``auto`` (adapter wired) aur ``registry-only`` alag
+    honest ginatī hai — dono ka total hamesha ``len(sources)`` ke barabar.
+    """
+    if sources is None:
+        try:
+            sources = store.list_sources()
+        except Exception:
+            sources = []
+    buckets = {"ok": 0, "failed": 0, "stale": 0, "disabled": 0}
+    auto = registry_only = 0
+    failed: list[dict] = []
+    stale: list[dict] = []
+    for s in sources:
+        if s.get("auto"):
+            auto += 1
+        else:
+            registry_only += 1
+        if not s.get("enabled"):
+            buckets["disabled"] += 1
+            continue
+        status = str(s.get("status") or "ok") or "ok"
+        if status == "verification_failed":
+            buckets["failed"] += 1
+            failed.append(s)
+        elif status == "stale":
+            buckets["stale"] += 1
+            stale.append(s)
+        else:
+            buckets["ok"] += 1
+    return {"total": len(sources), "buckets": buckets, "auto": auto,
+            "registry_only": registry_only, "failed": failed, "stale": stale}
+
+
 def format_status_text(cfg: dict | None = None) -> str:
     """``/status`` — agent + Telegram + sites + sources + explore ka live hisaab."""
     cfg = cfg or config.load()
@@ -1052,14 +1092,8 @@ def format_status_text(cfg: dict | None = None) -> str:
         sites = channels_mod.site_counts()
     except Exception:
         sites = {}
-    try:
-        sources = store.list_sources()
-    except Exception:
-        sources = []
-    ok_src = sum(1 for s in sources if str(s.get("status") or "") == "ok")
-    fail_src = sum(1 for s in sources
-                   if int(s.get("fail_count") or 0) > 0
-                   or str(s.get("status") or "") == "verification_failed")
+    health = source_health()
+    b = health["buckets"]
     try:
         pending = channels_mod.pending_candidates()
     except Exception:
@@ -1075,13 +1109,25 @@ def format_status_text(cfg: dict | None = None) -> str:
         f"{ch.get('archived', 0)} archived / {ch.get('stale', 0)} stale",
         f"• Sites memory: {sites.get('total', 0)} "
         f"(is hafte {sites.get('week', 0)})",
-        f"• Sources: {ok_src} ok / {fail_src} fail (total {len(sources)})",
+        f"• Sources: {health['total']} total — {health['auto']} auto / "
+        f"{health['registry_only']} registry-only | "
+        f"{b['ok']} ok / {b['failed']} failed / {b['stale']} stale / "
+        f"{b['disabled']} disabled",
         f"• Explore: last {last or 'kabhi nahi'} · "
         f"scope {last_scope or 'n/a'} · pending candidates {pending}",
         f"• Aakhri explore: {last_topic or 'kabhi nahi'}",
-        "",
-        "Explore: /explore <topic> (ya /explore se topic chunein)",
     ]
+    # Fail/stale source ka naam + wajah — hisaab chhota rehne par bhi khabar
+    # saaf honi chahiye (kaunsa source, kyun band).
+    for row in health["failed"]:
+        name = str(row.get("name") or row.get("key") or "source")
+        err = util.truncate(row.get("last_error") or "wajah darj nahi", 80)
+        lines.append(f"  ✗ {util.truncate(name, 60)}: {err}")
+    for row in health["stale"]:
+        name = str(row.get("name") or row.get("key") or "source")
+        err = util.truncate(row.get("last_error") or "verification purana", 80)
+        lines.append(f"  ⏳ {util.truncate(name, 60)}: {err}")
+    lines += ["", "Explore: /explore <topic> (ya /explore se topic chunein)"]
     return "\n".join(lines)
 
 
@@ -1551,6 +1597,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         except Exception:
             ch = {}
         text_status = format_status_text(cfg)
+        health = source_health()
+        b = health["buckets"]
         api.send(chat_id, text_status)
         return {"ok": True, "action": "status", "poll_failures": int(_poll_failures),
                 "channels_active": int(ch.get("active") or 0),
@@ -1562,7 +1610,12 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
                 "last_explore_scope": last_explore_scope(),
                 "last_explore_topic": last_explore_topic(),
                 "sites": channels_mod.site_counts().get("total", 0),
-                "sites_week": channels_mod.site_counts().get("week", 0)}
+                "sites_week": channels_mod.site_counts().get("week", 0),
+                "sources_total": health["total"],
+                "sources_ok": b["ok"], "sources_failed": b["failed"],
+                "sources_stale": b["stale"], "sources_disabled": b["disabled"],
+                "sources_auto": health["auto"],
+                "sources_registry_only": health["registry_only"]}
     if cmd == "sources":
         api.send(chat_id, f"Sources register open hai ({len(policy.register())} official/legal sources). "
                           f"/research <sawal> se detail.")
