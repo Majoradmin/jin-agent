@@ -45,6 +45,27 @@ RECOMMENDATIONS = {
     "World": "Aik se zyada sources se tasdeeq ke baghair customer ko natija na dein.",
 }
 
+# P1.6 - 12 variti categories ko 4 beginner-friendly buckets me group karo.
+# Report sirf 4 heading dikhata hai; asli category har item ki metadata me
+# rehti hai, is liye detail qayam hai. config.TOPICS waise ke waise rehte hain.
+CATEGORY_BUCKETS: dict[str, tuple[str, ...]] = {
+    "Technical": ("Mobile & Firmware", "Android", "iOS", "AI & Local LLM",
+                  "Hardware & Chipsets", "Tools & Reverse Engineering", "Telecom"),
+    "Security": ("Security",),
+    "Science & World": ("Science", "World", "Business & Policy"),
+    "Watchlist": ("Custom Watchlist",),
+}
+BUCKET_ORDER: tuple[str, ...] = tuple(CATEGORY_BUCKETS)
+
+
+def bucket_for(category: str) -> str:
+    """Item category ka beginner bucket. Na-maloom category Watchlist hai."""
+    cat = str(category or "Custom Watchlist").strip()
+    for bucket, members in CATEGORY_BUCKETS.items():
+        if cat in members:
+            return bucket
+    return "Watchlist"
+
 
 def display_source(item: dict) -> str:
     """A synthetic fixture is never presented as a real publisher attribution."""
@@ -143,40 +164,48 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
         if not items:
             lines += ["Is query par koi item nahi mila. Offline ya network failure ki soorat "
                       "mein agent khali natija deta hai, koi banawati khabar nahi banata.", ""]
-        for category in sorted(categories):
-            rows = categories[category][:5]
-            lines += [f"### {category}", ""]
-            for item in rows:
-                meta = item.get("meta") or {}
-                if item.get("cross_verified"):
-                    cross = "yes"
-                elif meta.get("offline") or item.get("link_only"):
-                    cross = "no (offline fixture / link-only: independent corroboration nahi)"
-                else:
-                    cross = "no"
-                lines += [
-                    f"- **{item.get('title', '')}**",
-                    (f"  - Source: {display_source(item)} | Tier: {item.get('tier', '')} | "
-                     f"Date checked: {item.get('date_checked', '')} | "
-                     f"Published: {item.get('published') or 'n/a'} | "
-                     f"Confidence: {item.get('confidence', 0)} | "
-                     f"Trust: {item.get('trust_label', '')} | Score: {item.get('score', 0)}"),
-                    f"  - URL: {item.get('url', '')}",
-                    f"  - Khulasa: {khulasa(item)}",
-                    (f"  - Why it matters: {HINTS.get(category, HINTS['Custom Watchlist'])}"),
-                    (f"  - Cross-verified: {cross}"),
-                    "",
-                ]
-                if item.get("also_sources"):
-                    label = ("Fixture replayed by" if meta.get("offline")
-                             else "Also reported by")
-                    lines.insert(
-                        len(lines) - 1,
-                        f"  - {label}: {', '.join(item['also_sources'])} "
-                        f"({item.get('duplicate_count', 1)} source records merged)",
-                    )
-            if len(categories[category]) > 5:
-                lines += [f"_Is category mein mazid {len(categories[category]) - 5} items archive mein hain._", ""]
+        buckets: dict[str, list[str]] = {}
+        for category in categories:
+            buckets.setdefault(bucket_for(category), []).append(category)
+        for bucket in BUCKET_ORDER:
+            members = buckets.get(bucket)
+            if not members:
+                continue
+            lines += [f"### {bucket}", ""]
+            for category in sorted(members):
+                rows = categories[category][:5]
+                for item in rows:
+                    meta = item.get("meta") or {}
+                    if item.get("cross_verified"):
+                        cross = "yes"
+                    elif meta.get("offline") or item.get("link_only"):
+                        cross = "no (offline fixture / link-only: independent corroboration nahi)"
+                    else:
+                        cross = "no"
+                    lines += [
+                        f"- **{item.get('title', '')}**",
+                        (f"  - Source: {display_source(item)} | Category: {category} | "
+                         f"Tier: {item.get('tier', '')} | "
+                         f"Date checked: {item.get('date_checked', '')} | "
+                         f"Published: {item.get('published') or 'n/a'} | "
+                         f"Confidence: {item.get('confidence', 0)} | "
+                         f"Trust: {item.get('trust_label', '')} | Score: {item.get('score', 0)}"),
+                        f"  - URL: {item.get('url', '')}",
+                        f"  - Khulasa: {khulasa(item)}",
+                        (f"  - Why it matters: {HINTS.get(category, HINTS['Custom Watchlist'])}"),
+                        (f"  - Cross-verified: {cross}"),
+                        "",
+                    ]
+                    if item.get("also_sources"):
+                        label = ("Fixture replayed by" if meta.get("offline")
+                                 else "Also reported by")
+                        lines.insert(
+                            len(lines) - 1,
+                            f"  - {label}: {', '.join(item['also_sources'])} "
+                            f"({item.get('duplicate_count', 1)} source records merged)",
+                        )
+                if len(categories[category]) > 5:
+                    lines += [f"_{category} mein mazid {len(categories[category]) - 5} items archive mein hain._", ""]
         repeated = verifier.repeated_claims(items)
         if repeated:
             lines += ["## Repeated Claims", ""]
