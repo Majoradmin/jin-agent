@@ -61,6 +61,20 @@ class TestOperators(unittest.TestCase):
         self.assertEqual(dorks.tg("android"),
                          "site:t.me/s android -twitter -instagram")
 
+    def test_tg_existing_site_not_duplicated(self):
+        # query me pehle se site:t.me/s ho to dobara na jodo
+        self.assertEqual(dorks.tg("site:t.me/s android"),
+                         "site:t.me/s android -twitter -instagram")
+        # case-insensitive talaash; site: ke baad ka hissa barqarar
+        self.assertEqual(dorks.tg("SITE:T.ME/S Android"),
+                         "SITE:T.ME/S Android -twitter -instagram")
+
+    def test_tg_normal_case_unchanged(self):
+        self.assertEqual(dorks.tg("android"),
+                         "site:t.me/s android -twitter -instagram")
+        self.assertEqual(dorks.tg("firmware update"),
+                         "site:t.me/s firmware update -twitter -instagram")
+
     def test_other_presets(self):
         self.assertEqual(dorks.pdf("x"), 'filetype:pdf "x"')
         self.assertEqual(dorks.gov("x"), 'site:gov "x"')

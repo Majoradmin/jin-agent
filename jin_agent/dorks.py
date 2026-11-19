@@ -55,9 +55,19 @@ def build(query: str, ops=()) -> str:
 # Presets
 # --------------------------------------------------------------------------
 
+_SITE_TG_RE = re.compile(r"\bsite:t\.me/s\b", re.I)
+
+
 def tg(query: str) -> str:
-    """Telegram public channel dork."""
-    return f'site:t.me/s {query} -twitter -instagram'
+    """Telegram public channel dork.
+
+    Query me pehle se ``site:t.me/s`` ho to dobara na jodo (case-insensitive);
+    ``site:t.me/s android`` -> ``site:t.me/s android -twitter -instagram``.
+    """
+    q = str(query or "").strip()
+    if _SITE_TG_RE.search(q):
+        return exclude(q, ("twitter", "instagram"))
+    return exclude(f"site:t.me/s {q}", ("twitter", "instagram"))
 
 
 def pdf(query: str) -> str:
