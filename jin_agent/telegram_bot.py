@@ -881,6 +881,9 @@ def _explore_channel_item(handle: str, rows: dict) -> dict:
             "score": int(row.get("score") or 0),
             "subs": str(row.get("subscribers") or ""),
             "status": str(row.get("status") or "active"),
+            # run_discovery active + score>=min ko origin='auto' se tg_channels
+            # me save karta hai — card par saaf dikhao.
+            "auto_saved": True,
             "url": "https://t.me/" + str(handle),
             "label": "@" + str(handle)}
 
@@ -969,6 +972,8 @@ def format_explore_cards_v2(topic: str, scope: str, groups: dict) -> str:
                                     (str(it.get("subs") or "") + " subs")
                                     if it.get("subs") else "",
                                     str(it.get("status") or "active")) if b]
+                if it.get("auto_saved"):
+                    bits.append("auto-save ✅")  # run_discovery ne memory me rakha
                 lines.append(f"{i}. {title} — @{it.get('handle')}")
                 lines.append(f"   {' · '.join(bits)}")
             else:

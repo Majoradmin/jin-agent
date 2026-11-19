@@ -214,6 +214,29 @@ class TestScopes(unittest.TestCase):
         self.assertIn("📡 Telegram", api.sent[-1][1])
 
 
+class TestAutoSaveBadge(unittest.TestCase):
+    """"run_discovery ne auto-save kiya — card par saaf dikhao."""
+
+    def setUp(self):
+        tb._EXPLORE_PENDING.pop(42, None)
+        tb._EXPLORE_SHOWN.pop(42, None)
+        tb._EXPLORE_TOPICS.clear()
+
+    def tearDown(self):
+        tb._EXPLORE_PENDING.pop(42, None)
+        tb._EXPLORE_SHOWN.pop(42, None)
+
+    def test_channel_card_shows_auto_save(self):
+        api = FakeAPI()
+        with mock.patch.object(tb.scheduler, "run_job",
+                               lambda *a, **k: _res(added=["autosave_ch"])):
+            tb.dispatch(42, "/explore android security",
+                        {"telegram_chat_id": "42"}, api=api)
+        cards = api.sent[-1][1]
+        self.assertIn("@autosave_ch", cards)
+        self.assertIn("auto-save ✅", cards)
+
+
 class TestStatusBlock(unittest.TestCase):
     def test_status_has_full_explore_block(self):
         api = FakeAPI()
