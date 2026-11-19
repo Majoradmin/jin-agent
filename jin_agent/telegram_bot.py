@@ -1009,9 +1009,11 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
         if drained:
             print(f"[bot] startup drain: {drained} pending update(s) skip", flush=True)
     except Exception as exc:
-        offset = int(POLL_OFFSET)
+        # KHABARDAAR: offset ko 0 par reset NAHI karte — warna restart ke baad saari
+        # pending updates dobara process hoti thin (duplicate reports + 429 flood).
+        # Aakhri kaamyaab offset hi rehta hai.
         print(f"[bot] startup drain fail ({type(exc).__name__}: {exc}); "
-              f"offset={offset} se shuru", flush=True)
+              f"offset={offset} se shuru (reset nahi kiya)", flush=True)
     # --- END STARTUP DRAIN ---
 
     # Chat allowlist: unset = allow-all (first-run). Production me ye amnitarian

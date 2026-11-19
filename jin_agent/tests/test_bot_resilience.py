@@ -67,6 +67,31 @@ class TestPollOffset(unittest.TestCase):
         self.assertEqual(api.offsets[2], 4)
         self.assertEqual(api.offsets[-1], 4)
 
+    def test_drain_fail_keeps_last_offset(self):
+        """Drain fail hone par offset 0 par reset NAHI hona chahiye.
+
+        Purana code except block me `offset = int(POLL_OFFSET)` karta tha — jab
+        drain ke doran error aati, aakhri kaamyaab offset bhi 0 par chala jata,
+        to restart ke baad saari pending updates dobara process hoti thin (report
+        dobara + 429 flood). Kaamyaab offset wahin rehna chahiye.
+        """
+        api = FakeAPI([[{"update_id": 7}], []])
+        calls = {"n": 0}
+        real = api.get_updates
+
+        def get_updates(offset, timeout=None):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("drain fail")
+            return real(offset, timeout)
+
+        api.get_updates = get_updates
+        tb.run("tok", cfg={"telegram_chat_id": "1"}, api=api, stop=api.stop)
+        # offsets: drain 0 -> (fail) 8 -> poll 8. Zero hona mana hai.
+        self.assertNotIn(0, api.offsets[1:])
+        self.assertEqual(api.offsets[0], 0)
+        self.assertEqual(api.offsets[-1], 8)
+
 
 class TestProxyConfig(unittest.TestCase):
     def _http_proxy(self, op):
