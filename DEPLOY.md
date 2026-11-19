@@ -78,6 +78,11 @@ Jawab (HTTP 200):
 Telegram se `/status` bhejo — bot ko jawab milna chahiye. Log:
 `jin_agent/data/logs/supervisor.log`.
 
+Pehle startup par bot Telegram ke `/` menu me 6 commands bhi set karta hai
+(Bot API `setMyCommands`, best-effort): `/research`, `/search`, `/channels`,
+`/explore`, `/status`, `/help`. `/explore` ke cards par ✅/❌ se channel/site
+memory me rakhna ya skip karna hota hai; `/status` me explore block dikhta hai.
+
 ---
 
 ## Render

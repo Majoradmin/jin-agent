@@ -47,6 +47,31 @@ ka server `8765` par alag rehta hai; dono aik saath chal sakte hain.
 | `llm` | Local model probe |
 | `channels` | Telegram channel registry: list / `--add <handle>` / `--remove <handle>` (archive, delete nahi) / `--check *` (liveness) / `--discover` (ek cycle) |
 
+### Telegram Bot Commands (P32)
+
+6 canonical commands — Telegram ke `/` menu me bhi (Bot API `setMyCommands`,
+startup par ek dafa, best-effort):
+
+| Command | Kaam |
+|---|---|
+| `/research <sawal> [--deep]` | Research + Roman Urdu report; `--deep` dark/deep engines links jodta hai |
+| `/search <keyword>` | Saved channels ke andar search |
+| `/channels` | Saved channels ki list + clickable `t.me` links |
+| `/channels add <link>` | Channel memory me rakho (✅/❌ confirm gate) |
+| `/channels rm <@handle>` | Channel archive (delete nahi) |
+| `/explore [topic]` | Channels + sites discovery, scored cards, har item par ✅ rakhna / ❌ skip gate |
+| `/status` | Agent + explore block: channels active/dead/archived/stale, sites, sources ok/fail, last explore, pending candidates |
+| `/help` | Yeh menu |
+
+Seedha matn (bina `/`) bhi `/research` ban jata hai; link ya `@handle` ya channel
+post forward `/addchannel` hi rakha jata hai. Purane commands (`/addchannel`,
+`/rmchannel`, `/tgsearch`, `/deep`, `/engines`, `/memory`, `/stop`, `/new`,
+`/digest`, `/reports`, `/alerts`, `/schedule`, `/channelhealth`, `/memoryaudit`,
+`/selftest`) aliases ki tarah chalte hain. Research ke dauran Plan → Sources →
+Fetch → Verify → Brief → Deliver stages wahi status message edit hote hain
+(3s throttle, Telegram 20/min ke andar), aur BLUF/caption me local trace path
+`data/runs/<id>.json` dikhta hai.
+
 ### Channel Auto-Discovery (P23)
 
 Agent khud informative Telegram channels dhoondta hai — user ke channel naam

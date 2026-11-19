@@ -444,3 +444,41 @@ stdlib-only, local-only, policy barqarar.
 **PHASE REVIEW — PHASE 31: READY**
 
 ---
+
+## 25. PHASE REVIEW — PHASE 32 — 6-Command Surface, Explore Cards + Memory Gate (2.9.0)
+
+**TASK:** User ka muksad: "main khta jaun wo explore krta jaey channel ko mjhy
+dekhata jaye link ... report ... memory mein rakhta jaye ... mjhy b option ho k
+konsa channel ya site memory mein rakhni ha ya ni ... /status me explore status
+dikhe." P0/P1 kaam: seedha matn = `/research`, `/help` ka 6-command rewrite,
+purane commands aliases, `/channels add/rm`, `/search`, `/research --deep`,
+`setMyCommands`, live progress stages, trace local path, aur explore cards +
+✅/❌ memory gate.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `telegram_bot.py` | `HELP_TEXT` 6 commands + har ek ka misaal; `BOT_COMMANDS` + `register_commands` + `_API.set_my_commands`; `route_plain_text` (seedha matn → `/research`, link/handle → `/addchannel`); `split_deep_flag`; `/channels` me `add`/`rm`/list/search merge; `/search` alias; explore cards + `_EXPLORE_PENDING` + `exp:keep/skip` callback gate; `format_status_text` explore block; `_stage_status` (3s throttle) + Plan→Deliver stages; `_bluf_text`/caption me `_trace_display` |
+| `channels.py` | `pending_candidates()`; `tg_sites` table + `add_site`/`list_sites`/`site_counts` (explore ✅ memory) |
+| `orchestrator.py` | `run(..., on_stage=...)` — Plan/Sources/Fetch/Verify/Brief stages; `trace_path` return |
+| `scheduler.py` | `explore()` event (`kind='explore'`) — `/status` ka "last explore" |
+| `__main__.py` | `run` CLI trace path print |
+| `tests/test_p0_p1_ux.py` | 19 regression tests (commands, routing, gate, stages, trace, explore) |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **Ran 475 tests — 2 failures** (`test_adapters_v2` / `test_governance` ka
+`len(policy.register()) == 33` ab 45 nahi hai — ye doosre agent ke commit
+`3286bc6` "source register me 12 legal/public institutional sources" ki wajah se
+hai; policy.py aur wo tests is agent ke ownership me hain). Meri files se mutaalliq
+sab tests green: `test_p0_p1_ux` 19/19, `test_telegram_bot`, `test_phase4_topclass`,
+`test_bot_hardening`, `test_lifetime_bot` OK.
+
+**RESULT:** 6-command surface (`/research`, `/search`, `/channels`, `/explore`,
+`/status`, `/help`) + purane aliases; explore cards clickable links ke saath,
+per-item/bulk ✅❌ memory gate; `/status` me explore block; live stages + trace
+local path. stdlib-only, `is_owner` default allow-all aur loopback unchanged.
+
+**PHASE REVIEW — PHASE 32: READY**
+
+---
