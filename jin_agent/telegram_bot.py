@@ -16,6 +16,7 @@ Boundary (Sahulat & Safe Service Policy / C12 / C13 / C27):
 from __future__ import annotations
 
 import contextlib
+import inspect
 import json
 import os
 import re
@@ -104,32 +105,37 @@ def _telegram_retry_after(exc: urllib.error.HTTPError) -> int:
 DEFAULT_UPDATE_WORKERS = 2
 MAX_UPDATE_WORKERS = 16
 HELP_TEXT = (
-    "Salam! Main aap ka JIN Agent hoon.\n\n"
-    "/research <sawal> - agent research karo aur Roman Urdu report bhej do\n"
-    "/stop - chal rahi research rok do\n"
-    "/status - agent status\n"
-    "/sources - legal source register\n"
-    "/channels - aap ke saved channels (add + 1-click links)\n"
-    "/addchannel <link> - channel save karo (post forward bhi kar sakte hain)\n"
-    "/rmchannel <@handle> - channel archive karo\n"
-    "/tgsearch <keyword> - saved channels ke ANDAR search\n"
-    "/engines - Telegram search engines ke 1-click links\n"
-    "/deep [keyword] - dark/deep web search engines ke links\n"
-    "/memory - pehle use ho chuke sources (rounds)\n"
-    "/explore [topic] - channels/sources explore + scored digest\n"
-    "/new - naya context (purana research memory band)\n"
-    "/digest - daily digest (local archive)\n"
-    "/alerts - recent alerts\n"
-    "/reports - recent reports\n"
-    "/schedule - scheduler intervals\n"
-    "/channelhealth - channel health (alive magar khamosh)\n"
-    "/memoryaudit - memory duplicate/conflict/stale scan\n"
-    "/selftest - parser-drift selftest\n"
-    "/help - yeh menu\n\n"
+    "Salam! Main aap ka JIN Agent hoon. 6 commands:\n\n"
+    "/research <sawal> — research + Roman Urdu report\n"
+    "  Misal: /research mediatek firmware unlock\n"
+    "/search <keyword> — saved channels ke andar search\n"
+    "  Misal: /search firmware\n"
+    "/channels — saved channels ki list + clickable links, add/rm\n"
+    "  Misal: /channels add https://t.me/durov  (hataana: /channels rm @durov)\n"
+    "/explore [topic] — channels + sites explore + scored report\n"
+    "  Misal: /explore android security\n"
+    "/status — agent + explore ka live status\n"
+    "  Misal: /status\n"
+    "/help — yeh menu\n"
+    "  Misal: /help\n\n"
+    "Seedha matn bhi likh sakte hain — wo /research ban jata hai. "
+    "Purane commands bhi chalte hain: /addchannel, /rmchannel, /tgsearch, "
+    "/deep, /engines, /memory, /stop, /new, /digest, /reports, /alerts, "
+    "/schedule, /channelhealth, /memoryaudit, /selftest.\n\n"
     "Har report ke baad bot poochta hai: mil gaya ya nahi. 'Nahi mila' par naye "
     "sources/channels try hote hain (purane skip). Policy SAHULAT-SAFE-SERVICE-v1; "
     "dark web links-only; Telegram public only."
 )
+
+# Telegram "/" menu ke liye 6 canonical commands (Bot API setMyCommands).
+BOT_COMMANDS = [
+    {"command": "research", "description": "Research + report — /research <sawal>"},
+    {"command": "search", "description": "Saved channels me search — /search <keyword>"},
+    {"command": "channels", "description": "Channels list/add/rm — /channels"},
+    {"command": "explore", "description": "Channels + sites explore — /explore [topic]"},
+    {"command": "status", "description": "Agent + explore status — /status"},
+    {"command": "help", "description": "Command menu — /help"},
+]
 
 # Sirf public preview (t.me/s + t.me/<handle>) - login/userbot nahi.
 TG_SEARCH_ENGINES = [
@@ -175,6 +181,11 @@ CMD_RE = re.compile(r"^/([A-Za-z0-9_]{1,20})(?:@[\w_]{1,20})?\s*(.*)$", re.S)
 _LINK_ONLY_RE = re.compile(
     r"(?:https?://)?(?:t\.me|telegram\.me)/(?:s/)?@?[A-Za-z0-9_]{3,40}/?", re.I)
 _HANDLE_ONLY_RE = re.compile(r"@[A-Za-z0-9_]{3,40}")
+# ``/research <sawal> --deep`` flag (deep engines links report ke saath).
+_DEEP_FLAG_RE = re.compile(r"(?:^|\s)--deep\s*$", re.I)
+# Explore confirm gate: exp:keep:ch:<handle> / exp:skip:st:<idx> / :all
+_EXPLORE_CB_RE = re.compile(
+    r"^exp:(keep|skip):(all|ch:[A-Za-z0-9_]{3,40}|st:\d{1,4})$")
 
 # Global stop flag — /stop command set karta hai, research thread check karti hai.
 # Sirf bool se kaam nahi chalta: do concurrent /research (ya research + /stop)
@@ -194,6 +205,12 @@ _poll_failures = 0
 _pending_add: dict[int, str] = {}
 # Progress edit-in-place (StatusTracker pattern): chat_id -> message_id.
 _STATUS_MESSAGES: dict[int, int] = {}
+# Progress edit throttle: chat_id -> aakhri edit ka monotonic waqt. Telegram
+# ~20 edit/min limit hai; stage edits 3s se kam na hon (20/min ke andar).
+_STATUS_LAST_EDIT: dict[int, float] = {}
+STATUS_EDIT_MIN_GAP = 3.0
+# Explore confirm gate: chat_id -> {item_key: item} (✅ rakhna / ❌ nahi).
+_EXPLORE_PENDING: dict[int, dict[str, dict]] = {}
 # Group/chat rate limit: chat_id -> sliding window of dispatch timestamps.
 _GROUP_HITS: dict[int, list[float]] = {}
 GROUP_RATE_LIMIT = 20
@@ -293,6 +310,43 @@ def parse_command(text: str) -> tuple[str, str]:
     if not m:
         return "unknown", s
     return m.group(1).lower(), (m.group(2) or "").strip()
+
+
+def route_plain_text(text: str, forwarded: str = "") -> str:
+    """Bina ``/`` wala matn: link/handle -> /addchannel, baqi -> /research.
+
+    User ka hukm: seedha sawal likhna bhi research chalaye; magar link ya
+    @handle, ya channel post forward, abhi bhi /addchannel hi rakha jaye.
+    """
+    s = str(text or "").strip()
+    if not s:
+        return ""
+    if forwarded:
+        return "/addchannel @" + forwarded
+    if _LINK_ONLY_RE.fullmatch(s) or _HANDLE_ONLY_RE.fullmatch(s):
+        return "/addchannel " + s
+    return "/research " + s
+
+
+def split_deep_flag(arg: str) -> tuple[str, bool]:
+    """``/research <sawal> --deep`` -> (sawal, deep). Flag hamesha aakhir me."""
+    s = str(arg or "").strip()
+    m = _DEEP_FLAG_RE.search(s)
+    if not m:
+        return s, False
+    return s[:m.start()].strip(), True
+
+
+def register_commands(api, commands: list[dict] | None = None) -> bool:
+    """Bot API ``setMyCommands`` — startup par ek dafa. Best-effort.
+
+    Purane/fake API jis me ye method nahi, wahan chupchaap skip.
+    """
+    fn = getattr(api, "set_my_commands", None)
+    if not callable(fn):
+        return False
+    fn(list(commands if commands is not None else BOT_COMMANDS))
+    return True
 
 
 def split_text(text: str, limit: int = SEND_CHUNK_LIMIT) -> list[str]:
@@ -543,6 +597,212 @@ def format_explore(res: dict) -> str:
     return "\n".join(lines)
 
 
+def format_explore_cards(topic: str, chan_items: list[dict],
+                         site_items: list[dict]) -> str:
+    """Explore digest + clickable cards (naam, @handle, link, score, subs, status)."""
+    lines = [f"🧭 Explore: {util.truncate(topic, 90)}", ""]
+    if chan_items:
+        lines.append(f"📡 Naye channels ({len(chan_items)}):")
+        for i, it in enumerate(chan_items, 1):
+            bits = [b for b in (f"score {it.get('score', 0)}",
+                                (str(it.get("subs") or "") + " subs") if it.get("subs") else "",
+                                str(it.get("status") or "active")) if b]
+            lines.append(f"{i}. {util.truncate(str(it.get('title') or it.get('handle')), 70)}"
+                         f" — @{it.get('handle')}")
+            lines.append(f"   {' · '.join(bits)}")
+            lines.append(f"   {it.get('url')}")
+        lines.append("")
+    if site_items:
+        lines.append(f"🌐 Sites / sources ({len(site_items)}):")
+        start = len(chan_items) + 1
+        for j, it in enumerate(site_items, start):
+            src = f" · {it['source']}" if it.get("source") else ""
+            lines.append(f"{j}. {util.truncate(str(it.get('title') or it.get('url')), 80)}{src}")
+            lines.append(f"   {it.get('url')}")
+        lines.append("")
+    if not chan_items and not site_items:
+        lines.append("Koi naya channel/site nahi mila.")
+    lines.append("✅ = memory me rakho · ❌ = skip. Bulk: ✅ Sab rakho / ❌ Kuch nahi.")
+    return "\n".join(lines)
+
+
+def parse_explore_callback(data: str) -> tuple[str, str]:
+    """``exp:keep:ch:<handle>`` / ``exp:skip:st:<idx>`` / ``exp:keep:all``."""
+    m = _EXPLORE_CB_RE.match(str(data or "").strip())
+    if not m:
+        return "", ""
+    return m.group(1), m.group(2)
+
+
+def _keep_explore_item(item: dict, cfg: dict | None = None) -> None:
+    """Confirm gate ✅: channel registry / site memory me rakho."""
+    if not isinstance(item, dict):
+        return
+    if item.get("kind") == "channel":
+        try:
+            channels_mod.add_channel(str(item.get("handle") or ""),
+                                     origin="manual", note="explore confirm")
+        except Exception:
+            pass
+    else:
+        try:
+            channels_mod.add_site(str(item.get("url") or ""),
+                                  title=str(item.get("title") or ""),
+                                  source=str(item.get("source") or ""),
+                                  topic=str(item.get("topic") or ""))
+        except Exception:
+            pass
+
+
+def _skip_explore_item(item: dict, cfg: dict | None = None) -> None:
+    """Confirm gate ❌: channel archive (delete nahi), site memory se nahi rakha."""
+    if isinstance(item, dict) and item.get("kind") == "channel":
+        try:
+            channels_mod.remove_channel(str(item.get("handle") or ""))
+        except Exception:
+            pass
+
+
+def _handle_explore_callback(chat_id: int, action: str, key: str,
+                             cfg: dict, api) -> dict:
+    """Explore ke ✅/❌ buttons (per-item aur bulk)."""
+    items = _EXPLORE_PENDING.get(int(chat_id)) or {}
+    if key == "all":
+        kept = skipped = 0
+        for item in list(items.values()):
+            if action == "keep":
+                _keep_explore_item(item, cfg)
+                kept += 1
+            else:
+                _skip_explore_item(item, cfg)
+                skipped += 1
+        _EXPLORE_PENDING.pop(int(chat_id), None)
+        mark = "✅" if action == "keep" else "❌"
+        api.send(chat_id, f"{mark} Bulk explore: {kept} memory me, {skipped} skip.")
+        return {"ok": True, "action": "explore_bulk",
+                "kept": kept, "skipped": skipped}
+    item = items.get(key)
+    if not item:
+        api.send(chat_id, "Purana explore gate hai. Naya /explore karein.")
+        return {"ok": False, "action": "explore", "error": "expired"}
+    items.pop(key, None)
+    label = str(item.get("label") or item.get("title") or key)
+    if action == "keep":
+        _keep_explore_item(item, cfg)
+        api.send(chat_id, f"✅ {util.truncate(label, 60)} memory me rakh liya.")
+        return {"ok": True, "action": "explore_keep", "kind": item.get("kind")}
+    _skip_explore_item(item, cfg)
+    api.send(chat_id, f"❌ {util.truncate(label, 60)} skip kar diya.")
+    return {"ok": True, "action": "explore_skip", "kind": item.get("kind")}
+
+
+def _send_explore_gate(chat_id: int, topic: str, res: dict, cfg: dict,
+                       api) -> dict:
+    """Discovery ke naye channels/sites ko cards + ✅/❌ confirm gate ke saath bhejo."""
+    disc = (res or {}).get("discovery") or {}
+    added = disc.get("added") or []
+    try:
+        rows = {r["channel"]: r for r in channels_mod.list_channels()}
+    except Exception:
+        rows = {}
+    chan_items: list[dict] = []
+    for handle in added[:10]:
+        row = rows.get(handle) or {}
+        chan_items.append({
+            "kind": "channel", "key": "ch:" + str(handle),
+            "handle": str(handle),
+            "title": str(row.get("title") or handle),
+            "score": int(row.get("score") or 0),
+            "subs": str(row.get("subscribers") or ""),
+            "status": str(row.get("status") or "active"),
+            "url": "https://t.me/" + str(handle),
+            "label": "@" + str(handle),
+        })
+    site_items: list[dict] = []
+    for it in ((res or {}).get("scored") or [])[:8]:
+        url = str(it.get("url") or "").strip()
+        if not url:
+            continue
+        site_items.append({
+            "kind": "site", "key": "st:" + str(len(site_items)),
+            "title": str(it.get("title") or url),
+            "source": str(it.get("source") or ""),
+            "url": url, "topic": topic,
+            "label": str(it.get("source") or "site"),
+        })
+    items = chan_items + site_items
+    if not items:
+        api.send(chat_id, f"🧭 Explore: {util.truncate(topic, 80)}\n\n"
+                          f"Koi naya channel/site nahi mila. Dobara /explore karein.")
+        return {"ok": False, "action": "explore_empty", "items": 0}
+    _EXPLORE_PENDING[int(chat_id)] = {it["key"]: it for it in items}
+    buttons: list[list[dict]] = []
+    for it in items:
+        buttons.append([
+            {"text": "✅ " + it["label"][:20],
+             "callback_data": "exp:keep:" + it["key"]},
+            {"text": "❌", "callback_data": "exp:skip:" + it["key"]},
+        ])
+    buttons.append([
+        {"text": "✅ Sab rakho", "callback_data": "exp:keep:all"},
+        {"text": "❌ Kuch nahi", "callback_data": "exp:skip:all"},
+    ])
+    api.send(chat_id, format_explore_cards(topic, chan_items, site_items),
+             buttons=buttons)
+    return {"ok": True, "action": "explore_gate", "items": len(items),
+            "channels": len(chan_items), "sites": len(site_items)}
+
+
+def last_explore_at() -> str:
+    """Aakhri explore event ka ts (``/status`` ke liye); na ho to ""."""
+    try:
+        for e in store.list_events(200):
+            if str(e.get("kind") or "") == "explore":
+                return str(e.get("ts") or "")
+    except Exception:
+        pass
+    return ""
+
+
+def format_status_text(cfg: dict | None = None) -> str:
+    """``/status`` — agent + channels + explore + sources ka live hisaab."""
+    cfg = cfg or config.load()
+    try:
+        ch = channels_mod.counts()
+    except Exception:
+        ch = {}
+    try:
+        sites = channels_mod.site_counts()
+    except Exception:
+        sites = {}
+    try:
+        sources = store.list_sources()
+    except Exception:
+        sources = []
+    ok_src = sum(1 for s in sources if str(s.get("status") or "") == "ok")
+    fail_src = sum(1 for s in sources
+                   if int(s.get("fail_count") or 0) > 0
+                   or str(s.get("status") or "") == "verification_failed")
+    try:
+        pending = channels_mod.pending_candidates()
+    except Exception:
+        pending = 0
+    last = last_explore_at()
+    lines = [
+        "📊 JIN Agent status",
+        f"• Policy: {cfg.get('policy_id') or 'SAHULAT-SAFE-SERVICE-v1'}",
+        f"• Poll failures: {_poll_failures}",
+        f"• Channels: {ch.get('active', 0)} active / {ch.get('dead', 0)} dead / "
+        f"{ch.get('archived', 0)} archived / {ch.get('stale', 0)} stale",
+        f"• Sites memory: {sites.get('total', 0)}",
+        f"• Sources: {ok_src} ok / {fail_src} fail (total {len(sources)})",
+        f"• Explore: last {last or 'kabhi nahi'} · pending candidates {pending}",
+        "",
+        "Explore chalane ke liye: /explore [topic]",
+    ]
+    return "\n".join(lines)
+
+
 def _socks5_target(cfg: dict | None = None):
     """(host, port, user, pass) agar SOCKS5 configured hai, warna None."""
     cfg = cfg or config.load()
@@ -751,6 +1011,12 @@ def _api(token: str, cfg: dict | None = None):
             return self._checked(self._post("/editMessageText", payload, 60),
                                  "editMessageText")
 
+        def set_my_commands(self, commands: list[dict], timeout: int = 30) -> dict:
+            """Telegram ke "/" menu me 6 canonical commands dikhao (startup par)."""
+            return self._checked(self._post("/setMyCommands",
+                                            {"commands": commands}, timeout),
+                                 "setMyCommands")
+
         def answer_callback(self, callback_id: str, text: str = "") -> dict:
             payload = {"callback_query_id": str(callback_id),
                        "text": str(text)[:200]}
@@ -806,7 +1072,8 @@ def format_channel_section(items: list[dict], failed: list | None = None) -> str
 
 
 def research_full(query: str, cfg: dict | None = None, save: bool = True,
-                  live: bool = True, skip_sources=None, skip_channels=None) -> dict:
+                  live: bool = True, skip_sources=None, skip_channels=None,
+                  on_stage=None) -> dict:
     """Web adapters + saved-channel search PARALLEL, ek hi markdown report.
 
     Returns ``{"ok", "markdown", "sources", "channels", "error"}``.
@@ -822,7 +1089,7 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
     pool = ThreadPoolExecutor(max_workers=2)
     try:
         f_web = pool.submit(orchestrator.run, q, live, 7, 25, None, cfg, save,
-                            skip_sources)
+                            skip_sources, on_stage=on_stage)
         f_tg = pool.submit(channels_mod.search_posts, q, saved, cfg, 8)
         out = f_web.result(timeout=180)
         try:
@@ -872,6 +1139,7 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
             "failed_channels": [str(f.get("channel")) for f in (tg.get("failed") or [])
                                 if f.get("channel")],
             "report_path": str((out.get("saved") or {}).get("md") or ""),
+            "trace_path": str(out.get("trace_path") or ""),
             "confidence": float(metrics.get("confidence") or 0.0),
             "confidence_label": str(metrics.get("confidence_label") or "n/a"),
             "absence_kind": absence, "items": items}
@@ -943,6 +1211,39 @@ def _addchannel_now(chat_id: int, handle: str, cfg: dict, api,
             "alive": alive}
 
 
+def _ask_add_channel(chat_id: int, handle: str, api) -> dict:
+    """Channel add ka confirm gate (✅/❌) — ``/channels add`` aur ``/addchannel``."""
+    _pending_add[int(chat_id)] = handle
+    buttons = [[{"text": "✅ Confirm", "callback_data": f"add:ok:{handle}"},
+                {"text": "❌ Cancel", "callback_data": "add:no"}]]
+    api.send(chat_id, f"➕ Channel add karein?\n\n@{handle}\nhttps://t.me/{handle}\n\n"
+                      f"Save karne ke liye ✅ dabayein (cancel ❌).", buttons=buttons)
+    return {"ok": True, "action": "addchannel_pending", "channel": handle,
+            "pending": True}
+
+
+def _do_channel_search(chat_id: int, arg: str, cfg: dict, api,
+                       tg_search=None, action: str = "search") -> dict:
+    """Saved channels ke andar keyword search (``/search`` / ``/tgsearch``)."""
+    if not arg:
+        api.send(chat_id, "Keyword likhein: /search firmware\n"
+                          "(ya /channels <keyword> — dono ek hi kaam karte hain)")
+        return {"ok": False, "action": action, "error": "query required"}
+    try:
+        api.send(chat_id, f'🔍 Channels ke andar search: "{arg}" ...')
+    except Exception:
+        pass
+    try:
+        res = (tg_search or channels_mod.search_posts)(arg, cfg=cfg)
+    except Exception as exc:
+        api.send(chat_id, f"❌ Channel search fail: {type(exc).__name__}: "
+                          f"{util.truncate(str(exc), 200)}")
+        return {"ok": False, "action": action, "error": "search failed"}
+    send_chunks(api, chat_id, format_tg_results(res))
+    return {"ok": True, "action": action, "query": arg,
+            "count": len(res.get("items") or [])}
+
+
 def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             research=None, probe=None, tg_search=None) -> dict:
     """Handle one private chat command. Returns {'ok':.., 'action':..}."""
@@ -967,44 +1268,60 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             ch = channels_mod.counts()
         except Exception:
             ch = {}
-        api.send(chat_id, "Status: JIN Agent chal raha hai (policy " +
-                          str(cfg.get("policy_id") or "SAHULAT-SAFE-SERVICE-v1") +
-                          f"). Poll failures: {_poll_failures}.\n"
-                          f"Channels: {ch.get('active', 0)} active / "
-                          f"{ch.get('dead', 0)} dead / {ch.get('archived', 0)} archived.")
+        text_status = format_status_text(cfg)
+        api.send(chat_id, text_status)
         return {"ok": True, "action": "status", "poll_failures": int(_poll_failures),
                 "channels_active": int(ch.get("active") or 0),
-                "channels_dead": int(ch.get("dead") or 0)}
+                "channels_dead": int(ch.get("dead") or 0),
+                "channels_archived": int(ch.get("archived") or 0),
+                "channels_stale": int(ch.get("stale") or 0),
+                "pending_candidates": channels_mod.pending_candidates(),
+                "last_explore_at": last_explore_at(),
+                "sites": channels_mod.site_counts().get("total", 0)}
     if cmd == "sources":
         api.send(chat_id, f"Sources register open hai ({len(policy.register())} official/legal sources). "
                           f"/research <sawal> se detail.")
         return {"ok": True, "action": "sources"}
-    if cmd == "channels" and arg.strip().lower() in ("--all", "all"):
-        rows = channels_mod.list_channels()
-        send_chunks(api, chat_id, format_channels(rows, counts=channels_mod.counts()))
-        return {"ok": True, "action": "channels_all", "count": len(rows)}
-    if cmd in ("channels", "tgsearch"):
-        if cmd == "tgsearch" or arg:
-            if not arg:
-                api.send(chat_id, "Keyword likhein: /tgsearch firmware\n"
-                                  "(ya /channels <keyword> - dono ek hi kaam karte hain)")
-                return {"ok": False, "action": "tgsearch", "error": "query required"}
+    if cmd == "channels":
+        parts = str(arg or "").strip().split(None, 1)
+        sub = parts[0].lower() if parts else ""
+        rest = parts[1].strip() if len(parts) > 1 else ""
+        if sub in ("add", "rm", "remove", "del", "delete"):
+            if sub == "add":
+                handle = channels_mod.clean_handle(rest)
+                if not handle:
+                    api.send(chat_id, "Link ya @username dein. Misal:\n"
+                                      "/channels add https://t.me/durov\n"
+                                      "ya channel ka koi post yahan forward kar dein.")
+                    return {"ok": False, "action": "channels_add",
+                            "error": "handle required"}
+                return _ask_add_channel(chat_id, handle, api)
+            handle = channels_mod.clean_handle(rest)
+            if not handle:
+                api.send(chat_id, "Handle dein: /channels rm @channelname")
+                return {"ok": False, "action": "channels_rm",
+                        "error": "handle required"}
             try:
-                api.send(chat_id, f'🔍 Channels ke andar search: "{arg}" ...')
-            except Exception:
-                pass
-            try:
-                res = (tg_search or channels_mod.search_posts)(arg, cfg=cfg)
+                channels_mod.remove_channel(handle)
             except Exception as exc:
-                api.send(chat_id, f"❌ Channel search fail: {type(exc).__name__}: "
-                                  f"{util.truncate(str(exc), 200)}")
-                return {"ok": False, "action": "tgsearch", "error": "search failed"}
-            send_chunks(api, chat_id, format_tg_results(res))
-            return {"ok": True, "action": "tgsearch", "query": arg,
-                    "count": len(res.get("items") or [])}
+                api.send(chat_id, f"❌ {util.truncate(str(exc), 150)}")
+                return {"ok": False, "action": "channels_rm", "error": "not found"}
+            api.send(chat_id, f"🗄️ @{handle} archive kar diya (delete nahi hua).")
+            return {"ok": True, "action": "channels_rm", "channel": handle}
+        if sub in ("--all", "all"):
+            rows = channels_mod.list_channels()
+            send_chunks(api, chat_id, format_channels(rows, counts=channels_mod.counts()))
+            return {"ok": True, "action": "channels_all", "count": len(rows)}
+        if arg.strip():
+            return _do_channel_search(chat_id, arg.strip(), cfg, api,
+                                      tg_search=tg_search, action="channels_search")
         rows = channels_mod.list_channels("active")
         send_chunks(api, chat_id, format_channels(rows, counts=channels_mod.counts()))
         return {"ok": True, "action": "channels", "count": len(rows)}
+    if cmd in ("search", "tgsearch"):
+        return _do_channel_search(chat_id, arg, cfg, api,
+                                  tg_search=tg_search,
+                                  action="tgsearch" if cmd == "tgsearch" else "search")
     if cmd == "addchannel":
         handle = channels_mod.clean_handle(arg)
         if not handle:
@@ -1012,14 +1329,7 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
                               "/addchannel https://t.me/durov\n"
                               "ya channel ka koi post yahan forward kar dein.")
             return {"ok": False, "action": "addchannel", "error": "handle required"}
-        # Confirmation gate (ADR-006/008): pehle pending + ✅/❌ button.
-        _pending_add[int(chat_id)] = handle
-        buttons = [[{"text": "✅ Confirm", "callback_data": f"add:ok:{handle}"},
-                    {"text": "❌ Cancel", "callback_data": "add:no"}]]
-        api.send(chat_id, f"➕ Channel add karein?\n\n@{handle}\nhttps://t.me/{handle}\n\n"
-                          f"Save karne ke liye ✅ dabayein (cancel ❌).", buttons=buttons)
-        return {"ok": True, "action": "addchannel_pending", "channel": handle,
-                "pending": True}
+        return _ask_add_channel(chat_id, handle, api)
     if cmd == "rmchannel":
         handle = channels_mod.clean_handle(arg)
         if not handle:
@@ -1049,6 +1359,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             closed = 0
         _pending_add.pop(int(chat_id), None)
         _STATUS_MESSAGES.pop(int(chat_id), None)
+        _STATUS_LAST_EDIT.pop(int(chat_id), None)
+        _EXPLORE_PENDING.pop(int(chat_id), None)
         api.send(chat_id, f"🌱 Naya context shuru — {closed} purana research band kar "
                           f"diya. Naya /research foran shuru ho jayega.")
         return {"ok": True, "action": "new", "closed": int(closed)}
@@ -1101,20 +1413,27 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
     if cmd == "explore":
         topic = arg.strip() or "mobile firmware security tools"
         try:
-            res = scheduler.run_job("explore", {"query": topic, "offline": True},
-                                    cfg, offline=True)
+            # Manual explore: asli discovery (network probes) chalao.
+            res = scheduler.run_job("explore", {"query": topic}, cfg, offline=False)
         except Exception as exc:
             api.send(chat_id, f"❌ Explore fail: {type(exc).__name__}: "
                               f"{util.truncate(str(exc), 200)}")
             return {"ok": False, "action": "explore", "error": "explore failed"}
         send_chunks(api, chat_id, format_explore(res))
+        gate = _send_explore_gate(chat_id, topic, res, cfg, api)
         return {"ok": True, "action": "explore", "topic": topic,
-                "items": int(res.get("items") or 0)}
+                "items": int(res.get("items") or 0), "gate": gate}
     if cmd == "research":
-        if not arg:
+        query, deep = split_deep_flag(arg)
+        if not query:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
             return {"ok": False, "action": "research", "error": "query required"}
-        return _send_research(chat_id, arg, cfg=cfg, api=api, research=research)
+        res = _send_research(chat_id, query, cfg=cfg, api=api, research=research)
+        if deep and res.get("ok"):
+            # ``/deep`` ka kaam ek jagah: deep engines links report ke saath.
+            send_chunks(api, chat_id, format_deep(query))
+            res["deep"] = True
+        return res
     api.send(chat_id, "Maaf kijiye, yeh command samajh nahi aaya. /help use kijiye.")
     return {"ok": False, "action": "unknown", "error": "unknown command"}
 
@@ -1183,8 +1502,37 @@ def _edit_status(chat_id: int, api, text: str) -> bool:
         return False
 
 
+def _stage_status(chat_id: int, api, text: str,
+                  min_gap: float | None = None) -> bool:
+    """Research stage edit — Telegram ki 20/min limit ke andar (3s throttle)."""
+    gap = STATUS_EDIT_MIN_GAP if min_gap is None else max(0.0, float(min_gap))
+    now = time.monotonic()
+    last = float(_STATUS_LAST_EDIT.get(int(chat_id), 0.0) or 0.0)
+    if now - last < gap:
+        return False
+    if not _edit_status(chat_id, api, text):
+        return False
+    _STATUS_LAST_EDIT[int(chat_id)] = now
+    return True
+
+
+def _trace_display(path: str) -> str:
+    """Trace ka local path ``data/runs/<id>.json`` ki shakl me (jhooti URL nahi)."""
+    p = str(path or "").strip()
+    if not p:
+        return ""
+    try:
+        rel = os.path.relpath(p, str(config.data_dir()))
+        if rel and not rel.startswith(".."):
+            return "data/" + rel.replace(os.sep, "/")
+    except Exception:
+        pass
+    return os.path.basename(p)
+
+
 def _bluf_text(query: str, out: dict, confidence: float, label: str,
-               sources: list, channels: list, kind: str = "ok") -> str:
+               sources: list, channels: list, kind: str = "ok",
+               trace_path: str = "") -> str:
     """BLUF — TL;DR + 3-5 key findings, <=1000 chars (poori report file me)."""
     items = []
     for it in (out.get("items") or [])[:5]:
@@ -1196,6 +1544,9 @@ def _bluf_text(query: str, out: dict, confidence: float, label: str,
     text = (f"📌 Report tayyar hai{note} — {util.truncate(query, 70)}\n\n"
             f"{body}\n\nConfidence: {label} ({confidence}) · "
             f"{len(sources)} engines · {len(channels)} channels")
+    trace = _trace_display(trace_path)
+    if trace:
+        text += f"\n🗂️ Trace: {trace}"
     return text[:1000]
 
 
@@ -1210,6 +1561,25 @@ def _group_allowed(chat_id: int, limit: int | None = None) -> bool:
     hits.append(now)
     _GROUP_HITS[int(chat_id)] = hits
     return True
+
+
+def _call_research_full(query: str, cfg: dict, skip_sources, skip_channels,
+                        on_stage) -> dict:
+    """``research_full`` ko on_stage ke saath bulayo — purane mocks jin me ye
+    param nahi, un par bina on_stage fallback (tests/backward compat)."""
+    fn = research_full
+    accepts = True
+    try:
+        params = inspect.signature(fn).parameters
+        accepts = (any(p.kind == p.VAR_KEYWORD for p in params.values())
+                   or "on_stage" in params)
+    except (TypeError, ValueError):
+        accepts = True
+    if accepts:
+        return fn(query, cfg, skip_sources=skip_sources,
+                  skip_channels=skip_channels, on_stage=on_stage)
+    return fn(query, cfg, skip_sources=skip_sources,
+              skip_channels=skip_channels)
 
 
 def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
@@ -1255,6 +1625,14 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
         except Exception:
             pass
 
+        _STATUS_LAST_EDIT.pop(int(chat_id), None)
+
+        def on_stage(name: str, detail: str = "") -> None:
+            """Plan → Sources → Fetch → Verify → Brief — wahi message edit (3s throttle)."""
+            _stage_status(chat_id, api,
+                          f"⏳ {name} — {util.truncate(query, 60)}"
+                          + (f" ({util.truncate(detail, 40)})" if detail else ""))
+
         result_box = [None]
         # Agla round: use ho chuke AUR failed (negative memory) channels skip.
         skip_channels = list(dict.fromkeys(used_channels + failed))
@@ -1271,15 +1649,14 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                     for q in queries:
                         if not _session_active(session):
                             return
-                        final = research_full(q, cfg, skip_sources=used_sources,
-                                              skip_channels=skip_channels)
+                        final = _call_research_full(q, cfg, used_sources,
+                                                    skip_channels, on_stage)
                         if str((final or {}).get("markdown") or "").strip():
                             break
                     result_box[0] = final
                 elif research is None:
-                    result_box[0] = research_full(
-                        query, cfg, skip_sources=used_sources,
-                        skip_channels=skip_channels)
+                    result_box[0] = _call_research_full(
+                        query, cfg, used_sources, skip_channels, on_stage)
                 else:
                     result_box[0] = research(query, cfg)
             except Exception as exc:
@@ -1312,12 +1689,13 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             channels_used = [str(c) for c in (out.get("channels") or [])]
             failed_new = [str(c) for c in (out.get("failed_channels") or [])]
             report_path = str(out.get("report_path") or "")
+            trace_path = str(out.get("trace_path") or "")
             confidence = float(out.get("confidence") or 0.0)
             confidence_label = str(out.get("confidence_label") or "n/a")
             absence_kind = str(out.get("absence_kind") or "ok")
         else:
             md, sources, channels_used = str(out or ""), [], []
-            failed_new, report_path = [], ""
+            failed_new, report_path, trace_path = [], "", ""
             confidence, confidence_label = 0.0, "n/a"
             absence_kind = "ok"
         if not md.strip():
@@ -1331,6 +1709,9 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
         except Exception:
             final_md = md
 
+        # Delivery stage: report tayyar — wahi status message edit (throttle ki
+        # parsed asaan hai; aakhri edit hamesha lagti hai).
+        _edit_status(chat_id, api, f"✅ Report tayyar hai — {util.truncate(query, 60)}")
         # Delivery: report file (sendDocument) — chat flood ki jagah. Confidence
         # gate ke niche file nahi bhejti, sirf khabar local console ki taraf.
         threshold = verifier.confidence_threshold()
@@ -1339,7 +1720,8 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
         if report_path and os.path.isfile(report_path):
             caption = (f"📄 JIN Agent Brief — {util.truncate(query, 80)}\n"
                        f"Confidence: {confidence_label} ({confidence})\n"
-                       f"{len(sources)} engines · {len(channels_used)} channels")
+                       f"{len(sources)} engines · {len(channels_used)} channels"
+                       + (f"\n🗂️ Trace: {_trace_display(trace_path)}" if trace_path else ""))
             if absence_kind == "no_results":
                 api.send(chat_id, "🔍 Koi result nahi mila — sources live the magar is "
                                   "query par kuch nahi aaya. Chhota keyword ya /explore "
@@ -1355,7 +1737,8 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                                  f"✅ Report tayyar hai — {util.truncate(query, 60)}")
                     bluf = _bluf_text(query, out if isinstance(out, dict) else {},
                                       confidence, confidence_label, sources,
-                                      channels_used, absence_kind)
+                                      channels_used, absence_kind,
+                                      trace_path=trace_path)
                     api.send(chat_id, bluf)
                     if SEND_DELAY > 0:
                         time.sleep(SEND_DELAY)
@@ -1449,6 +1832,9 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
             api.send(chat_id, "Purana confirmation hai. Dobara /addchannel karein.")
             return {"ok": False, "action": "addchannel", "error": "expired"}
         return _addchannel_now(chat_id, target, cfg, api)
+    exp_action, exp_key = parse_explore_callback(data)
+    if exp_action:
+        return _handle_explore_callback(chat_id, exp_action, exp_key, cfg, api)
     row_id, action = parse_callback(data)
     if not row_id:
         api.send(chat_id, "Purana button hai. Naya /research karein.")
@@ -1499,6 +1885,14 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
     stop = stop or type("S", (), {"is_set": lambda self: False})()
     workers = update_workers()
     pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="jin-update")
+
+    # Telegram "/" menu: 6 canonical commands (best-effort, startup par ek dafa).
+    try:
+        if register_commands(api):
+            print("[bot] Telegram command menu set (6 commands)", flush=True)
+    except Exception as exc:
+        print(f"[bot] setMyCommands fail ({type(exc).__name__}: {exc}) — ignore",
+              flush=True)
 
     # --- STARTUP: purani queue clear karo (restart ke baad loop band) ---
     # Telegram ki pending queue ko skip karo: offset se shuru kar ke tak update
@@ -1591,12 +1985,7 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 chat_id = int(chat.get("id") or 0)
                 text = str(msg.get("text") or "")
                 if not text.startswith("/"):
-                    handle = forwarded_handle(msg)
-                    if handle:
-                        text = "/addchannel @" + handle
-                    elif _LINK_ONLY_RE.fullmatch(text.strip()) or \
-                            _HANDLE_ONLY_RE.fullmatch(text.strip()):
-                        text = "/addchannel " + text.strip()
+                    text = route_plain_text(text, forwarded_handle(msg))
                 if not text or text == "/addchannel ":
                     continue
                 if not is_owner(chat_id, cfg):
@@ -1648,8 +2037,14 @@ def status(cfg: dict | None = None) -> dict:
         out["channels_active"] = int(ch.get("active") or 0)
         out["channels_dead"] = int(ch.get("dead") or 0)
         out["channels_archived"] = int(ch.get("archived") or 0)
+        out["channels_stale"] = int(ch.get("stale") or 0)
+        out["pending_candidates"] = channels_mod.pending_candidates()
+        out["sites"] = channels_mod.site_counts().get("total", 0)
     except Exception:
         out["channels_active"] = 0
         out["channels_dead"] = 0
         out["channels_archived"] = 0
+        out["channels_stale"] = 0
+        out["pending_candidates"] = 0
+        out["sites"] = 0
     return out
