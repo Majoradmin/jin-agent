@@ -572,7 +572,6 @@ def retention(days: int | None = None) -> dict:
     cutoff = datetime.fromtimestamp(util.epoch() - days * 86400, timezone.utc)
     cutoff_iso = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     cutoff_epoch = util.epoch() - days * 86400
-    dead_epoch = util.epoch() - 30 * 86400
     pruned: dict[str, int] = {}
     with session() as con:
         removed = con.execute("DELETE FROM items WHERE fetched_at<>'' AND fetched_at<?",
@@ -590,15 +589,18 @@ def retention(days: int | None = None) -> dict:
         if _table_exists(con, "tg_candidates"):
             pruned["tg_candidates"] = con.execute(
                 "DELETE FROM tg_candidates WHERE found_at<?", (cutoff_epoch,)).rowcount
-        if _table_exists(con, "tg_channels"):
-            pruned["tg_channels_dead"] = con.execute(
-                "DELETE FROM tg_channels WHERE status='dead' AND last_checked<?",
-                (dead_epoch,)).rowcount
         # Freelist pages wapas le lo (auto_vacuum off ho to no-op bhi safe).
         try:
             con.execute("PRAGMA incremental_vacuum")
         except sqlite3.Error:
             pass
+    # Dead channel registry TTL (channels module apni table ensure karta hai).
+    # Alag connection — upar wala write transaction commit ho chuka hai.
+    try:
+        from . import channels as channels_mod
+        pruned["tg_channels_dead"] = channels_mod.cleanup_dead()
+    except Exception:
+        pruned["tg_channels_dead"] = 0
     vacuum = vacuum_db()
     add_event("retention", f"Removed {removed} articles older than {days} days; "
                            f"pruned={pruned}")

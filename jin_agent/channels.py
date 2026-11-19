@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import os
 import re
 import time
 import urllib.parse
@@ -109,6 +110,36 @@ def counts() -> dict:
         out[str(r["status"])] = int(r["n"])
     out["total"] = sum(out.values())
     return out
+
+
+def dead_ttl_days() -> int:
+    """Dead channel registry TTL (din). Default 30, env ``JIN_AGENT_CHANNEL_DEAD_TTL_DAYS``.
+
+    Competitor pattern: silent/dead channels ka record time-to-live ke baad
+    clean karo (14/30/90 din thresholds) taake registry unbounded na barhe.
+    """
+    try:
+        return max(1, int(str(os.environ.get("JIN_AGENT_CHANNEL_DEAD_TTL_DAYS", "30")
+                               or 30)))
+    except (TypeError, ValueError):
+        return 30
+
+
+def cleanup_dead(threshold_days: int | None = None) -> int:
+    """``status='dead'`` aur ``last_checked`` TTL purani rows delete karo.
+
+    Archive-not-delete policy ka istisna sirf retention ke liye: dead registry
+    rows jinki aakhri probe TTL (default 30 din) barhogar ho chuki ho unhe
+    hatao taake table bounded rahe. Active/archived rows ko chhua nahi jata.
+    """
+    ensure_table()
+    ttl = dead_ttl_days() if threshold_days is None else max(1, int(threshold_days))
+    cutoff = util.epoch() - ttl * 86400
+    with store.session() as con:
+        cur = con.execute(
+            "DELETE FROM tg_channels WHERE status='dead' AND last_checked<?",
+            (cutoff,))
+        return int(cur.rowcount)
 
 
 def add_channel(channel: str, origin: str = "manual", note: str = "") -> dict:

@@ -22,9 +22,10 @@ import re
 import socket
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
-import urllib.error
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 # Real executor class ka private alias — tests ``tb.ThreadPoolExecutor`` ko fake
 # se replace karte hain, magar control-dispatch ka guard asli class par bana rahe.
@@ -36,7 +37,7 @@ except ImportError:
     _SOCKS_AVAILABLE = False
 
 from . import (VERSION, channels as channels_mod, config, llm, orchestrator,
-               policy, searchmemory as memory_mod, util)
+               policy, scheduler, searchmemory as memory_mod, util, verifier)
 
 
 class BotAPIError(RuntimeError):
@@ -115,6 +116,7 @@ HELP_TEXT = (
     "/engines - Telegram search engines ke 1-click links\n"
     "/deep [keyword] - dark/deep web search engines ke links\n"
     "/memory - pehle use ho chuke sources (rounds)\n"
+    "/explore [topic] - channels/sources explore + scored digest\n"
     "/help - yeh menu\n\n"
     "Har report ke baad bot poochta hai: mil gaya ya nahi. 'Nahi mila' par naye "
     "sources/channels try hote hain (purane skip). Policy SAHULAT-SAFE-SERVICE-v1; "
@@ -361,9 +363,19 @@ def forwarded_handle(msg: dict) -> str:
     return ""
 
 
-def format_channels(rows: list[dict]) -> str:
+def format_channels(rows: list[dict], counts: dict | None = None) -> str:
     """Saved channels + 1-click links (plain text, Telegram khud link banata hai)."""
     if not rows:
+        dead = int((counts or {}).get("dead") or 0)
+        archived = int((counts or {}).get("archived") or 0)
+        if dead or archived:
+            return (f"❌ Saare channels dead/archived hain "
+                    f"({dead} dead, {archived} archived) — koi active channel nahi.\n\n"
+                    "Sab channels dikhane ke liye: /channels --all\n"
+                    "Naye channel add karein: /addchannel https://t.me/channelname\n"
+                    "Ya kisi channel ka post yahan forward karein (khud add ho jayega).\n\n"
+                    "Sirf PUBLIC channels ke andar search ho sakti hai "
+                    "(private/invite-only preview nahi deta).")
         return ("Koi channel save nahi hai.\n\n"
                 "Add karne ke 2 tareeqe:\n"
                 "1) Kisi bhi channel ka post yahan forward karein (khud add ho jayega)\n"
@@ -464,6 +476,29 @@ def format_memory(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def format_explore(res: dict) -> str:
+    """``/explore`` ka result — discovery + scored archive items (chhota digest)."""
+    res = res or {}
+    topic = str(res.get("topic") or res.get("query") or "")
+    disc = res.get("discovery") or {}
+    scored = res.get("scored") or []
+    added = disc.get("added") or []
+    dead = disc.get("dead") or []
+    lines = [f"🧭 Explore: {util.truncate(topic, 90)}", ""]
+    lines.append(f"Discovery: {len(added)} naye active, {len(dead)} dead "
+                 f"(candidates {disc.get('candidates', 0)}, "
+                 f"probed {disc.get('probed', 0)}).")
+    if scored:
+        lines += ["", "Top scored archive results:"]
+        for i, item in enumerate(scored[:5], 1):
+            lines.append(f"{i}. {util.truncate(str(item.get('title') or ''), 90)} "
+                         f"| score {item.get('score', 0)} | "
+                         f"{util.truncate(str(item.get('source') or ''), 30)}")
+    else:
+        lines += ["", "Archive me is topic ka koi scored item nahi mila."]
+    lines += ["", f"📄 Digest: {res.get('items', 0)} items (local archive report).",
+              "", "Rozana explore: scheduler explore_minutes (default 1440)."]
+    return "\n".join(lines)
 
 
 def _socks5_target(cfg: dict | None = None):
@@ -589,6 +624,62 @@ def _api(token: str, cfg: dict | None = None):
                     time.sleep(wait)
             return {}
 
+        def _post_bytes(self, path: str, body: bytes, content_type: str,
+                        timeout: int) -> dict:
+            """Multipart/raw POST — 429 par wahi retry_policy (sendDocument)."""
+            req = urllib.request.Request(
+                self.base + path, data=body,
+                headers={"Content-Type": content_type}, method="POST")
+            for attempt in range(1, 4):
+                try:
+                    with _socks_scope(cfg):
+                        with opener.open(req, timeout=timeout) as r:
+                            return json.loads(r.read().decode())
+                except urllib.error.HTTPError as exc:
+                    if exc.code != 429 or attempt >= 3:
+                        raise
+                    wait = _telegram_retry_after(exc) or min(5 * attempt, 60)
+                    print(f"[bot] Telegram 429 (rate limit) — {wait}s baad retry "
+                          f"({attempt}/2)", flush=True)
+                    time.sleep(wait)
+            return {}
+
+        def send_document(self, chat_id: int, file_path: str, caption: str = "",
+                          timeout: int = 120) -> dict:
+            """Report ko ``sendDocument`` se bhejo (chat flood ki jagah file).
+
+            Telegram Bot API: document 50MB tak, caption 1024 chars. Koi public
+            URL nahi — file multipart upload hoti hai (hosted-friendly).
+            """
+            boundary = "----JINAgent" + uuid.uuid4().hex
+            filename = os.path.basename(str(file_path))
+            with open(file_path, "rb") as fh:
+                data = fh.read()
+            parts: list[bytes] = []
+
+            def field(name: str, value: str) -> None:
+                parts.append(
+                    f"--{boundary}\r\n"
+                    f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                    f"{value}\r\n".encode("utf-8"))
+
+            field("chat_id", str(int(chat_id)))
+            if caption:
+                field("caption", str(caption)[:1024])
+            parts.append(
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="document"; '
+                f'filename="{filename}"\r\n'
+                f"Content-Type: application/octet-stream\r\n\r\n".encode("utf-8"))
+            parts.append(data)
+            parts.append(f"\r\n--{boundary}--\r\n".encode("utf-8"))
+            body = b"".join(parts)
+            return self._checked(
+                self._post_bytes("/sendDocument", body,
+                                 "multipart/form-data; boundary=" + boundary,
+                                 timeout),
+                "sendDocument")
+
         def _checked(self, res: dict, what: str) -> dict:
             # Telegram ok:false (409 conflict, 429 flood, 400) pehle ignore hota
             # tha -> generic exception -> backoff. Ab saaf, named error.
@@ -688,6 +779,8 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
                   "error": f"{type(exc).__name__}: {util.truncate(str(exc), 200)}"}
     except Exception as exc:
         return {"ok": False, "sources": [], "channels": [],
+                "failed_channels": [], "report_path": "", "confidence": 0.0,
+                "confidence_label": "n/a",
                 "markdown": f"❌ Research error: {type(exc).__name__}: "
                             f"{util.truncate(str(exc), 300)}"}
     finally:
@@ -698,6 +791,8 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
 
     if out.get("blocked"):
         return {"ok": False, "sources": [], "channels": [],
+                "failed_channels": [], "report_path": "", "confidence": 0.0,
+                "confidence_label": "n/a",
                 "markdown": "⛔ Request block hua policy ke hisaab se. Detail: "
                             + json.dumps(out.get("gate") or {}, ensure_ascii=False)}
     md = str((out.get("report") or {}).get("markdown")
@@ -708,8 +803,14 @@ def research_full(query: str, cfg: dict | None = None, save: bool = True,
         md = md.rstrip() + "\n\n" + section + "\n"
     sources = [str(d.get("key")) for d in (out.get("diagnostics") or [])
                if int(d.get("count") or 0) > 0]
+    metrics = out.get("metrics") or {}
     return {"ok": True, "markdown": md, "sources": sources,
-            "channels": list(tg.get("channels") or []), "error": ""}
+            "channels": list(tg.get("channels") or []), "error": "",
+            "failed_channels": [str(f.get("channel")) for f in (tg.get("failed") or [])
+                                if f.get("channel")],
+            "report_path": str((out.get("saved") or {}).get("md") or ""),
+            "confidence": float(metrics.get("confidence") or 0.0),
+            "confidence_label": str(metrics.get("confidence_label") or "n/a")}
 
 
 def after_report_buttons(row_id: int) -> list[list[dict]]:
@@ -760,14 +861,26 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         api.send(chat_id, "🛑 Research rok di gayi. Naya /research karne se phir shuru hoga.")
         return {"ok": True, "action": "stop"}
     if cmd == "status":
+        try:
+            ch = channels_mod.counts()
+        except Exception:
+            ch = {}
         api.send(chat_id, "Status: JIN Agent chal raha hai (policy " +
                           str(cfg.get("policy_id") or "SAHULAT-SAFE-SERVICE-v1") +
-                          f"). Poll failures: {_poll_failures}.")
-        return {"ok": True, "action": "status", "poll_failures": int(_poll_failures)}
+                          f"). Poll failures: {_poll_failures}.\n"
+                          f"Channels: {ch.get('active', 0)} active / "
+                          f"{ch.get('dead', 0)} dead / {ch.get('archived', 0)} archived.")
+        return {"ok": True, "action": "status", "poll_failures": int(_poll_failures),
+                "channels_active": int(ch.get("active") or 0),
+                "channels_dead": int(ch.get("dead") or 0)}
     if cmd == "sources":
         api.send(chat_id, f"Sources register open hai ({len(policy.register())} official/legal sources). "
                           f"/research <sawal> se detail.")
         return {"ok": True, "action": "sources"}
+    if cmd == "channels" and arg.strip().lower() in ("--all", "all"):
+        rows = channels_mod.list_channels()
+        send_chunks(api, chat_id, format_channels(rows, counts=channels_mod.counts()))
+        return {"ok": True, "action": "channels_all", "count": len(rows)}
     if cmd in ("channels", "tgsearch"):
         if cmd == "tgsearch" or arg:
             if not arg:
@@ -788,7 +901,7 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             return {"ok": True, "action": "tgsearch", "query": arg,
                     "count": len(res.get("items") or [])}
         rows = channels_mod.list_channels("active")
-        send_chunks(api, chat_id, format_channels(rows))
+        send_chunks(api, chat_id, format_channels(rows, counts=channels_mod.counts()))
         return {"ok": True, "action": "channels", "count": len(rows)}
     if cmd == "addchannel":
         handle = channels_mod.clean_handle(arg)
@@ -843,6 +956,18 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         rows = memory_mod.recent(chat_id, 6)
         send_chunks(api, chat_id, format_memory(rows))
         return {"ok": True, "action": "memory", "count": len(rows)}
+    if cmd == "explore":
+        topic = arg.strip() or "mobile firmware security tools"
+        try:
+            res = scheduler.run_job("explore", {"query": topic, "offline": True},
+                                    cfg, offline=True)
+        except Exception as exc:
+            api.send(chat_id, f"❌ Explore fail: {type(exc).__name__}: "
+                              f"{util.truncate(str(exc), 200)}")
+            return {"ok": False, "action": "explore", "error": "explore failed"}
+        send_chunks(api, chat_id, format_explore(res))
+        return {"ok": True, "action": "explore", "topic": topic,
+                "items": int(res.get("items") or 0)}
     if cmd == "research":
         if not arg:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
@@ -868,11 +993,13 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
         _stop_research = False
         used_sources: list[str] = []
         used_channels: list[str] = []
+        failed: list[str] = []
         round_no = 1
         if row_id:
             row = memory_mod.get(row_id) or {}
             used_sources = row.get("used_sources") or []
             used_channels = row.get("used_channels") or []
+            failed = memory_mod.failed_channels(row_id)
             round_no = int(row.get("round_no") or 1) + (1 if advance else 0)
             if advance and round_no > max_rounds():
                 limit = max_rounds()
@@ -890,6 +1017,8 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             pass
 
         result_box = [None]
+        # Agla round: use ho chuke AUR failed (negative memory) channels skip.
+        skip_channels = list(dict.fromkeys(used_channels + failed))
 
         def _do_research():
             if not _session_active(session):
@@ -904,14 +1033,14 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                         if not _session_active(session):
                             return
                         final = research_full(q, cfg, skip_sources=used_sources,
-                                              skip_channels=used_channels)
+                                              skip_channels=skip_channels)
                         if str((final or {}).get("markdown") or "").strip():
                             break
                     result_box[0] = final
                 elif research is None:
                     result_box[0] = research_full(
                         query, cfg, skip_sources=used_sources,
-                        skip_channels=used_channels)
+                        skip_channels=skip_channels)
                 else:
                     result_box[0] = research(query, cfg)
             except Exception as exc:
@@ -942,8 +1071,14 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             md = str(out.get("markdown") or "")
             sources = [str(s) for s in (out.get("sources") or [])]
             channels_used = [str(c) for c in (out.get("channels") or [])]
+            failed_new = [str(c) for c in (out.get("failed_channels") or [])]
+            report_path = str(out.get("report_path") or "")
+            confidence = float(out.get("confidence") or 0.0)
+            confidence_label = str(out.get("confidence_label") or "n/a")
         else:
             md, sources, channels_used = str(out or ""), [], []
+            failed_new, report_path = [], ""
+            confidence, confidence_label = 0.0, "n/a"
         if not md.strip():
             md = "❌ Report khali rahi. /research dobara try karein."
 
@@ -954,14 +1089,45 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
                 final_md = translated  # foreign sources -> Roman Urdu report
         except Exception:
             final_md = md
-        chunks = split_text(final_md)
-        for i, chunk in enumerate(chunks):
-            if not _session_active(session):
-                api.send(chat_id, "🛑 Report rok di gayi.")
-                break
-            if i and SEND_DELAY > 0:
-                time.sleep(SEND_DELAY)
-            api.send(chat_id, chunk)
+
+        # Delivery: report file (sendDocument) — chat flood ki jagah. Confidence
+        # gate ke niche file nahi bhejti, sirf khabar local console ki taraf.
+        threshold = verifier.confidence_threshold()
+        delivered = False
+        chunks: list[str] = []
+        if report_path and os.path.isfile(report_path):
+            caption = (f"📄 JIN Agent Brief — {util.truncate(query, 80)}\n"
+                       f"Confidence: {confidence_label} ({confidence})\n"
+                       f"{len(sources)} engines · {len(channels_used)} channels")
+            if confidence >= threshold:
+                try:
+                    api.send(chat_id, f"✅ Report tayyar hai — {len(sources)} engines, "
+                                      f"{len(channels_used)} channels. "
+                                      f"Confidence: {confidence_label} ({confidence}).")
+                    if SEND_DELAY > 0:
+                        time.sleep(SEND_DELAY)
+                    api.send_document(chat_id, report_path, caption=caption)
+                    delivered = True
+                except Exception as exc:
+                    print(f"[bot] sendDocument fail ({type(exc).__name__}: {exc}); "
+                          f"chunks par wapas", flush=True)
+            else:
+                try:
+                    api.send(chat_id, f"⚠️ Report bharosemand nahi "
+                                      f"(confidence {confidence_label} {confidence} < "
+                                      f"{threshold}) — detail local console par hai.")
+                    delivered = True
+                except Exception:
+                    pass
+        if not delivered:
+            chunks = split_text(final_md)
+            for i, chunk in enumerate(chunks):
+                if not _session_active(session):
+                    api.send(chat_id, "🛑 Report rok di gayi.")
+                    break
+                if i and SEND_DELAY > 0:
+                    time.sleep(SEND_DELAY)
+                api.send(chat_id, chunk)
 
         # Memory: kaunse sources/channels is round me use hue
         try:
@@ -971,6 +1137,11 @@ def _send_research(chat_id: int, query: str, cfg: dict, api, research=None,
             else:
                 row = memory_mod.begin(chat_id, query)
                 row = memory_mod.remember(row["id"], sources, channels_used)
+            if row and row.get("id") and failed_new:
+                try:
+                    memory_mod.remember_failed(row["id"], failed_new)
+                except Exception:
+                    pass
             row = row or {"id": 0, "round_no": round_no}
         except Exception:
             row = {"id": 0, "round_no": round_no}
@@ -1178,7 +1349,7 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
 
 def status(cfg: dict | None = None) -> dict:
     cfg = cfg or config.load()
-    return {
+    out = {
         "version": VERSION,
         "policy_id": "SAHULAT-SAFE-SERVICE-v1",
         "bot_token_set": bool(str(cfg.get("telegram_bot_token") or "").strip()),
@@ -1189,3 +1360,13 @@ def status(cfg: dict | None = None) -> dict:
         "max_rounds": max_rounds(),
         "send_delay": send_delay(),
     }
+    try:
+        ch = channels_mod.counts()
+        out["channels_active"] = int(ch.get("active") or 0)
+        out["channels_dead"] = int(ch.get("dead") or 0)
+        out["channels_archived"] = int(ch.get("archived") or 0)
+    except Exception:
+        out["channels_active"] = 0
+        out["channels_dead"] = 0
+        out["channels_archived"] = 0
+    return out

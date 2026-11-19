@@ -29,6 +29,7 @@ def max_rounds() -> int:
     except (TypeError, ValueError):
         return DEFAULT_MAX_ROUNDS
 
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS search_memory (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS search_memory (
   round_no INTEGER NOT NULL DEFAULT 1,
   used_sources TEXT NOT NULL DEFAULT '[]',
   used_channels TEXT NOT NULL DEFAULT '[]',
+  failed_channels TEXT NOT NULL DEFAULT '[]',
   status TEXT NOT NULL DEFAULT 'active',
   created_at INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL DEFAULT 0
@@ -50,6 +52,71 @@ CREATE INDEX IF NOT EXISTS idx_search_memory_chat
 def ensure_table() -> None:
     with store.session() as con:
         con.executescript(SCHEMA)
+        # Purani DB migration: failed_channels column add karo.
+        cols = {r[1] for r in con.execute("PRAGMA table_info(search_memory)")}
+        if "failed_channels" not in cols:
+            con.execute("ALTER TABLE search_memory "
+                        "ADD COLUMN failed_channels TEXT NOT NULL DEFAULT '[]'")
+
+
+def channel_negative_ttl_days() -> int:
+    """Failed-channel negative memory TTL (din).
+
+    Default 7, env ``JIN_AGENT_CHANNEL_NEGATIVE_TTL_DAYS``. 0 = hamesha yaad.
+    """
+    try:
+        return max(0, int(str(os.environ.get("JIN_AGENT_CHANNEL_NEGATIVE_TTL_DAYS", "7")
+                               or 7)))
+    except (TypeError, ValueError):
+        return 7
+
+
+def _failed_entries(row) -> list[dict]:
+    return _parse_failed((row or {}).get("failed_channels") or "[]")
+
+
+def failed_channels(row_id: int) -> list[str]:
+    """TTL ke andar waale failed channel handles (purane nahi)."""
+    row = get(row_id)
+    if not row:
+        return []
+    now = util.epoch()
+    ttl = channel_negative_ttl_days() * 86400
+    out: list[str] = []
+    for entry in _failed_entries(row):
+        handle = str(entry.get("channel") or "").strip()
+        at = float(entry.get("at") or 0)
+        if not handle:
+            continue
+        if ttl and now - at > ttl:
+            continue
+        if handle not in out:
+            out.append(handle)
+    return out
+
+
+def remember_failed(row_id: int, channels=None) -> dict | None:
+    """Channel ko negative memory me TTL ke saath yaad rakho (dobara try na ho)."""
+    row = get(row_id)
+    if not row:
+        return None
+    now = util.epoch()
+    ttl = channel_negative_ttl_days() * 86400
+    merged: dict[str, float] = {}
+    for entry in _failed_entries(row):
+        handle = str(entry.get("channel") or "").strip()
+        if handle:
+            merged[handle] = float(entry.get("at") or 0)
+    for raw in channels or []:
+        handle = str(raw or "").strip()
+        if handle:
+            merged[handle] = now
+    kept = [{"channel": h, "at": at} for h, at in merged.items()
+            if not ttl or now - at <= ttl]
+    with store.session() as con:
+        con.execute("UPDATE search_memory SET failed_channels=?, updated_at=? "
+                    "WHERE id=?", (json.dumps(kept), now, int(row_id)))
+    return get(row_id)
 
 
 def query_key(query: str) -> str:
@@ -65,6 +132,16 @@ def _loads(raw: str) -> list[str]:
     return [str(x) for x in data] if isinstance(data, list) else []
 
 
+def _parse_failed(raw) -> list[dict]:
+    if isinstance(raw, list):
+        return [e for e in raw if isinstance(e, dict)]
+    try:
+        data = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [e for e in data if isinstance(e, dict)] if isinstance(data, list) else []
+
+
 def _row_to_dict(row) -> dict:
     return {
         "id": int(row["id"]),
@@ -74,6 +151,7 @@ def _row_to_dict(row) -> dict:
         "round_no": int(row["round_no"] or 1),
         "used_sources": _loads(row["used_sources"]),
         "used_channels": _loads(row["used_channels"]),
+        "failed_channels": _parse_failed(row["failed_channels"] or "[]"),
         "status": str(row["status"]),
         "created_at": int(row["created_at"] or 0),
         "updated_at": int(row["updated_at"] or 0),
