@@ -37,9 +37,9 @@ try:
 except ImportError:
     _SOCKS_AVAILABLE = False
 
-from . import (VERSION, channels as channels_mod, config, highlight as highlight_mod,
-               llm, orchestrator, policy, report_export, scheduler,
-               searchmemory as memory_mod, store, util, verifier)
+from . import (VERSION, channels as channels_mod, chat_context, config,
+               highlight as highlight_mod, llm, orchestrator, policy, report_export,
+               scheduler, searchmemory as memory_mod, store, util, verifier)
 
 
 class BotAPIError(RuntimeError):
@@ -1739,6 +1739,10 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             closed = memory_mod.reset_chat(chat_id)
         except Exception:
             closed = 0
+        try:
+            chat_context.clear(chat_id)
+        except Exception:
+            pass
         _pending_add.pop(int(chat_id), None)
         _STATUS_MESSAGES.pop(int(chat_id), None)
         _STATUS_LAST_EDIT.pop(int(chat_id), None)
@@ -1803,7 +1807,14 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         if not query:
             api.send(chat_id, "Research ke liye query likhein: /research <sawal>")
             return {"ok": False, "action": "research", "error": "query required"}
-        res = _send_research(chat_id, query, cfg=cfg, api=api, research=research)
+        # Multi-turn: chhota follow-up ho to pichhla sawal context me jodo
+        # (max 1). Context table na hone par research as-is chalta rahe.
+        try:
+            composed = chat_context.attach(chat_id, query)
+            chat_context.note(chat_id, query)
+        except Exception:
+            composed = query
+        res = _send_research(chat_id, composed, cfg=cfg, api=api, research=research)
         if deep and res.get("ok"):
             # ``/deep`` ka kaam ek jagah: deep engines links report ke saath.
             send_chunks(api, chat_id, format_deep(query))

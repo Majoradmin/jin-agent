@@ -150,6 +150,11 @@ CREATE TABLE IF NOT EXISTS page_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_page_snapshots_ts ON page_snapshots(ts);
 CREATE INDEX IF NOT EXISTS idx_page_snapshots_source ON page_snapshots(source_key);
+CREATE TABLE IF NOT EXISTS chat_context (
+  chat_id TEXT PRIMARY KEY,
+  last_queries TEXT NOT NULL DEFAULT '[]',
+  updated_at REAL NOT NULL DEFAULT 0
+);
 """
 
 SCHEMA_FTS = """
@@ -431,6 +436,62 @@ def mark_stale_sources(stale_days: int | None = None) -> int:
 def set_source_enabled(key: str, enabled: bool) -> None:
     with session() as con:
         con.execute("UPDATE sources SET enabled=? WHERE key=?", (int(bool(enabled)), key))
+
+
+CHAT_CONTEXT_MAX = 5
+
+
+def save_chat_query(chat_id, query: str) -> None:
+    """Chat ka aakhri sawal JSON list me jamu karo (max ``CHAT_CONTEXT_MAX``).
+
+    Multi-turn follow-up ke liye: ``chat_context.attach`` pichhla sawal
+    prompt me jodta hai. Key Telegram chat id hai (``run`` id nahi).
+    """
+    q = util.truncate(str(query or "").strip(), 400)
+    if not q:
+        return
+    with session() as con:
+        row = con.execute("SELECT last_queries FROM chat_context WHERE chat_id=?",
+                          (str(chat_id),)).fetchone()
+        queries: list[str] = []
+        if row and row["last_queries"]:
+            try:
+                parsed = json.loads(row["last_queries"])
+                if isinstance(parsed, list):
+                    queries = [str(x).strip() for x in parsed if str(x).strip()]
+            except (TypeError, ValueError):
+                queries = []
+        if not queries or queries[-1] != q:
+            queries.append(q)
+        queries = queries[-CHAT_CONTEXT_MAX:]
+        con.execute(
+            "INSERT INTO chat_context(chat_id,last_queries,updated_at) "
+            "VALUES(?,?,?) ON CONFLICT(chat_id) DO UPDATE SET "
+            "last_queries=excluded.last_queries,updated_at=excluded.updated_at",
+            (str(chat_id), _json(queries), util.epoch()))
+
+
+def last_chat_query(chat_id) -> str:
+    """Chat ka aakhri sawal; na ho to ``""``."""
+    with session() as con:
+        row = con.execute("SELECT last_queries FROM chat_context WHERE chat_id=?",
+                          (str(chat_id),)).fetchone()
+    if not row or not row["last_queries"]:
+        return ""
+    try:
+        queries = json.loads(row["last_queries"])
+    except (TypeError, ValueError):
+        return ""
+    if isinstance(queries, list) and queries:
+        return str(queries[-1] or "")
+    return ""
+
+
+def clear_chat_context(chat_id) -> int:
+    """``/new`` par chat context saaf — rowcount (0 ya 1)."""
+    with session() as con:
+        cur = con.execute("DELETE FROM chat_context WHERE chat_id=?", (str(chat_id),))
+        return int(cur.rowcount)
 
 
 def record_run(query: str, mode: str = "offline") -> int:
