@@ -11,3 +11,6 @@ jin_agent/data/metrics.json
 jin_agent/data/runs/
 *.log
 .env
+
+# Category probe ka generated transcript
+tests/category_probe.json
