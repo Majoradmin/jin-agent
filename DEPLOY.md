@@ -47,6 +47,12 @@ ya default `python bot.py` (yeh shim ab wahi supervisor chalata hai).
 | `JIN_AGENT_CHANNEL_DEAD_TTL_DAYS` | na | dead `tg_channels` registry TTL (din), default `30` — purani dead rows retention delete karta hai |
 | `JIN_AGENT_REPORT_CONFIDENCE` | na | report confidence gate (0–1), default `0.6` — is se niche "bharosemand nahi" payam, file nahi |
 | `JIN_AGENT_REQUIRE_CHAT_ID` | na | `1` par unset `TELEGRAM_CHAT_ID` reject (default off = allow-all) |
+| `JIN_AGENT_SOURCE_STALE_DAYS` | na | source `stale` mark karne ki window (din), default `30` |
+| `JIN_AGENT_CHANNEL_STALE_DAYS` | na | active channel `stale` (khamosh) window (din), default `30` |
+| `JIN_AGENT_TRACE_DAYS` | na | `data/runs/` per-run trace retention (din), default `30` |
+| `JIN_AGENT_MEMORY_STALE_DAYS` | na | memory audit ka stale window (din), default `30` |
+| `JIN_AGENT_TOKEN_BUDGET` | na | per-run token budget, default `100000` (meter + `budget_exceeded`) |
+| `JIN_AGENT_COST_PER_1M` | na | USD per 1M tokens (cost meter), default `0` |
 | `GROQ_API_KEY` | na | Roman Urdu translation / related search ke liye |
 | `LLM_PROVIDER` | na | `custom` |
 | `LLM_ENDPOINT` | na | `https://api.groq.com/openai/v1` |

@@ -387,3 +387,60 @@ stdlib-only, local-only, policy barqarar.
 **PHASE REVIEW — PHASE 29: READY**
 
 ---
+
+## 23. PHASE REVIEW — PHASE 30 — Scoring, Lifecycle, Trace (2.11.0)
+
+**TASK:** Competitor deep-dive (tgden/chatcrawler, ipiton STEWARDSHIP, maddness,
+ashishki, tsukeno, Hermes) ke P0 gaps: log-scale channel scoring + 30-din dead
+rule, source/channel lifecycle, markdown HTML, confirm-gated actions, suppression
+memory, per-run trace + token accounting, repeated-claim detection.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `channels.py` | `score()` log-scale (`lg(1+subs)`, `0.8*lg(1+posts)`), `channel_signs()` (kam-az-kam-3-signs gate), `check_channel` 30-din dead rule + `insufficient_data`, `dead_ttl_days`/`stale_ttl_days` + `mark_stale_channels`, `parse_preview` + `parser_selftest` (drift gate) |
+| `store.py` | sources me `status`/`last_verified_at`/`stale_days` (migration), `touch_source` lifecycle, `mark_stale_sources`, trace pruning |
+| `searchmemory.py` | `rejected_ideas` + `source_stats` (acted/cited/skipped/rejected), `reset_chat`, `audit` (duplicate/conflict/stale + audit trail) |
+| `verifier.py` | `repeated_claims()` (≥2 occurrences, cross-channel/cross-source/same-channel) |
+| `orchestrator.py` | per-run trace `data/runs/<id>.json` (query/plan/tools/sources/tokens/duration/confidence), token budget/cost meter |
+| `llm.py` | `TOKEN_USAGE` + `reset_tokens`/`token_usage`/`token_budget`/`cost_per_1m` |
+| `briefer.py` | Repeated Claims section |
+| `telegram_bot.py` | markdown→HTML + `parse_mode="HTML"` (escape-safe), `/addchannel` confirm gate (✅/❌), per-chat 20/min rate limit |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **Ran 413 tests — OK** (1 skip: PySocks). Naye `test_phase3_scoring_lifecycle.py` (17 tests).
+
+**RESULT:** Phases P13–P30 sab `PHASE REVIEW READY`. Scoring log-scale, lifecycle
+bounded, report HTML, destructive action confirm-gated, trace/token accounting,
+repeated-claim labels; stdlib-only, local-only, policy barqarar.
+
+**PHASE REVIEW — PHASE 30: READY**
+
+---
+
+## 24. PHASE REVIEW — PHASE 31 — BLUF, Honest Absence, Progress Edit, Top-Class Ops (2.11.0)
+
+**TASK:** Explorer ke "top class" gaps: BLUF (TL;DR + 3-5 findings, poori report
+file), honest absence (no result vs fetch fail vs partial), `/new` context reset,
+progress edit-in-place, `/digest` `/alerts` `/reports` `/schedule`, channel health
+digest, parser-drift selftest, memory audit.
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `telegram_bot.py` | `_bluf_text` (≤1000 chars) + `sendDocument`; `absence_kind` (ok/no_results/fetch_failed/partial/blocked) alag payam; `_API.edit` + `_STATUS_MESSAGES` (progress edit-in-place); `/new` `/digest` `/alerts` `/reports` `/schedule` `/channelhealth` `/memoryaudit` `/selftest`; `format_channel_health` / `format_memory_audit` / `format_selftest` |
+| `channels.py` | `parser_selftest()` (network-free drift gate) |
+| `searchmemory.py` | `audit()` duplicate/conflict/stale + audit event |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **Ran 413 tests — OK** (1 skip: PySocks). Naye `test_phase4_topclass.py` (17 tests).
+
+**RESULT:** Phases P13–P31 sab `PHASE REVIEW READY`. BLUF + honest absence, context
+reset, progress edit, ops commands, channel health, parser selftest, memory audit;
+stdlib-only, local-only, policy barqarar.
+
+**PHASE REVIEW — PHASE 31: READY**
+
+---
