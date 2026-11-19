@@ -38,8 +38,9 @@ except ImportError:
     _SOCKS_AVAILABLE = False
 
 from . import (VERSION, channels as channels_mod, chat_context, config,
-               highlight as highlight_mod, llm, orchestrator, policy, report_export,
-               scheduler, searchmemory as memory_mod, store, util, verifier)
+               dorks, highlight as highlight_mod, llm, orchestrator, policy,
+               report_export, scheduler, searchmemory as memory_mod, store,
+               util, verifier)
 
 
 class BotAPIError(RuntimeError):
@@ -121,7 +122,7 @@ HELP_TEXT = (
     "  Misal: /help\n"
     "/report [md|html] — aakhri report dobara bhejo (default md)\n\n"
     "Seedha matn bhi likh sakte hain — wo /research ban jata hai. "
-    "Purane commands bhi chalte hain: /addchannel, /rmchannel, /tgsearch, "
+    "Purane commands bhi chalte hain: /dork, /addchannel, /rmchannel, /tgsearch, "
     "/deep, /engines, /memory, /stop, /new, /digest, /reports, /alerts, "
     "/schedule, /channelhealth, /memoryaudit, /selftest.\n\n"
     "Har report ke baad bot poochta hai: mil gaya ya nahi. 'Nahi mila' par naye "
@@ -185,6 +186,7 @@ _LINK_ONLY_RE = re.compile(
 _HANDLE_ONLY_RE = re.compile(r"@[A-Za-z0-9_]{3,40}")
 # ``/research <sawal> --deep`` flag (deep engines links report ke saath).
 _DEEP_FLAG_RE = re.compile(r"(?:^|\s)--deep\s*$", re.I)
+_DORK_FLAG_RE = re.compile(r"(?:^|\s)--dork\s*$", re.I)
 # Explore confirm gate: exp:keep:ch:<handle> / exp:skip:st:<idx> / :all
 _EXPLORE_CB_RE = re.compile(
     r"^exp:(keep|skip):(all|ch:[A-Za-z0-9_]{3,40}|st:\d{1,4})$")
@@ -343,6 +345,15 @@ def split_deep_flag(arg: str) -> tuple[str, bool]:
     """``/research <sawal> --deep`` -> (sawal, deep). Flag hamesha aakhir me."""
     s = str(arg or "").strip()
     m = _DEEP_FLAG_RE.search(s)
+    if not m:
+        return s, False
+    return s[:m.start()].strip(), True
+
+
+def split_dork_flag(arg: str) -> tuple[str, bool]:
+    """``/explore <topic> --dork`` -> (topic, dork). Flag hamesha aakhir me."""
+    s = str(arg or "").strip()
+    m = _DORK_FLAG_RE.search(s)
     if not m:
         return s, False
     return s[:m.start()].strip(), True
@@ -1001,8 +1012,32 @@ def _render_explore(chat_id: int, topic: str, scope: str, res: dict,
             "items": len(items), "empty": False}
 
 
+def _send_dork(chat_id: int, query: str, cfg: dict, api) -> dict:
+    """``/dork <query>`` — dork presets + working backend ke links/results."""
+    q = str(query or "").strip()
+    if not q:
+        api.send(chat_id, "Dork ke liye query likhein: /dork <query>")
+        return {"ok": False, "action": "dork", "error": "query required"}
+    results = []
+    try:
+        results = dorks.search(dorks.tg(q), cfg)
+    except Exception:
+        results = []
+    send_chunks(api, chat_id, dorks.render(q, results))
+    try:
+        store.add_event("dork", f"query={util.truncate(q, 60)} "
+                                 f"results={len(results)}")
+    except Exception:
+        pass
+    return {"ok": True, "action": "dork", "query": q, "results": len(results)}
+
+
 def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
-    """``/explore <topic>`` — topic required; scope default all."""
+    """``/explore <topic>`` — topic required; scope default all.
+
+    ``--dork`` flag par dork presets + backend links bhi bheje jate hain.
+    """
+    topic, dork = split_dork_flag(topic)
     topic = str(topic or "").strip()
     scope = str(scope or "all").strip().lower()
     if scope not in SCOPE_LABELS:
@@ -1025,6 +1060,8 @@ def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
     out = _render_explore(chat_id, topic, scope, res, cfg, api)
     out["items"] = int(out.get("items") or 0)
     out["archive_items"] = int(res.get("items") or 0)
+    if dork:
+        out["dork"] = _send_dork(chat_id, topic, cfg, api)
     return out
 
 
@@ -1153,6 +1190,16 @@ def format_status_text(cfg: dict | None = None) -> str:
             f"added {int(disc.get('added') or 0)}")
         if disc.get("error"):
             lines.append("  ✗ wajah: " + util.truncate(str(disc["error"]), 100))
+    try:
+        dstat = dorks.backend_status()
+    except Exception:
+        dstat = []
+    if dstat:
+        ok_n = sum(1 for s in dstat if s["ok"])
+        lines.append(
+            f"• Dork: {ok_n} kaam / {len(dstat) - ok_n} blocked — "
+            + " · ".join(f"{s['name']} {'✓' if s['ok'] else '✗'}"
+                         for s in dstat))
     # Fail/stale source ka naam + wajah — hisaab chhota rehne par bhi khabar
     # saaf honi chahiye (kaunsa source, kyun band).
     for row in health["failed"]:
@@ -1834,6 +1881,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
         res = channels_mod.parser_selftest()
         send_chunks(api, chat_id, format_selftest(res))
         return {"ok": True, "action": "selftest", "ok": bool(res.get("ok"))}
+    if cmd == "dork":
+        return _send_dork(chat_id, arg, cfg, api)
     if cmd == "explore":
         # Topic required — bina topic par topic picker (koi niche default nahi).
         return _run_explore(chat_id, arg.strip(), "all", cfg, api)
