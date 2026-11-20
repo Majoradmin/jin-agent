@@ -22,6 +22,29 @@ def _log():
     return logging_setup.get_logger("orchestrator")
 
 
+# Ek hi source ki aik hi qisam ki items poori report par kabza na karey.
+# Misal: "free api key" par 14 Stack Exchange sawaal — score to barabar thi,
+# magar report "repeated" lagti thi. Har source se zyada se zyada ye items.
+DEFAULT_MAX_PER_SOURCE = 6
+
+
+def _diversify(ranked: list[dict], cap: int) -> list[dict]:
+    """Ranked list me se har source ki items ``cap`` par rok do.
+
+    Source ka matlab ``source_key`` (``source`` display naam nahi) — taake
+    "Google News RSS" aur "Google News RSS (topic)" alag na ginne jayen.
+    """
+    counts: dict[str, int] = {}
+    out: list[dict] = []
+    for item in ranked:
+        key = str(item.get("source_key") or item.get("source") or "")
+        if counts.get(key, 0) >= cap:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+        out.append(item)
+    return out
+
+
 def _write_trace(payload: dict) -> str:
     """Per-run trace JSON (``data/runs/<id>.json``) — Hermes trace.py pattern.
 
@@ -139,7 +162,11 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
     words = util.terms(query, 20)
     on_topic = [r for r in collapsed if ranker.matched_terms(r, words)] if words else collapsed
     off_topic_dropped = len(collapsed) - len(on_topic)
-    ranked = on_topic[:limit]
+    max_per_source = util.clamp(cfg.get("max_items_per_source"), 1, 25,
+                                DEFAULT_MAX_PER_SOURCE)
+    diverse = _diversify(on_topic, max_per_source)
+    diversity_dropped = len(on_topic) - len(diverse)
+    ranked = diverse[:limit]
     if ranked:
         store.upsert_items(ranked)                       # persist scores / confidence
 
@@ -173,6 +200,7 @@ def run(query: str, live: bool = False, days: int = 7, limit: int = 25,
         "budget_exceeded": tokens["total_tokens"] > llm.token_budget(),
         "unique_stories": len(ranked), "duplicate_rows_merged": merged_away,
         "off_topic_dropped": off_topic_dropped,
+        "diversity_dropped": diversity_dropped,
         "dedupe_rate_pct": round(100.0 * (1 - len(normalized) / len(executed["items"])), 1)
         if executed["items"] else 0.0,
         "sources_ok": sources_ok, "sources_failed": sources_failed,

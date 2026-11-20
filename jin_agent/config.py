@@ -79,6 +79,9 @@ DEFAULT = {
     "max_fetch_bytes": 2_000_000,
     "fetch_timeout": 10,
     "max_query_chars": 4000,
+    # Report me har source ki max items — ek hi source ki aik qisam ki
+    # items poori report par kabza na karey ("repeated" feel ke liye).
+    "max_items_per_source": 6,
     "default_days": 7,
     "default_limit": 25,
     # Proxy settings (for regions where api.telegram.org is blocked)
