@@ -1,4 +1,4 @@
-# PHASES — JIN Agent P13–P41
+# PHASES — JIN Agent P13–P42
 
 **Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
 **Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
@@ -763,5 +763,43 @@ Dork sirf public search + onion link-only. `VERSION` `2.9.0`, `is_owner`,
 patterns untouched.
 
 **PHASE REVIEW — PHASE 41: READY**
+
+---
+
+## 35. PHASE REVIEW — PHASE 42 — Synthetic Archive Guard + Live Scheduler (2.9.0)
+
+**TASK:** User ki shikayat: bot ki di hui links "fake" lagti thin. Live `/explore`
+me `https://example.org/8badfbb73842` jaisi URLs dikhin.
+
+**ROOT CAUSE (prove kiya):** `server._start_scheduler(offline=True)` default tha —
+yaani hosted scheduler **offline** chalta tha. `adapters._offline_items` offline
+par `https://example.org/<fingerprint>` banawati links deta hai; wo items archive
+me jamate the aur `/explore` / `/digest` unhe asli khabar ki tarah dikhate the.
+Reproduce: `scheduler.tick(cfg, offline=True)` → `search_archive("android")` me
+4 `example.org` items (bilkul wahi URL jo live explore me dikha).
+
+**IMPLEMENTATION:**
+
+| File | Change |
+|---|---|
+| `store.py` | `items.synthetic` column + purani DB migration (purane `example.org` rows ko flag karta hai); `upsert_items` flag set karta hai (`synthetic`/`kind=fixture`/`offline`/`meta.offline`); `search_archive` dono paths (FTS + LIKE) me `synthetic=0` filter |
+| `normalizer.py` | `normalize()` `synthetic` field jodi jo hai (fixture/offline se derive) |
+| `adapters.py` | `_offline_items` me `synthetic: True` |
+| `server.py` | `_start_scheduler` ab **live** default; env `JIN_AGENT_SCHEDULER_OFFLINE=1` se offline minta`l |
+| `tests/test_synthetic_guard.py` (naya) | 8 tests: flag, archive hide, `example.org` kabhi na wapas, purani DB migration, scheduler default |
+| `tests/test_eval_scheduler.py` | `test_watchlist_job` asli item use karta hai (synthetic archive se bahar hai) |
+
+**VERIFICATION:** `JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **669 tests OK (1 skipped)**. End-to-end: offline `tick` → 106 items, sab
+`synthetic=1`, `search_archive` **0** rows. Live `firehose` (gnews) → 101 asli
+items, `synthetic=0`, archive 20 asli URLs dikhata hai.
+
+**RESULT:** Bot ki di hui links ab hamesha asli hain — synthetic fixture archive
+me hote hain magar user ko kabhi nahi dikhte. Hosted scheduler live chalta hai,
+is liye archive asli khabaron se bharta hai. `VERSION` `2.9.0`, `is_owner`,
+`watchdog.py`, onion fetch block aur FRP/FMI/HuaweiID/Knox/MDM/IMEI patterns
+untouched.
+
+**PHASE REVIEW — PHASE 42: READY**
 
 ---

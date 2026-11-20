@@ -140,6 +140,12 @@ hai. Exact steps aur env vars (`JIN_AGENT_HOST`, `PORT`,
 `JIN_AGENT_UPDATE_WORKERS`, proxy vars) ke liye [`DEPLOY.md`](../DEPLOY.md)
 parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
 `JIN_AGENT_HOST` env / `--host` se (explicit opt-in).
+- **Scheduler live:** `serve()` scheduler ko **live** mode me start karta hai
+  (taake archive asli khabaron se bhare). Offline chalane ke liye
+  `JIN_AGENT_SCHEDULER_OFFLINE=1`; band karne ke liye `JIN_AGENT_SCHEDULER=off`.
+- **Synthetic guard:** offline fixture items (`example.org`) archive me sakht
+  hote hain magar `synthetic=1` flag se user-facing search (`/explore`,
+  `/digest`, `/reports`) se hamesha bahar rehte hain.
 
 ## Boundaries
 
