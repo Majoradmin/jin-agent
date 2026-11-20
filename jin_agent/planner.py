@@ -82,6 +82,72 @@ TOOLS = {
 
 TOOL_NAMES = sorted(TOOLS)
 
+# search_public ke liye base keys (kisi bhi generic query par).
+DEFAULT_PUBLIC_KEYS = ["gsmarena", "xda", "androidauthority", "androidpolice",
+                       "9to5google", "sammobile", "apple-newsroom", "gnews",
+                       "gnews-topic", "hn", "github", "gdelt"]
+
+# Topic → preferred adapter keys. Query ke lafz ke mutabiq search_public
+# unhi sources ko poochta hai; "free api key" jaise code query par GSMArena
+# jaise mobile sources kaam nahi aate, is liye wahi keys hata diye jate hain.
+TOPIC_KEYS = [
+    ("mobile", re.compile(
+        r"\b(android|iphone|ipad|ios|samsung|galaxy|pixel|xiaomi|oppo|vivo|"
+        r"oneplus|firmware|ota|rom|gsmarena|xda|sammobile|one ui|emui|"
+        r"harmonyos|mobile|phone)\b", re.I),
+     ["gsmarena", "xda", "sammobile", "androidauthority", "androidpolice",
+      "9to5google", "apple-newsroom"]),
+    ("security", re.compile(
+        r"\b(security|bulletin|cve|nvd|vulnerability|exploit|malware|patch|"
+        r"attestation|secure boot)\b", re.I),
+     ["nvd", "gnews", "gnews-topic", "zdnet", "arstechnica", "theverge"]),
+    ("code", re.compile(
+        r"\b(github|gitlab|repo|repository|source code|open source|sdk|api|"
+        r"npm|crates|stackexchange|huggingface)\b", re.I),
+     ["github-search", "github", "gitlab", "stackexchange", "hn", "npm",
+      "crates"]),
+    ("science", re.compile(
+        r"\b(paper|research|study|arxiv|doi|academic|patent|pubmed)\b", re.I),
+     ["openalex", "crossref", "arxiv", "pubmed", "doaj", "datacite", "hal"]),
+    ("world", re.compile(
+        r"\b(world|global|gdelt|news|international)\b", re.I),
+     ["gdelt", "gnews", "gnews-topic", "bbc-news", "aljazeera", "npr"]),
+]
+
+# Topic → extra deterministic tool call (hook). Ye calls search_public ke
+# muqable nafeeth tool se maloomat lati hain.
+TOPIC_TOOLS = [
+    ("security", re.compile(
+        r"\b(cve|nvd|vulnerability|exploit|security advisory|patch tuesday)\b",
+        re.I),
+     {"tool": "search_security", "limit": 15}),
+    ("code", re.compile(
+        r"\b(github|repo|repository|source code|open source|sdk)\b", re.I),
+     {"tool": "search_code", "limit": 15}),
+]
+
+
+def topic_keys(query: str, base: list[str] | None = None) -> list[str]:
+    """Query ke topic ke mutabiq adapter keys.
+
+    Topic match na ho to base keys (default 12). Match ho to sirf us topic
+    (ya topics) ke preferred keys — overlap se fayda, ghalat source nahi.
+    """
+    low = str(query or "").lower()
+    matched: list[str] = []
+    for _name, pattern, keys in TOPIC_KEYS:
+        if pattern.search(low):
+            matched.extend(keys)
+    if not matched:
+        return list(base) if base is not None else list(DEFAULT_PUBLIC_KEYS)
+    out: list[str] = []
+    seen: set[str] = set()
+    for key in matched:
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
 INJECTION = re.compile(
     r"(ignore\s+(all\s+)?(previous|prior|above)|disregard\s+(the\s+)?(instructions|system)|"
     r"system\s*prompt|you are now|jailbreak|dan mode|act as\s+(a\s+)?(developer|admin)|"
@@ -159,9 +225,8 @@ def dispatch(call: dict, ctx: dict) -> dict:
     result = {"tool": name, "args": args, "text": "", "items": [], "error": ""}
     try:
         if name == "search_public":
-            keys = ["gsmarena", "xda", "androidauthority", "androidpolice",
-                    "9to5google", "sammobile", "apple-newsroom", "gnews",
-                    "gnews-topic", "hn", "github", "gdelt"]
+            keys = topic_keys(args.get("query", ctx.get("query", "")),
+                              DEFAULT_PUBLIC_KEYS)
             items, diag = adapters.run(args.get("query", ctx.get("query", "")),
                                        keys=keys, days=int(args.get("days", 7)),
                                        limit=int(args.get("limit", 20)),
@@ -333,10 +398,11 @@ def _deterministic_calls(query: str, cfg: dict) -> list[dict]:
         calls.append({"tool": "search_social", "args": {"query": str(query)[:400], "limit": 15}})
     if re.search(r"\b(wikipedia|wikidata|encyclopedia|reference|what is|who is|definition)\b", low):
         calls.append({"tool": "search_reference", "args": {"query": str(query)[:400], "limit": 15}})
-    if re.search(r"\b(cve|nvd|vulnerability|exploit|security advisory|patch tuesday)\b", low):
-        calls.append({"tool": "search_security", "args": {"query": str(query)[:400], "limit": 15}})
-    if re.search(r"\b(github|repo|repository|source code|open source|sdk)\b", low):
-        calls.append({"tool": "search_code", "args": {"query": str(query)[:400], "limit": 15}})
+    for _name, pattern, spec in TOPIC_TOOLS:
+        if pattern.search(low):
+            calls.append({"tool": spec["tool"],
+                          "args": {"query": str(query)[:400],
+                                   "limit": spec["limit"]}})
     if re.search(r"\b(wayback|archive\.org|archived|old version|snapshot|deleted page)\b", low):
         calls.append({"tool": "search_web_archive", "args": {"query": str(query)[:500], "limit": 15}})
     if re.search(r"\b(sitemap|robots\.txt|crawl|site index)\b", low):
