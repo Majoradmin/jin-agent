@@ -19,6 +19,9 @@ import time
 
 from . import config, highlight, llm, policy, store, util, verifier
 
+# Category-level guidance — sirf recommendations/disclaimer ke tor par.
+# Per-item khulasa me NA (warna item se unrelated jumla lagta hai); tests isay
+# item output se door rakhne ki tameen istemal karte hain.
 HINTS = {
     "Mobile & Firmware": "Flash karne se pehle exact model, region / CSC aur binary revision match karain; galat package bootloop ya blocked binary deta hai.",
     "Android": "Build number, security patch level aur vendor variant note karain; purane loader naye patch par kaam nahi karte.",
