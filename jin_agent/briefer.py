@@ -17,7 +17,7 @@ import json
 import os
 import time
 
-from . import config, policy, store, util, verifier
+from . import config, llm, policy, store, util, verifier
 
 HINTS = {
     "Mobile & Firmware": "Flash karne se pehle exact model, region / CSC aur binary revision match karain; galat package bootloop ya blocked binary deta hai.",
@@ -75,19 +75,123 @@ def display_source(item: dict) -> str:
     return item.get("source", "source")
 
 
-def khulasa(item: dict) -> str:
-    """Rule-based Roman Urdu one-liner. Never invents facts."""
-    title = item.get("title", "")
+def _item_key(item: dict) -> str:
+    """Item ka stable cache key (guid, ya title+url)."""
+    guid = str(item.get("guid") or "").strip()
+    if guid:
+        return guid
+    return str(item.get("title") or "") + "|" + str(item.get("url") or "")
+
+
+def _rule_khulasa(item: dict) -> str:
+    """Item ke apne fields se Roman Urdu one-liner. Kabhi facts nahi banata."""
     source = display_source(item)
-    date = item.get("published") or "date nahi mili"
-    cat = item.get("category", "Custom Watchlist")
-    return (f"{source} ki ye maloomat {date} par aayi hai. "
-            f"Title mein darga hai: {util.truncate(title, 150)}. "
-            f"{HINTS.get(cat, HINTS['Custom Watchlist'])}")
+    date = item.get("published") or item.get("date_checked") or "date nahi mili"
+    parts = [f"{source} ki ye maloomat {date} par aayi hai."]
+    title = util.truncate(str(item.get("title") or ""), 150)
+    if title:
+        parts.append(f"Title: {title}.")
+    excerpt = util.clean_text(
+        item.get("excerpt") or item.get("snippet") or item.get("description") or "", 300)
+    if excerpt:
+        parts.append(f"Item ka khulasa: {util.truncate(excerpt, 300)}")
+    entities = item.get("entities") or []
+    values: list[str] = []
+    for ent in entities:
+        value = ent.get("value") if isinstance(ent, dict) else ent
+        value = str(value or "").strip()
+        if value and value not in values:
+            values.append(value)
+    if values:
+        parts.append("Darj entities: " + ", ".join(values[:5]) + ".")
+    return " ".join(parts)
+
+
+def _llm_khulasa(item: dict, cfg: dict) -> str:
+    """LLM se item ki asli summary — sirf item ke fields diye hote hain.
+
+    Model ko koi URL/path/socket nahi milta; prompt me sirf item ki apni
+    maloomat hoti hai. Fail hone par "" lauta aata hai (rule-based fallback).
+    """
+    entities = item.get("entities") or []
+    values = [str(e.get("value") if isinstance(e, dict) else e) for e in entities]
+    values = [v.strip() for v in values if str(v or "").strip()][:6]
+    excerpt = util.truncate(
+        util.clean_text(item.get("excerpt") or item.get("snippet")
+                        or item.get("description") or "", 800), 800)
+    prompt = (
+        "Summarize this ONE research item in 1-2 sentences of natural Roman Urdu. "
+        "Use ONLY the fields below. Never invent facts, URLs, dates or citations. "
+        "Keep technical terms in English.\n\n"
+        f"Title: {item.get('title', '')}\n"
+        f"Source: {display_source(item)}\n"
+        f"Published: {item.get('published') or 'n/a'}\n"
+        f"Date checked: {item.get('date_checked') or 'n/a'}\n"
+        f"Category: {item.get('category', '')}\n"
+        f"Excerpt: {excerpt or 'n/a'}\n"
+        f"Entities: {', '.join(values) if values else 'n/a'}"
+    )
+    try:
+        out = llm.chat(cfg, llm.SYSTEM_RESEARCH, prompt, timeout=20)
+    except Exception:
+        return ""
+    text = str((out or {}).get("text") or "").strip()
+    return util.truncate(text, 500) if text else ""
+
+
+def summarize_items(items: list[dict], cfg: dict) -> dict[str, str]:
+    """LLM mode me har item ki summary cache banata hai; off ho to {}.
+
+    Cache ``khulasa`` aur report export isi se parhte hain, taake HTML/MD
+    ek hi summary dobara na likhein.
+    """
+    if not items:
+        return {}
+    try:
+        mode = llm.resolve(cfg).get("mode")
+    except Exception:
+        return {}
+    if mode != "llm":
+        return {}
+    out: dict[str, str] = {}
+    for item in items:
+        text = _llm_khulasa(item, cfg)
+        if text:
+            out[_item_key(item)] = text
+    return out
+
+
+def khulasa(item: dict, cfg: dict | None = None,
+            cache: dict[str, str] | None = None) -> str:
+    """Item-specific Roman Urdu summary.
+
+    - ``cache`` mojood ho to wahi summary (build/report export ek hi natija).
+    - LLM enabled ho to asli summary; fail par rule-based fallback.
+    - LLM off ho to sirf item ke apne fields — category ki canned jumla nahi.
+    """
+    key = _item_key(item)
+    if isinstance(cache, dict) and key in cache:
+        cached = str(cache[key] or "").strip()
+        if cached:
+            return cached
+    base = _rule_khulasa(item)
+    if cfg is not None:
+        try:
+            mode = llm.resolve(cfg).get("mode")
+        except Exception:
+            mode = "rule_based"
+        if mode == "llm":
+            text = _llm_khulasa(item, cfg)
+            if text:
+                if isinstance(cache, dict):
+                    cache[key] = text
+                return text
+    return base
 
 
 def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
-              duration_ms, mode, blocked=None) -> str:
+              duration_ms, mode, blocked=None,
+              summaries: dict[str, str] | None = None) -> str:
     date_checked = util.now_iso()
     categories: dict[str, list[dict]] = {}
     for item in items:
@@ -191,8 +295,7 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                          f"Confidence: {item.get('confidence', 0)} | "
                          f"Trust: {item.get('trust_label', '')} | Score: {item.get('score', 0)}"),
                         f"  - URL: {item.get('url', '')}",
-                        f"  - Khulasa: {khulasa(item)}",
-                        (f"  - Why it matters: {HINTS.get(category, HINTS['Custom Watchlist'])}"),
+                        f"  - Khulasa: {khulasa(item, cfg, summaries)}",
                         (f"  - Cross-verified: {cross}"),
                         "",
                     ]
@@ -285,8 +388,9 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
           duration_ms: int = 0, mode: str = "offline",
           blocked: dict | None = None) -> dict:
     cfg = cfg or config.load()
+    summaries = summarize_items(items, cfg)
     markdown = _markdown(query, items, diagnostics, cfg, plan_result, audit,
-                         metrics, duration_ms, mode, blocked)
+                         metrics, duration_ms, mode, blocked, summaries)
     confidence = verifier.aggregate_confidence(items)
     repeated = verifier.repeated_claims(items)
     structured = {
@@ -296,6 +400,7 @@ def build(query: str, items: list[dict], diagnostics: list[dict],
         "tools": [c["tool"] for c in (plan_result or {}).get("calls", [])],
         "items": items, "diagnostics": diagnostics, "audit": audit,
         "metrics": metrics, "blocked": blocked or None,
+        "summaries": summaries,
         "confidence": confidence, "repeated_claims": repeated,
     }
     return {

@@ -72,7 +72,8 @@ def _items(report: dict, structured: dict) -> list[dict]:
     return [r for r in rows if isinstance(r, dict)]
 
 
-def _bucket_sections(items: list[dict]) -> list[str]:
+def _bucket_sections(items: list[dict],
+                     summaries: dict[str, str] | None = None) -> list[str]:
     """Items ko beginner buckets me group karke HTML (bucket headings ke saath)."""
     by_bucket: dict[str, list[dict]] = {}
     for item in items:
@@ -103,7 +104,7 @@ def _bucket_sections(items: list[dict]) -> list[str]:
                        f'Trust: {_esc(item.get("trust_label") or "")} | '
                        f'Score: {_esc(item.get("score") or 0)}</p>'
                        f'<p class="meta">URL: {_link(item.get("url") or "")}</p>'
-                       f'<p>{_esc(briefer.khulasa(item))}</p>'
+                       f'<p>{_esc(briefer.khulasa(item, None, summaries))}</p>'
                        f'<p class="meta">Cross-verified: {_esc(cross)}</p></div>')
         if len(rows) > 5:
             out.append(f'<p class="meta">{_esc(bucket)} mein mazid '
@@ -146,6 +147,9 @@ def to_html(report: dict) -> str:
     blocked = structured.get("blocked") or None
     audit = structured.get("audit") or {}
     metrics = structured.get("metrics") or {}
+    summaries = structured.get("summaries")
+    if not isinstance(summaries, dict):
+        summaries = {}
 
     top_sources = sorted({briefer.display_source(i) for i in items})[:6]
     bluf = (f"Is run mein <strong>{len(items)}</strong> unique stories mile, jin mein "
@@ -201,7 +205,7 @@ def to_html(report: dict) -> str:
 
     parts.append("<h2>Findings</h2>")
     if items:
-        parts.extend(_bucket_sections(items))
+        parts.extend(_bucket_sections(items, summaries))
     else:
         parts.append('<div class="card"><p>Is query par koi item nahi mili. '
                      "Offline ya network failure ki soorat mein agent khali natija "
