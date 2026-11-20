@@ -91,6 +91,9 @@ def normalize(raw: dict, date_checked: str = "", cfg: dict | None = None) -> dic
         "score": 0.0, "reasons": [], "confidence": 0.0,
         "verified": False, "cross_verified": False,
         "link_only": link_only, "useful": 0,
+        # Offline fixture / synthetic — user-facing archive se bahar.
+        "synthetic": bool(raw.get("synthetic") or raw.get("offline")
+                          or str(raw.get("kind") or "") == "fixture"),
         "meta": {"kind": raw.get("kind", ""), "offline": offline,
                  "url_fetched": False, "adapter": source_key},
     }

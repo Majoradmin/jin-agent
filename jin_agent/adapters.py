@@ -1848,7 +1848,8 @@ def _offline_items(adapter: Adapter, query: str, limit: int) -> list[dict]:
             "excerpt": "Offline fixture for pipeline evaluation: " + title,
             "body": "Offline fixture corpus. No live network access was used.",
             "category": category, "trust": adapter.trust, "tier": adapter.tier,
-            "kind": "fixture", "link_only": adapter.key == "ahmia",
+            "kind": "fixture", "synthetic": True, "offline": True,
+            "link_only": adapter.key == "ahmia",
             "offline": True,
         })
     if adapter.key in ("ahmia", "wayback"):

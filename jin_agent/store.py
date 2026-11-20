@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS items (
   cross_verified INTEGER NOT NULL DEFAULT 0,
   link_only INTEGER NOT NULL DEFAULT 0,
   useful INTEGER NOT NULL DEFAULT 0,
+  synthetic INTEGER NOT NULL DEFAULT 0,
   meta TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_items_fingerprint ON items(fingerprint);
@@ -180,7 +181,8 @@ ITEM_FIELDS = (
     "guid", "url", "canonical", "title", "source", "source_key", "tier", "trust",
     "trust_label", "category", "published", "date_checked", "fetched_at", "excerpt",
     "body", "fingerprint", "content_hash", "entities", "score", "reasons",
-    "confidence", "verified", "cross_verified", "link_only", "useful", "meta",
+    "confidence", "verified", "cross_verified", "link_only", "useful",
+    "synthetic", "meta",
 )
 
 
@@ -212,6 +214,15 @@ def init_db() -> dict:
     global FTS_ENABLED, FTS_ERROR
     with session() as con:
         con.executescript(SCHEMA_MAIN)
+        # Purani DB migration: synthetic (offline fixture) items ka flag.
+        # FTS triggers se PEHLE — external-content FTS5 par trigger wala
+        # UPDATE "database disk image is malformed" deta hai.
+        icols = {r[1] for r in con.execute("PRAGMA table_info(items)")}
+        if "synthetic" not in icols:
+            con.execute("ALTER TABLE items ADD COLUMN synthetic INTEGER NOT NULL DEFAULT 0")
+            # Purani offline fixture items (example.org) ko synthetic mark karo.
+            con.execute("UPDATE items SET synthetic=1 WHERE url LIKE '%example.org%' "
+                        "OR url LIKE '%example%.onion%'")
         try:
             con.executescript(SCHEMA_FTS)
             FTS_ENABLED = True
@@ -279,6 +290,21 @@ def upsert_items(items: list[dict]) -> dict:
                     item[key] = _json(item.get(key, [] if key != "meta" else {}))
             for key in ("verified", "cross_verified", "link_only", "useful"):
                 item[key] = int(bool(item.get(key)))
+            # Offline fixture / synthetic items user-facing archive se bahar.
+            # Wajah: hosted scheduler offline chalne par ``example.org`` jaisi
+            # banawati links explore/digest me asli khabar lagti thin.
+            _meta = item.get("meta")
+            if isinstance(_meta, str):
+                try:
+                    _meta = json.loads(_meta or "{}")
+                except ValueError:
+                    _meta = {}
+            _meta = dict(_meta or {})
+            item["synthetic"] = int(bool(item.get("synthetic")
+                                         or item.get("kind") == "fixture"
+                                         or item.get("offline") is True
+                                         or _meta.get("offline") is True
+                                         or _meta.get("kind") == "fixture"))
             values = []
             for field in ITEM_FIELDS:
                 value = item.get(field, "" if field not in ("trust", "score", "confidence") else 0)
@@ -328,7 +354,7 @@ def search_archive(query: str = "", limit: int = 30, category: str = "") -> list
     if FTS_ENABLED and str(query or "").strip():
         try:
             sql = ("SELECT i.* FROM items_fts f JOIN items i ON i.id=f.rowid "
-                   "WHERE items_fts MATCH ?")
+                   "WHERE items_fts MATCH ? AND i.synthetic=0")
             args = [_fts_expression(query)]
             if cat_where:
                 sql += " AND i.category=?"
@@ -339,7 +365,7 @@ def search_archive(query: str = "", limit: int = 30, category: str = "") -> list
                 return [_row_to_dict(r) for r in con.execute(sql, args)]
         except sqlite3.Error:
             pass  # graceful fallback below
-    sql = "SELECT * FROM items WHERE 1=1"
+    sql = "SELECT * FROM items WHERE synthetic=0"
     params: list = []
     if str(query or "").strip():
         sql += " AND (title LIKE ? OR excerpt LIKE ? OR source LIKE ?)"

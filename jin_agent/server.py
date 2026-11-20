@@ -329,15 +329,30 @@ def _scheduler_enabled() -> bool:
     return raw not in ("off", "0", "false", "no")
 
 
-def _start_scheduler(offline: bool = True):
+def _scheduler_offline_default() -> bool:
+    """Scheduler ka offline mode — hosted deploy par **live** (env
+    ``JIN_AGENT_SCHEDULER_OFFLINE``, default ``0``).
+
+    Pehle default ``offline=True`` tha. Natija: archive me sirf synthetic
+    ``example.org`` fixture items jamate the aur ``/explore`` / ``/digest``
+    unhe asli khabar ki tarah dikhate the — user ko "fake links" lagti thin.
+    """
+    raw = str(os.environ.get("JIN_AGENT_SCHEDULER_OFFLINE", "0") or "0").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _start_scheduler(offline: bool | None = None):
     """Global scheduler start karo (pehle se chal raha ho to wahi)."""
     global _SCHEDULER
     if not _scheduler_enabled():
         return None
+    if offline is None:
+        offline = _scheduler_offline_default()
     if _SCHEDULER is not None and _SCHEDULER.is_alive():
         return _SCHEDULER
     _SCHEDULER = scheduler.Scheduler(config.load(), offline=offline)
     _SCHEDULER.start()
+    print(f"[server] scheduler auto-start (offline={bool(offline)})")
     return _SCHEDULER
 
 

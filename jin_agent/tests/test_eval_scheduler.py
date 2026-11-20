@@ -82,6 +82,15 @@ class TestScheduler(unittest.TestCase):
 
     def test_watchlist_job(self):
         store.add_watchlist("MediaTek")
+        # Watchlist user-facing archive par chalti hai — synthetic (offline
+        # fixture) items wo se bahar hain, is liye asli item daalte hain.
+        store.upsert_items([{
+            "title": "MediaTek preloader scatter analysis",
+            "url": "https://news.google.com/mediatek-preloader-scatter",
+            "source": "Google News RSS", "source_key": "gnews",
+            "excerpt": "MediaTek preloader scatter",
+            "category": "Mobile & Firmware",
+        }])
         out = scheduler.run_job("watchlist", {}, config.load(), offline=True)
         self.assertTrue(any(h["term"] == "MediaTek" for h in out["hits"]))
 
