@@ -84,7 +84,7 @@ def _bucket_sections(items: list[dict], terms: list[str],
         if not rows:
             continue
         out.append(f"<h3>{_esc(bucket)}</h3>")
-        for item in rows[:5]:
+        for item in rows:
             meta = item.get("meta") or {}
             if item.get("cross_verified"):
                 cross = "yes"
@@ -106,9 +106,6 @@ def _bucket_sections(items: list[dict], terms: list[str],
                        f'<p class="meta">URL: {_link(item.get("url") or "")}</p>'
                        f'<p>{highlight.highlight_html(_esc(briefer.khulasa(item, None, summaries)), terms)}</p>'
                        f'<p class="meta">Cross-verified: {_esc(cross)}</p></div>')
-        if len(rows) > 5:
-            out.append(f'<p class="meta">{_esc(bucket)} mein mazid '
-                       f'{len(rows) - 5} items archive mein hain.</p>')
     return out
 
 
@@ -213,7 +210,8 @@ def to_html(report: dict) -> str:
                      "Offline ya network failure ki soorat mein agent khali natija "
                      "deti hai, koi banawati khabar nahi banata.</p></div>")
 
-    parts.extend(_sources_section(structured.get("diagnostics")))
+    parts.extend(_sources_section(
+        briefer.query_diagnostics(structured.get("diagnostics"), items)))
 
     parts.append("<h2>Not Verified / Limitations</h2>")
     parts.append("<ul>")

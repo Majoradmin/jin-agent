@@ -75,6 +75,42 @@ def display_source(item: dict) -> str:
     return item.get("source", "source")
 
 
+def query_diagnostics(diagnostics: list[dict] | None,
+                      items: list[dict] | None) -> list[dict]:
+    """Sources table sirf is query ke sources dikhaye — jin se items aaye.
+
+    Raw adapter ``count`` (off-topic filter ke baad bhi bara dikhta tha) ki
+    jagah is query ke ranked items ka count use hota hai. Is tarah GSMArena
+    jaisa source 20 raw items ke baawajood 0 report items par table se gayab.
+    """
+    counts: dict[str, int] = {}
+    for item in items or []:
+        key = str(item.get("source_key") or "").strip()
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+        name = str(item.get("source") or "").strip().lower()
+        if name:
+            counts.setdefault(name, 0)
+    out: list[dict] = []
+    seen: set[str] = set()
+    for diag in diagnostics or []:
+        if not isinstance(diag, dict):
+            continue
+        key = str(diag.get("key") or "").strip()
+        name = str(diag.get("name") or "").strip().lower()
+        ident = key if key in counts else (name if name in counts else "")
+        if not ident or ident in seen:
+            continue
+        seen.add(ident)
+        row = dict(diag)
+        row["count"] = int(counts.get(ident) or 0)
+        row["query_items"] = int(row["count"])
+        out.append(row)
+    out.sort(key=lambda d: (-int(d.get("count") or 0),
+                            str(d.get("name") or "")))
+    return out
+
+
 def _item_key(item: dict) -> str:
     """Item ka stable cache key (guid, ya title+url)."""
     guid = str(item.get("guid") or "").strip()
@@ -194,6 +230,7 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
               summaries: dict[str, str] | None = None) -> str:
     date_checked = util.now_iso()
     terms = highlight.terms(query)
+    qdiagnostics = query_diagnostics(diagnostics, items)
     categories: dict[str, list[dict]] = {}
     for item in items:
         categories.setdefault(item.get("category", "Custom Watchlist"), []).append(item)
@@ -278,8 +315,7 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                 continue
             lines += [f"### {bucket}", ""]
             for category in sorted(members):
-                rows = categories[category][:5]
-                for item in rows:
+                for item in categories[category]:
                     meta = item.get("meta") or {}
                     if item.get("cross_verified"):
                         cross = "yes"
@@ -312,8 +348,6 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                             f"  - {label}: {', '.join(item['also_sources'])} "
                             f"({item.get('duplicate_count', 1)} source records merged)",
                         )
-                if len(categories[category]) > 5:
-                    lines += [f"_{category} mein mazid {len(categories[category]) - 5} items archive mein hain._", ""]
         repeated = verifier.repeated_claims(items)
         if repeated:
             lines += ["## Repeated Claims", ""]
@@ -349,12 +383,14 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
         "## Sources & Diagnostics", "",
         "| Source | Tier | Status | Items | Note |", "|---|---|---|---|---|",
     ]
-    for diag in diagnostics or []:
+    for diag in qdiagnostics:
         lines.append(f"| {diag.get('name', '')} | {diag.get('tier', '')} | "
                      f"{'OK' if diag.get('ok') else 'FAIL'} | {diag.get('count', 0)} | "
                      f"{util.truncate(diag.get('error', ''), 90).replace('|', '/')} |")
-    if not diagnostics:
-        lines.append("| (none) | - | - | 0 | Blocked request par koi fetch nahi hua |")
+    if not qdiagnostics:
+        note = ("Blocked request par koi fetch nahi hua" if blocked
+                else "Is query par koi source item nahi diya")
+        lines.append(f"| (none) | - | - | 0 | {note} |")
     lines += ["", "## Provenance", "",
               f"- Items: {audit.get('total', 0) if audit else 0}",
               f"- With URL: {audit.get('with_url', 0) if audit else 0}",

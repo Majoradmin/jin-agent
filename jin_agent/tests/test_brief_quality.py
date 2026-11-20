@@ -9,7 +9,7 @@ import os
 import tempfile
 import unittest
 
-from jin_agent import briefer, config  # noqa: E402
+from jin_agent import briefer, config, report_export  # noqa: E402
 
 
 def setUpModule():
@@ -120,6 +120,54 @@ class TestItemSpecificKhulasa(unittest.TestCase):
         self.assertIn("Free Dictionary API", md)
         self.assertIn("Dictionary API.", md)
         self.assertNotIn("Flash karne", md)
+
+
+class TestReportCompletenessAndSources(unittest.TestCase):
+    def test_all_items_shown_no_archive_note(self):
+        items = [_item(f"Story {i}") for i in range(7)]
+        md = briefer._markdown("q", items, [], {"tor_mode": "links_only"},
+                               {}, {}, {}, 0, "offline")
+        for i in range(7):
+            self.assertIn(f"Story {i}", md)
+        self.assertNotIn("archive mein", md)
+
+    def test_html_all_items_shown(self):
+        items = [_item(f"Story {i}") for i in range(7)]
+        built = briefer.build("q", items, [], config.load())
+        html = report_export.to_html(built)
+        for i in range(7):
+            self.assertIn(f"Story {i}", html)
+        self.assertNotIn("archive mein", html)
+
+    def test_sources_table_is_query_specific(self):
+        diags = [
+            {"key": "gsmarena", "name": "GSMArena", "tier": "T0",
+             "ok": True, "count": 20, "error": ""},
+            {"key": "androidauthority", "name": "Android Authority", "tier": "T0",
+             "ok": True, "count": 1, "error": ""},
+        ]
+        items = [_item("Android story", source="Android Authority",
+                        source_key="androidauthority")]
+        md = briefer._markdown("q", items, diags, {"tor_mode": "links_only"},
+                               {}, {}, {}, 0, "offline")
+        self.assertIn("Android Authority", md)
+        self.assertNotIn("GSMArena", md)
+        # count raw 20 nahi, is query ka 1
+        self.assertIn("| Android Authority | T0 | OK | 1 |", md)
+
+    def test_html_sources_table_is_query_specific(self):
+        diags = [
+            {"key": "gsmarena", "name": "GSMArena", "tier": "T0",
+             "ok": True, "count": 20, "error": ""},
+            {"key": "androidauthority", "name": "Android Authority", "tier": "T0",
+             "ok": True, "count": 1, "error": ""},
+        ]
+        items = [_item("Android story", source="Android Authority",
+                        source_key="androidauthority")]
+        built = briefer.build("q", items, diags, config.load())
+        html = report_export.to_html(built)
+        self.assertIn("Android Authority", html)
+        self.assertNotIn("GSMArena", html)
 
 
 if __name__ == "__main__":

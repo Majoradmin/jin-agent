@@ -36,8 +36,8 @@ class TestHtmlExport(unittest.TestCase):
             "title": '<script>alert("x")</script>',
             "query": "<b>sawal</b>",
             "items": [_item("<b>breaking</b> & news")],
-            "diagnostics": [{"name": "<i>src</i>", "tier": "T0", "ok": True,
-                             "count": 1, "error": ""}],
+            "diagnostics": [{"key": "k", "name": "<i>src</i>", "tier": "T0",
+                             "ok": True, "count": 1, "error": ""}],
             "confidence": {"label": "High", "value": 0.9, "items": 1,
                            "verified": 1, "cross_verified": 0},
             "audit": {},
@@ -68,9 +68,12 @@ class TestHtmlExport(unittest.TestCase):
     def test_sources_table_and_confidence(self):
         report = {
             "query": "q",
-            "diagnostics": [{"name": "Android Bulletin", "tier": "T0", "ok": False,
-                             "count": 0, "error": "timeout"}],
-            "confidence": {"label": "Medium", "value": 0.5, "items": 0,
+            "items": [_item("Android story", source="Android Bulletin",
+                            source_key="android-bulletin")],
+            "diagnostics": [{"key": "android-bulletin",
+                             "name": "Android Bulletin", "tier": "T0",
+                             "ok": False, "count": 1, "error": "timeout"}],
+            "confidence": {"label": "Medium", "value": 0.5, "items": 1,
                            "verified": 0, "cross_verified": 0},
         }
         html = report_export.to_html(report)
@@ -91,7 +94,7 @@ class TestHtmlExport(unittest.TestCase):
     def test_briefer_build_roundtrip(self):
         items = [_item("Android 17 patch", "Android")]
         built = briefer.build("android patch", items,
-                              [{"name": "Android Bulletin", "tier": "T0",
+                              [{"key": "k", "name": "Android Bulletin", "tier": "T0",
                                 "ok": True, "count": 1, "error": ""}],
                               audit={"total": 1, "with_url": 1, "with_date": 1,
                                      "with_source": 1, "provenance_pct": 100,
