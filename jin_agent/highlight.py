@@ -209,6 +209,57 @@ def highlight_html(html: str, terms: list[str]) -> str:
     return "".join(out)
 
 
+_MD_SPECIAL_RE = re.compile(r"([\\`*_{}\[\]()#+.!|>-])")
+_MD_SKIP_RE = re.compile(r"(https?://[^\s)\]]+)|(`[^`\n]*`)")
+
+
+def escape_markdown(text: str) -> str:
+    """Markdown meta-characters ko escape karo (sirf highlight ke nazeer ke liye)."""
+    return _MD_SPECIAL_RE.sub(r"\\\1", str(text or ""))
+
+
+def _highlight_md_segment(segment: str, pattern: re.Pattern) -> str:
+    """Aik (URL/code-free) MD segment me terms ko ``**`` se wrap karo."""
+    def repl(match: re.Match) -> str:
+        return "**" + escape_markdown(match.group(0)) + "**"
+    return pattern.sub(repl, segment)
+
+
+def highlight_markdown(text: str, terms: list[str]) -> str:
+    """Plain Markdown me query terms ko ``**term**`` se highlight karo.
+
+    - URL ke andar aur inline code me replace nahi hota.
+    - case-insensitive; har term ek dafa (pehli occurrence).
+    - term me markdown meta-char ho to escape kiya jata hai, taake ``**``
+      structure na toote.
+    - koi match nahi to text waisa hi lauta aata hai.
+    """
+    raw = str(text or "")
+    if not raw:
+        return raw
+    if isinstance(terms, str):
+        terms = [terms]
+    uniq: dict[str, str] = {}
+    for t in terms or []:
+        s = str(t or "").strip()
+        if s:
+            uniq.setdefault(s.lower(), s)
+    ordered = sorted(uniq.values(), key=lambda s: (-len(s), s))
+    if not ordered:
+        return raw
+    pattern = re.compile("|".join(re.escape(t) for t in ordered), re.IGNORECASE)
+    out: list[str] = []
+    pos = 0
+    for m in _MD_SKIP_RE.finditer(raw):
+        if m.start() > pos:
+            out.append(_highlight_md_segment(raw[pos:m.start()], pattern))
+        out.append(m.group(0))
+        pos = m.end()
+    if pos < len(raw):
+        out.append(_highlight_md_segment(raw[pos:], pattern))
+    return "".join(out)
+
+
 def _split_lines(text: str) -> list[str]:
     """Text ko newline par todo, newline peechay wale hissay ke saath rahe."""
     parts = text.split("\n")

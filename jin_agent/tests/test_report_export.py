@@ -102,6 +102,28 @@ class TestHtmlExport(unittest.TestCase):
         self.assertIn("Android 17 patch", html)
         self.assertIn("Android Bulletin", html)
 
+    def test_md_report_highlights_query_terms(self):
+        items = [_item("Free Dictionary API key",
+                       excerpt="A free dictionary API service.")]
+        built = briefer.build("free api key", items, [], config.load())
+        md = built["markdown"]
+        self.assertIn("**Query:** **free** **api** **key**", md)
+        self.assertIn("**Free**", md)
+        self.assertNotIn("<b>", md)
+        # URL ke andar highlight nahi hota
+        self.assertNotIn("https://example.com/**api**", md)
+
+    def test_html_report_highlights_query_terms(self):
+        items = [_item("Free Dictionary API key",
+                       excerpt="A free dictionary API service.")]
+        built = briefer.build("free api key", items, [], config.load())
+        html = report_export.to_html(built)
+        self.assertIn("<b>free</b>", html)
+        self.assertIn("<b>api</b>", html)
+        self.assertIn("<b>Free</b>", html)
+        # href ke andar highlight nahi
+        self.assertIn('href="https://example.com/a"', html)
+
     def test_from_report_file(self):
         folder = config.reports_dir()
         md = folder / "brief-export-test.md"

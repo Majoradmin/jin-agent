@@ -200,5 +200,42 @@ class TestSplitHtml(unittest.TestCase):
         self.assertEqual("".join(chunks), html)
 
 
+class TestHighlightMarkdown(unittest.TestCase):
+    def test_basic_bold(self):
+        self.assertEqual(highlight.highlight_markdown("free api key", ["api"]),
+                         "free **api** key")
+
+    def test_case_insensitive(self):
+        self.assertEqual(highlight.highlight_markdown("Free API key", ["api"]),
+                         "Free **API** key")
+
+    def test_url_not_highlighted(self):
+        text = "dekhein https://example.com/api docs"
+        self.assertEqual(highlight.highlight_markdown(text, ["api"]), text)
+
+    def test_inline_code_not_highlighted(self):
+        text = "use `api` yahan"
+        self.assertEqual(highlight.highlight_markdown(text, ["api"]), text)
+
+    def test_markdown_meta_escaped_inside_bold(self):
+        out = highlight.highlight_markdown("foo_bar baz", ["foo_bar"])
+        self.assertEqual(out, "**foo\\_bar** baz")
+
+    def test_multiple_terms_longest_first(self):
+        out = highlight.highlight_markdown("android security bulletin",
+                                           ["android", "security"])
+        self.assertEqual(out.count("**"), 4)
+        self.assertIn("**android**", out)
+        self.assertIn("**security**", out)
+
+    def test_no_match_returns_identical(self):
+        text = "koi match nahi"
+        self.assertEqual(highlight.highlight_markdown(text, ["zzz"]), text)
+
+    def test_empty_terms(self):
+        text = "plain text"
+        self.assertEqual(highlight.highlight_markdown(text, []), text)
+
+
 if __name__ == "__main__":
     unittest.main()

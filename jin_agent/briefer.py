@@ -17,7 +17,7 @@ import json
 import os
 import time
 
-from . import config, llm, policy, store, util, verifier
+from . import config, highlight, llm, policy, store, util, verifier
 
 HINTS = {
     "Mobile & Firmware": "Flash karne se pehle exact model, region / CSC aur binary revision match karain; galat package bootloop ya blocked binary deta hai.",
@@ -193,6 +193,7 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
               duration_ms, mode, blocked=None,
               summaries: dict[str, str] | None = None) -> str:
     date_checked = util.now_iso()
+    terms = highlight.terms(query)
     categories: dict[str, list[dict]] = {}
     for item in items:
         categories.setdefault(item.get("category", "Custom Watchlist"), []).append(item)
@@ -202,7 +203,7 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
     lines = [
         "# JIN Agent - Research Brief",
         "",
-        f"**Query:** {query}",
+        f"**Query:** {highlight.highlight_markdown(query, terms)}",
         f"**Date checked:** {date_checked}",
         f"**Mode:** {mode} | **Duration:** {duration_ms} ms",
         f"**Policy:** {policy.POLICY_ID} | **Tor:** {cfg.get('tor_mode', 'links_only')}",
@@ -286,8 +287,11 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                         cross = "no (offline fixture / link-only: independent corroboration nahi)"
                     else:
                         cross = "no"
+                    title = str(item.get("title") or "")
+                    htitle = highlight.highlight_markdown(title, terms)
+                    title_line = f"- {htitle}" if htitle != title else f"- **{title}**"
                     lines += [
-                        f"- **{item.get('title', '')}**",
+                        title_line,
                         (f"  - Source: {display_source(item)} | Category: {category} | "
                          f"Tier: {item.get('tier', '')} | "
                          f"Date checked: {item.get('date_checked', '')} | "
@@ -295,7 +299,8 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                          f"Confidence: {item.get('confidence', 0)} | "
                          f"Trust: {item.get('trust_label', '')} | Score: {item.get('score', 0)}"),
                         f"  - URL: {item.get('url', '')}",
-                        f"  - Khulasa: {khulasa(item, cfg, summaries)}",
+                        (f"  - Khulasa: "
+                         f"{highlight.highlight_markdown(khulasa(item, cfg, summaries), terms)}"),
                         (f"  - Cross-verified: {cross}"),
                         "",
                     ]

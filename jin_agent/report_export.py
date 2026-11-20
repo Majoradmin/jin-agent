@@ -16,7 +16,7 @@ from __future__ import annotations
 import html
 import json
 
-from . import briefer, policy, util
+from . import briefer, highlight, policy, util
 
 _STYLE = """
 body{font-family:system-ui,Arial,sans-serif;margin:2rem;background:#f5f7fa;
@@ -72,7 +72,7 @@ def _items(report: dict, structured: dict) -> list[dict]:
     return [r for r in rows if isinstance(r, dict)]
 
 
-def _bucket_sections(items: list[dict],
+def _bucket_sections(items: list[dict], terms: list[str],
                      summaries: dict[str, str] | None = None) -> list[str]:
     """Items ko beginner buckets me group karke HTML (bucket headings ke saath)."""
     by_bucket: dict[str, list[dict]] = {}
@@ -93,7 +93,7 @@ def _bucket_sections(items: list[dict],
             else:
                 cross = "no"
             source = briefer.display_source(item)
-            title = _esc(item.get("title") or "")
+            title = highlight.highlight_html(_esc(item.get("title") or ""), terms)
             out.append(f'<div class="item"><strong>{title}</strong>'
                        f'<p class="meta">Source: {_esc(source)} | '
                        f'Category: {_esc(item.get("category") or "")} | '
@@ -104,7 +104,7 @@ def _bucket_sections(items: list[dict],
                        f'Trust: {_esc(item.get("trust_label") or "")} | '
                        f'Score: {_esc(item.get("score") or 0)}</p>'
                        f'<p class="meta">URL: {_link(item.get("url") or "")}</p>'
-                       f'<p>{_esc(briefer.khulasa(item, None, summaries))}</p>'
+                       f'<p>{highlight.highlight_html(_esc(briefer.khulasa(item, None, summaries)), terms)}</p>'
                        f'<p class="meta">Cross-verified: {_esc(cross)}</p></div>')
         if len(rows) > 5:
             out.append(f'<p class="meta">{_esc(bucket)} mein mazid '
@@ -143,6 +143,7 @@ def to_html(report: dict) -> str:
     unverified = len(items) - verified
     conf = structured.get("confidence") if isinstance(structured.get("confidence"), dict) else {}
     query = str(structured.get("query") or report.get("query") or "")
+    terms = highlight.terms(query)
     title = str(report.get("title") or f"JIN Agent Brief - {util.truncate(query, 60)}")
     blocked = structured.get("blocked") or None
     audit = structured.get("audit") or {}
@@ -156,6 +157,7 @@ def to_html(report: dict) -> str:
             f"<strong>{verified}</strong> verified citation ke sath aur "
             f"<strong>{unverified}</strong> abhi verify nahi hue. "
             f"Kaam karne wale sources: {_esc(', '.join(top_sources)) if top_sources else 'koi nahi'}.")
+    bluf = highlight.highlight_html(bluf, terms)
 
     parts = [
         "<!DOCTYPE html>",
@@ -167,9 +169,9 @@ def to_html(report: dict) -> str:
         f"<style>{_STYLE}</style>",
         "</head>",
         "<body>",
-        f"<h1>{_esc(title)}</h1>",
+        f"<h1>{highlight.highlight_html(_esc(title), terms)}</h1>",
         '<div class="card meta">',
-        f"<div>Query: {_esc(query)}</div>",
+        f"<div>Query: {highlight.highlight_html(_esc(query), terms)}</div>",
         f"<div>Date checked: {_esc(structured.get('date_checked') or '')}</div>",
         f"<div>Mode: {_esc(structured.get('mode') or 'n/a')} | "
         f"Policy: {_esc(structured.get('policy_id') or policy.POLICY_ID)}</div>",
@@ -205,7 +207,7 @@ def to_html(report: dict) -> str:
 
     parts.append("<h2>Findings</h2>")
     if items:
-        parts.extend(_bucket_sections(items, summaries))
+        parts.extend(_bucket_sections(items, terms, summaries))
     else:
         parts.append('<div class="card"><p>Is query par koi item nahi mili. '
                      "Offline ya network failure ki soorat mein agent khali natija "
