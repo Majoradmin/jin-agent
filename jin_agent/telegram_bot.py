@@ -896,17 +896,64 @@ def _explore_item_key(item: dict) -> str:
     return "url:" + str(item.get("url") or "")
 
 
-def _explore_channel_item(handle: str, rows: dict) -> dict:
+# Card badge: active / stale / bot-private. ``check_channel`` ka note dekh kar
+# infer hota hai (liveness logic waisi hi rehti hai). Stale = last_post_at
+# 30+ din purana (note "aakhri post N din purani"), bot/private = note se.
+_EXPLORE_BADGES = {
+    "active": "✅ active",
+    "stale": "⏳ stale (30+ din)",
+    "botprivate": "🤖 bot/private",
+}
+_PRIVATE_BOT_MARKERS = ("0 posts on preview", "contact @", "probe error",
+                        "private", "not found", "deactivated",
+                        "unavailable", "404")
+
+
+def _explore_row_kind(it: dict) -> str:
+    """Item ka badge-bucket: active | botprivate | stale."""
+    status = str(it.get("status") or "").lower()
+    if status == "active":
+        return "active"
+    blob = " ".join(str(it.get(k) or "").lower()
+                    for k in ("note", "title", "handle"))
+    if any(w in blob for w in _PRIVATE_BOT_MARKERS):
+        return "botprivate"
+    if re.search(r"\bbot\b", blob):
+        return "botprivate"
+    return "stale"
+
+
+def _explore_status_badge(it: dict) -> str:
+    return _EXPLORE_BADGES.get(_explore_row_kind(it), "⏳ stale (30+ din)")
+
+
+def _explore_status_counts(items: list[dict]) -> str:
+    """``1 active · 8 stale · 6 private/bot`` — card heading ka summary."""
+    n = len(items)
+    active = sum(1 for it in items if _explore_row_kind(it) == "active")
+    privbot = sum(1 for it in items
+                  if _explore_row_kind(it) == "botprivate")
+    stale = n - active - privbot
+    return f"{active} active · {stale} stale · {privbot} private/bot"
+
+
+def _explore_channel_item(handle: str, rows: dict, status: str = "active",
+                          auto_saved: bool = True, note: str = "",
+                          last_post_at: str = "", title: str = "",
+                          subs: str = "", score: int | None = None) -> dict:
     row = rows.get(handle) or {}
     return {"kind": "channel", "key": "ch:" + str(handle),
             "handle": str(handle),
-            "title": str(row.get("title") or handle),
-            "score": int(row.get("score") or 0),
-            "subs": str(row.get("subscribers") or ""),
-            "status": str(row.get("status") or "active"),
+            "title": str(title or row.get("title") or handle),
+            "score": int(score if score is not None
+                         else (row.get("score") or 0)),
+            "subs": str(subs or row.get("subscribers") or ""),
+            "status": str(status or row.get("status") or "active"),
+            "note": str(note or row.get("note") or ""),
+            "last_post_at": str(last_post_at or row.get("last_post_at") or ""),
             # run_discovery active + score>=min ko origin='auto' se tg_channels
-            # me save karta hai — card par saaf dikhao.
-            "auto_saved": True,
+            # me save karta hai — card par saaf dikhao (sirf active par).
+            "auto_saved": bool(auto_saved),
             "url": "https://t.me/" + str(handle),
             "label": "@" + str(handle)}
 
@@ -934,8 +981,32 @@ def _explore_groups(res: dict, topic: str, scope: str) -> dict:
             rows = {r["channel"]: r for r in channels_mod.list_channels()}
         except Exception:
             rows = {}
-        for handle in (disc.get("added") or [])[:_EXPLORE_GROUP_CAP["tg"]]:
-            groups["tg"].append(_explore_channel_item(str(handle), rows))
+        probe_rows = disc.get("probe_rows")
+        if isinstance(probe_rows, list) and probe_rows:
+            # Sab probed candidates dikhao (active top par, phir stale/dead) —
+            # sirf active nahi. Cap 15. auto-save sirf added (active+score>=min).
+            added = {str(h) for h in (disc.get("added") or [])}
+            ranked = sorted(
+                probe_rows,
+                key=lambda r: (0 if str(r.get("status") or "") == "active" else 1,
+                               -int(r.get("score") or 0)))
+            for pr in ranked[:_EXPLORE_GROUP_CAP["tg"]]:
+                handle = str(pr.get("channel") or "").strip()
+                if not handle:
+                    continue
+                groups["tg"].append(_explore_channel_item(
+                    handle, rows,
+                    status=str(pr.get("status") or ""),
+                    auto_saved=handle in added,
+                    note=str(pr.get("note") or ""),
+                    last_post_at=str(pr.get("last_post_at") or ""),
+                    title=str(pr.get("title") or ""),
+                    subs=str(pr.get("subscribers") or ""),
+                    score=int(pr.get("score") or 0)))
+        else:
+            # Purana shape (``added`` ke saath) — tamam active maan ke.
+            for handle in (disc.get("added") or [])[:_EXPLORE_GROUP_CAP["tg"]]:
+                groups["tg"].append(_explore_channel_item(str(handle), rows))
     idx = 0
     if scope in ("all", "web", "oss"):
         for it in scored:
@@ -987,14 +1058,18 @@ def format_explore_cards_v2(topic: str, scope: str, groups: dict) -> str:
         if not items:
             continue
         suffix = " — links only, bot fetch nahi karta" if g == "deep" else ""
-        lines.append(f"{head} ({len(items)}){suffix}")
+        if g == "tg":
+            lines.append(f"{head} ({len(items)}): "
+                         f"{_explore_status_counts(items)}")
+        else:
+            lines.append(f"{head} ({len(items)}){suffix}")
         for i, it in enumerate(items, 1):
             title = util.truncate(str(it.get("title") or it.get("url") or ""), 70)
             if g == "tg":
                 bits = [b for b in (f"score {it.get('score', 0)}",
                                     (str(it.get("subs") or "") + " subs")
                                     if it.get("subs") else "",
-                                    str(it.get("status") or "active")) if b]
+                                    _explore_status_badge(it)) if b]
                 if it.get("auto_saved"):
                     bits.append("auto-save ✅")  # run_discovery ne memory me rakha
                 lines.append(f"{i}. {title} — @{it.get('handle')}")

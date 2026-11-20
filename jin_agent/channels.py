@@ -794,7 +794,8 @@ def check_channel(channel: str, cfg: dict | None = None) -> dict:
                     "UPDATE tg_channels SET last_checked=?, note=? WHERE channel=?",
                     (util.epoch(), f"probe error: {type(exc).__name__}", clean))
         return {"channel": clean, "alive": False, "status": "dead",
-                "score": 0, "error": type(exc).__name__, "harvested": []}
+                "score": 0, "error": type(exc).__name__,
+                "note": f"probe error: {type(exc).__name__}", "harvested": []}
     sc = score(rec, cfg)
     info = channel_signs(rec, cfg)
     if not rec["alive"]:
@@ -828,6 +829,7 @@ def check_channel(channel: str, cfg: dict | None = None) -> dict:
     out = dict(rec)
     out["status"] = status
     out["score"] = sc
+    out["note"] = note
     return out
 
 
@@ -899,6 +901,7 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
     take_candidates(min(len(candidates), max_add * 3))
 
     added, dead, summaries = [], [], []
+    probe_rows: list[dict] = []
     auto_now = counts().get("active", 0)
     for cand in candidates[:max_add]:
         if auto_now >= max_auto:
@@ -906,6 +909,16 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
         res = check_channel(cand, cfg)
         summaries.append({"channel": res["channel"], "status": res["status"],
                           "score": res["score"]})
+        probe_rows.append({
+            "channel": res.get("channel"),
+            "status": res.get("status"),
+            "score": res.get("score"),
+            "title": res.get("title") or "",
+            "subscribers": res.get("subscribers") or "",
+            "last_post_at": res.get("last_post_at") or "",
+            "post_count": res.get("post_count") or 0,
+            "note": res.get("note") or "",
+        })
         if res["status"] == "active" and res["score"] >= min_score:
             added.append(res["channel"])
             auto_now += 1
@@ -928,7 +941,10 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
 
     out = {"query": q, "candidates": len(candidates), "probed": len(summaries),
            "added": added, "dead": dead, "rechecked": rechecked,
-           "counts": counts(), "web_search": web_info}
+           "counts": counts(), "web_search": web_info,
+           # Har probed candidate (active + dead/insufficient) — /explore card
+           # ke liye. ``candidates`` count (int) barqarar hai (purane tests).
+           "probe_rows": probe_rows}
     store.add_event("channel_discovery",
                     f"added={len(added)} dead={len(dead)} "
                     f"engine={web_info.get('engine') or 'n/a'} "
