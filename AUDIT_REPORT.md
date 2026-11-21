@@ -371,3 +371,34 @@ $ git log --all -p | grep -cE "gsk_|sk-[A-Za-z0-9]{20,}"
 ---
 
 *Audit performed read-only. No production configuration or secret was modified. No deploy or start was performed.*
+
+---
+
+## 10. Remediation status — 2026-11-21 (post-audit, commit `fd6d680`)
+
+Audit ke baad P0-1..P0-4 + P1-5..P1-7 implement kar diye gaye. Suite: **796 tests OK (1 skipped)** (audit waqt 749).
+
+| # | Masla | Status | Commit | Evidence |
+|---|---|---|---|---|
+| P0-1 | Unauthenticated console | **FIXED** | `a412b79` | `server.py` me `admin_token()` (env `JIN_AGENT_ADMIN_TOKEN`) + `_is_loopback()` + `Handler._authorized()`/`_denied()`; `do_GET`/`do_POST` gate; `/api/health` public. Tests `test_http.py:22-27` (401 anonymous/ghalat token, `WWW-Authenticate: Bearer`, Bearer 200, `X-Admin-Token` 200, health public, token kabhi log nahi). |
+| P0-2 | `is_owner()` allow-all | **PARTIAL → FIXED (opt-in)** | `510b3b5` | `cmd_bot` ab `JIN_AGENT_REQUIRE_CHAT_ID=1` + unset/ghalat `telegram_chat_id` par `return 1` (safe startup failure); unauthorized chat ko 60s throttled "not authorized" reply (`_unauthorized_reply`). **Default `is_owner` behaviour (unset → allow-all) barqarar hai** (tests `test_lifetime_bot.py:88-100` aur `test_telegram_bot.py:56-60` wahi assert karte hain) — production me `JIN_AGENT_REQUIRE_CHAT_ID=1` lazmi. |
+| P0-3 | DB durability/permissions | **FIXED** | `3d7b3fa` | `store.secure_permissions()` — data dir/subdirs `0700`, DB `0600` (lstat + uid check, Windows skip); `Dockerfile` `VOLUME /app/jin_agent/data` + `mkdir -m 0700`; `.gitignore` `*.db-shm/-wal`, `*.sqlite-wal/-shm`, `*.db-journal`, `.env*` (+ `!.env.example`). Tests `test_permissions.py`. |
+| P0-4 | Backup restore | **FIXED** | `f39e326` | `store.restore(path, confirm=False)` — confirm gate, `..` reject, `PRAGMA integrity_check`, required-tables check, staging copy, pre-restore safety `backup()`, WAL/SHM/journal cleanup, atomic `os.replace`, baad me verify + `add_event("restore")`. CLI `python -m jin_agent restore --from <path> --confirm`; `POST /api/restore` (confirm lazmi). Tests `test_restore.py` (round-trip, corrupt, traversal, HTTP). |
+| P1 | `DEPLOY.md` retention galat (180 vs 90) | **FIXED** | `7fa6dcc` | `DEPLOY.md` retention `180 → 90` (asal effective 90). |
+| P1 | `.env.example` nahi tha | **FIXED** | `a412b79` | `.env.example` (sirf placeholders, koi asli secret nahi) + `.gitignore` me `!.env.example` negation. |
+
+| P1-5 | SSRF: custom LLM endpoint par DNS resolve nahi | **FIXED** | `eb40d19` | `policy.trusted_public_endpoint()` ab `socket.getaddrinfo` se hostname resolve kar ke har IP ko `ipaddress` par check karta hai (`is_private/is_loopback/is_link_local/is_reserved/is_multicast/is_unspecified` + `not is_global`); DNS fail = reject. Tests `test_policy.py` (+4). |
+| P1-6 | Retention default mismatch + unbounded tables | **FIXED** | `1761abd` | `store._retention_days` fallback **180 → 90** (`config.DEFAULT` se match); `retention()` ab `chat_context`, `feedback`, `tg_sites`, `tg_discovery_state`, `schedule_state` prune karta hai; `snapshots.prune()` retention se jud gaya. Tests `test_lifetime_store.py` (+3). |
+| P1-7 | Data deletion/export mojood nahi | **FIXED** | `fd6d680` | `store.export_data(chat_id)` + `store.delete_chat_data(chat_id)` (asli DELETE, soft-delete nahi); `GET /api/export` (JSON/CSV, admin gate); Telegram `/delete` + `/forget` command + confirmation. Tests `test_http.py` (+3), `test_telegram_bot.py` (+3). |
+
+### Abhi bhi baqi (audit ke mutabiq, abhi fix NAHI)
+- **P1-8** Provider limits ki documentation + opt-in MTProto/paid provider (Telemetr/TGStat/tgAtlas) — `TELEGRAM_DISCOVERY_PLAN.md` me likha hai, abhi adapter nahi.
+- **P2** lint/type CI, coverage, live-network integration tests, metrics/alerting.
+- **Dead code:** `format_explore`, `format_explore_cards`, `discovery.clean_text`, `alerts.get_updates`, `alerts.handle_command` (`snapshots.prune()` ab retention se jud gaya).
+
+### Honest limitations (fixes ke)
+- `secure_permissions()` non-owner file par chmod nahi karta, sirf warning.
+- `restore()` bade DB par disk 2–3× (staging copy + tmp + safety backup).
+- P0-2 default allow-all rehta hai — production ke liye `TELEGRAM_CHAT_ID` + `JIN_AGENT_REQUIRE_CHAT_ID=1` set karna **zaroori** hai.
+
+*Audit report updated 2026-11-21 by the same read-only audit session. Production config/secret abhi bhi chhua nahi; deploy/start nahi kiya.*
