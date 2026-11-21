@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import concurrent.futures
+import html as _html
 import json
 import math
 import os
@@ -46,6 +47,10 @@ EXCLUDE_HANDLES = {"joinchat", "share", "proxy", "addstickers", "addlist",
 # RightDAO pehle (Bing ``site:`` ignore karta hai, DDG anomaly deta hai),
 # phir Bing, phir DDG html, phir DDG lite.
 RIGHTDAO_SEARCH_URL = "https://rightdao.com/search?q="
+# P43: Lyzem — Telegram-wide search engine (channel/group/bot/post/article),
+# bina login, bina API key.
+LYZEM_SEARCH_URL = "https://lyzem.com/search?q="
+LYZEM_RESULT_RE = re.compile(r'<ul class="search-results">')
 BING_SEARCH_URL = "https://www.bing.com/search?q="
 DDG_HTML_URL = "https://html.duckduckgo.com/html/?q="
 DDG_LITE_URL = "https://lite.duckduckgo.com/lite/?q="
@@ -457,6 +462,52 @@ def parse_ddg_html(html: str) -> list[str]:
     return out
 
 
+def lyzem_has_results(html: str) -> bool:
+    """Lyzem ne asli results diye? Anti-bot/404 page par ``search-results`` nahi."""
+    return bool(LYZEM_RESULT_RE.search(str(html or "")))
+
+
+def parse_lyzem_html(html: str) -> list[dict]:
+    """Lyzem search page se records: type/handle/title/descr/url/msg_id.
+
+    Lyzem ek Telegram-wide search engine hai (lyzem.com) — bina login, bina key.
+    Har result ke saath ``title="channel|group|bot|post|article|message"`` aur
+    ``https://t.me/<handle>(/<msg_id>)`` link hota hai. Posts ke liye title
+    aksar khaali hota hai, is liye descr se fallback.
+    """
+    s = str(html or "")
+    block = re.search(r'<ul class="search-results">(.*?)</ul>', s, re.S)
+    if not block:
+        return []
+    out: list[dict] = []
+    seen: set[str] = set()
+    for item in re.findall(r'<li class="search-result">(.*?)</li>',
+                           block.group(1), re.S):
+        t = re.search(r'search-result-type-wrapper\s*"\s+title="([^"]+)"', item)
+        kind = (t.group(1) if t else "").strip().lower()
+        a = re.search(
+            r'search-result-title">\s*<a href="(https?://t\.me/[A-Za-z0-9_]+'
+            r'(?:/\d+)?)"[^>]*>(.*?)</a>', item, re.S)
+        url = _html.unescape(a.group(1)) if a else ""
+        title = re.sub(r"\s+", " ", _html.unescape(
+            re.sub(r"<[^>]+>", " ", a.group(2) or ""))).strip() if a else ""
+        d = re.search(r'search-result-descr">\s*<a[^>]*>(.*?)</a>', item, re.S)
+        descr = re.sub(r"\s+", " ", _html.unescape(
+            re.sub(r"<[^>]+>", " ", d.group(1) or ""))).strip() if d else ""
+        if not url:
+            continue
+        m = HANDLE_RE.search(url)
+        handle = m.group(1) if m else ""
+        if not handle or handle in seen:
+            continue
+        seen.add(handle)
+        mid = re.search(r"/(\d+)$", url)
+        out.append({"handle": handle, "url": url, "kind": kind,
+                    "title": title or descr[:120], "descr": descr,
+                    "msg_id": mid.group(1) if mid else ""})
+    return out
+
+
 def _engine_from_tried(tried: list[dict]) -> str:
     """``tried`` se sahi engine: pehla ``ok`` jis me anomaly nahi.
 
@@ -471,72 +522,16 @@ def _engine_from_tried(tried: list[dict]) -> str:
     return ""
 
 
-def web_search_probe(query: str, cfg: dict | None = None) -> dict:
-    """Search engines ko kram se azmo: RightDAO -> Bing -> DDG html -> DDG lite.
+def web_search_probe(query: str, cfg: dict | None = None,
+                     providers=None, merge: bool = False) -> dict:
+    """Provider-agnostic discovery probe — ``discovery.probe`` ka wrapper.
 
-    Anti-bot "anomaly" page (RightDAO par ``class="item"`` 0 / Bing par
-    ``b_algo`` 0 / DDG par ``uddg=`` 0) par us engine ko chhor kar agle par
-    jao. Returns ``{"handles", "engine", "candidates", "anomaly", "error",
-    "tried"}``.
+    Engine kram: RightDAO -> **Lyzem** -> Bing -> DDG html -> DDG lite (P43).
+    Returns ``{"handles", "engine", "candidates", "anomaly", "error", "tried",
+    "cached"}``. Cache ``discovery_cache_seconds`` (default 900s).
     """
-    cfg = cfg or config.load()
-    q = urllib.parse.quote("site:t.me " + str(query)[:120])
-    ddg_q = urllib.parse.quote("site:t.me/s " + str(query)[:120])
-    engines = (
-        ("rightdao", RIGHTDAO_SEARCH_URL + q, "rightdao"),
-        ("bing", BING_SEARCH_URL + q, "bing"),
-        ("ddg-html", DDG_HTML_URL + ddg_q, "ddg-html"),
-        ("ddg-lite", DDG_LITE_URL + ddg_q, "ddg-lite"),
-    )
-    tried: list[dict] = []
-    saw_anomaly = False
-    saw_results = False
-    for name, url, kind in engines:
-        try:
-            html = adapters.fetch(url, cfg)
-        except Exception as exc:
-            tried.append({"engine": name, "ok": False,
-                          "error": type(exc).__name__})
-            continue
-        if kind == "rightdao":
-            handles = parse_rightdao_html(html)
-            anomaly = not rightdao_has_results(html)
-        elif kind == "bing":
-            handles = parse_bing_html(html)
-            anomaly = not bing_has_results(html)
-        elif kind == "ddg-html":
-            handles = parse_ddg_html(html)
-            anomaly = not handles
-        else:
-            handles = extract_handles(html)
-            anomaly = not handles
-        tried.append({"engine": name, "ok": True, "handles": len(handles),
-                      "anomaly": bool(anomaly)})
-        if anomaly:
-            saw_anomaly = True
-            continue
-        saw_results = True
-        if handles:
-            return {"handles": handles[:60], "engine": name,
-                    "candidates": len(handles), "anomaly": False,
-                    "error": "", "tried": tried}
-        # results to mila magar t.me handle nahi — agla engine azmo
-    if saw_results:
-        error = "results me t.me channel nahi mila"
-        # Results mile magar handle nahi — engine ka naam bhi rakho (``tried``
-        # kram se pehla ok/non-anomaly). Sirf anomaly par engine "" rahega.
-        engine = _engine_from_tried(tried)
-    elif saw_anomaly:
-        error = "search engine ne results nahi diye (anti-bot)"
-        engine = ""
-    else:
-        error = "kisi engine ne results nahi diye"
-        engine = ""
-    # ``anomaly`` sirf tab jab koi engine results hi na de — results milne par
-    # (handle na milein) wajah "results me t.me channel nahi mila" honi chahiye.
-    return {"handles": [], "engine": engine, "candidates": 0,
-            "anomaly": saw_anomaly and not saw_results,
-            "error": error, "tried": tried}
+    from . import discovery
+    return discovery.probe(query, cfg, providers=providers, merge=merge)
 
 
 def merge_web_probe(infos: list[dict]) -> dict:
@@ -568,14 +563,17 @@ def merge_web_probe(infos: list[dict]) -> dict:
 
 
 def web_search_candidates(query: str, cfg: dict | None = None,
-                          info: dict | None = None) -> list[str]:
-    """Public search engine HTML par t.me/s search (RightDAO -> Bing -> DDG).
+                          info: dict | None = None, merge: bool = False,
+                          providers=None) -> list[str]:
+    """Public search engine HTML par t.me/s search (RightDAO -> Lyzem -> Bing -> DDG).
 
     ``info`` dict diya ho to us me probe ka hisaab (engine/anomaly/error)
     bhar diya jata hai — ``run_discovery`` honest status ke liye istemal karta
     hai. Anti-bot anomaly par khali list, agla engine apne aap azmo.
+
+    ``merge=True`` par saare providers se handles ikhatte hain (diversity).
     """
-    probe = web_search_probe(query, cfg)
+    probe = web_search_probe(query, cfg, merge=merge, providers=providers)
     if isinstance(info, dict):
         info.clear()
         info.update(probe)
@@ -878,7 +876,9 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
             # topic-driven: query + us ke variants (Urdu/Roman/tarjuma)
             for term in search_terms[:3]:
                 info: dict = {}
-                candidates.extend(web_search_candidates(term, cfg, info))
+                candidates.extend(web_search_candidates(
+                    term, cfg, info, merge=True,
+                    providers=("rightdao", "lyzem")))
                 web_infos.append(info)
         else:
             info: dict = {}

@@ -25,19 +25,19 @@ class TestSourceHealth(unittest.TestCase):
     def test_auto_registry_breakdown_in_text(self):
         text = tb.format_status_text()
         self.assertIn("Sources:", text)
-        self.assertIn("130 total", text)
-        self.assertIn("57 auto / 73 registry-only", text)
+        self.assertIn("131 total", text)
+        self.assertIn("58 auto / 73 registry-only", text)
 
     def test_buckets_cover_every_source_once(self):
         h = tb.source_health()
         b = h["buckets"]
-        self.assertEqual(h["total"], 130)
+        self.assertEqual(h["total"], 131)
         self.assertEqual(sum(b.values()), h["auto"])   # buckets sirf auto sources
-        self.assertEqual(h["auto"], 57)
+        self.assertEqual(h["auto"], 58)
         self.assertEqual(h["registry_only"], 73)
         self.assertEqual(h["auto"] + h["registry_only"], h["total"])
-        # Seed state: 57 auto enabled (ok), 73 registry-only alag ginche.
-        self.assertEqual(b["ok"], 57)
+        # Seed state: 58 auto enabled (ok), 73 registry-only alag ginche.
+        self.assertEqual(b["ok"], 58)
         self.assertEqual(b["disabled"], 0)
 
     def test_disabled_bucket(self):
@@ -45,14 +45,14 @@ class TestSourceHealth(unittest.TestCase):
         store.set_source_enabled("gsmarena", False)   # auto source band karo
         b = tb.source_health()["buckets"]
         self.assertEqual(b["disabled"], before + 1)
-        self.assertEqual(b["ok"], 56)
-        self.assertEqual(sum(b.values()), 57)          # auto sources ka total
+        self.assertEqual(b["ok"], 57)
+        self.assertEqual(sum(b.values()), 58)          # auto sources ka total
         # Fail bhi hone par disabled hi jeetta hai (ek bucket).
         store.touch_source("gsmarena", False, "wajah")
         b2 = tb.source_health()["buckets"]
         self.assertEqual(b2["disabled"], before + 1)
         self.assertEqual(b2["failed"], 0)
-        self.assertEqual(sum(b2.values()), 57)
+        self.assertEqual(sum(b2.values()), 58)
 
     def test_failed_source_name_and_error_in_status(self):
         before = len(tb.source_health()["failed"])

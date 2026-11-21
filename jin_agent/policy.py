@@ -88,7 +88,7 @@ ALLOWED_HOSTS = frozenset({
     "pubpsych.zpid.de", "search.ipaustralia.gov.au", "j-platpat.inpit.go.jp",
     "kris.kipris.or.kr", "index.commoncrawl.org", "www.loc.gov",
     "search.worldcat.org", "earthquake.usgs.gov", "api.weather.gov",
-    "api.reliefweb.int", "wiby.me", "rightdao.com", "lemmy.ml", "a.4cdn.org",
+    "api.reliefweb.int", "wiby.me", "rightdao.com", "lyzem.com", "lemmy.ml", "a.4cdn.org",
     "8kun.top",
 })
 
@@ -242,6 +242,7 @@ SOURCE_REGISTER = [
     # --- Web ---
     {"key": "wiby", "name": "Wiby", "url": "https://wiby.me/", "tier": "T1", "category": "World", "trust": 0.6, "auto": True, "notes": "P41 keyless indie web search. Live: results milte hain."},
     {"key": "rightdao", "name": "RightDAO", "url": "https://rightdao.com/search", "tier": "T1", "category": "World", "trust": 0.55, "auto": True, "notes": "P41 keyless web search. Live: results milte hain."},
+    {"key": "lyzem", "name": "Lyzem", "url": "https://lyzem.com/search", "tier": "T1", "category": "Telecom", "trust": 0.55, "auto": True, "notes": "P43 Telegram-wide search engine (channel/group/bot/post/article) — bina login, bina key. `channels.web_search_probe` isko discovery ke liye use karta hai; content items ka adapter nahi."},
     # --- TG / social ---
     {"key": "lemmy", "name": "Lemmy", "url": "https://lemmy.ml/api/v3/search", "tier": "T2", "category": "World", "trust": 0.6, "auto": True, "notes": "P41 keyless Lemmy community search. Live: JSON results."},
     {"key": "4cdn", "name": "4chan", "url": "https://a.4cdn.org/", "tier": "T2", "category": "Telecom", "trust": 0.5, "auto": False, "notes": "P41 imageboard. Live: HTTP 404 (search endpoint nahi) — auto=False."},

@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from jin_agent import channels, config, policy, store
+from jin_agent import channels, config, discovery, policy, store
 from jin_agent import telegram_bot as tb
 
 
@@ -23,6 +23,7 @@ def setUpModule():
     os.environ["JIN_AGENT_DATA"] = tempfile.mkdtemp(prefix="jin-rightdao-")
     store.init_db()
     channels.ensure_table()
+    discovery.clear_cache()
 
 
 # RightDAO result page ka hissa: ``class="item"`` marker + t.me links.
@@ -86,6 +87,7 @@ class TestRightDaoParse(unittest.TestCase):
 
 class TestRightDaoEngineOrder(unittest.TestCase):
     def setUp(self):
+        discovery.clear_cache()          # har test ki apni discovery dhoond
         self._patch = mock.patch.object(channels.adapters, "fetch")
         self.mock_fetch = self._patch.start()
         self.addCleanup(self._patch.stop)

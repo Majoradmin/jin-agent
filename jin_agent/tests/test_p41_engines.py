@@ -78,8 +78,8 @@ class TestPolicy(unittest.TestCase):
 
     def test_counts(self):
         rows = policy.register()
-        self.assertEqual(len(rows), 130)
-        self.assertEqual(sum(1 for r in rows if r["auto"]), 57)
+        self.assertEqual(len(rows), 131)   # P43: +1 Lyzem
+        self.assertEqual(sum(1 for r in rows if r["auto"]), 58)   # P43: +Lyzem
 
     def test_auto_and_blocked_flags(self):
         rows = {r["key"]: r for r in policy.register()}

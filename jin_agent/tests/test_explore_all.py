@@ -75,7 +75,7 @@ class TestRunDiscoveryProbeRows(unittest.TestCase):
                 "ch_b": _dead_row("ch_b", title="Some Channel", subs="1.2K")}
         seen = {}
 
-        def fake_web(query, cfg=None, info=None):
+        def fake_web(query, cfg=None, info=None, merge=False, providers=None):
             seen["web"] = query
             return ["ch_a", "ch_b"]
 
@@ -105,7 +105,7 @@ class TestRunDiscoveryProbeRows(unittest.TestCase):
                "last_post_at": "2026-11-19 10:00:00", "post_count": 9,
                "note": "auto-discovered liveness check"}
         with mock.patch.object(channels, "web_search_candidates",
-                               lambda q, cfg=None, info=None: ["act_ch"]), \
+                               lambda q, cfg=None, info=None, merge=False, providers=None: ["act_ch"]), \
              mock.patch.object(channels, "harvest_archive",
                                lambda cfg=None, query="": []), \
              mock.patch.object(channels, "check_channel",
@@ -121,7 +121,7 @@ class TestRunDiscoveryProbeRows(unittest.TestCase):
                "title": "Low", "subscribers": "", "last_post_at": "",
                "post_count": 0, "note": "insufficient_data: sirf 2 positive signs"}
         with mock.patch.object(channels, "web_search_candidates",
-                               lambda q, cfg=None, info=None: ["low_ch"]), \
+                               lambda q, cfg=None, info=None, merge=False, providers=None: ["low_ch"]), \
              mock.patch.object(channels, "harvest_archive",
                                lambda cfg=None, query="": []), \
              mock.patch.object(channels, "check_channel",

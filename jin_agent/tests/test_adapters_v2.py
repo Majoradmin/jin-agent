@@ -299,7 +299,8 @@ class TestRegistryAndSafety(unittest.TestCase):
         # P39: +1 keyless Bing HTML search (45 -> 46).
         # P40: +46 key-free engine list (46 -> 92).
         # P41: +38 dork/extra engines (92 -> 130).
-        self.assertEqual(len(policy.register()), 130)
+        # P43: +1 Lyzem Telegram-wide discovery engine (130 -> 131).
+        self.assertEqual(len(policy.register()), 131)
 
     def test_new_hosts_allowlisted(self):
         for url in ("https://www.reddit.com/r/android/search.json",
