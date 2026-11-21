@@ -1483,10 +1483,19 @@ def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api,
         header_res = api.send(chat_id, loading)
     except Exception:
         header_res = None
+    loading_mid = 0
     if _status_supported(api) and isinstance(header_res, dict):
-        mid = int((header_res.get("result") or {}).get("message_id") or 0)
-        if mid:
-            _STATUS_MESSAGES[int(chat_id)] = mid
+        loading_mid = int((header_res.get("result") or {}).get("message_id") or 0)
+
+    def _edit_loading(text: str) -> bool:
+        """Loading message ko wahi jagah edit karo (research state alag)."""
+        if not loading_mid:
+            return False
+        try:
+            return bool(api.edit(chat_id, loading_mid, text))
+        except Exception:
+            return False
+
     try:
         # Manual explore: asli discovery (network probes) chalao, topic ke saath.
         # max_add=15: ek run me 10-15 channels probe/dikhao.
@@ -1499,11 +1508,11 @@ def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api,
     except Exception as exc:
         msg = (f"⚠️ Explore me masla hua — {type(exc).__name__}: "
                f"{util.truncate(str(exc), 120)}; detail local console par hai.")
-        if not _edit_status(chat_id, api, msg):
+        if not _edit_loading(msg):
             api.send(chat_id, msg)
         return {"ok": False, "action": "explore", "error": "explore failed"}
     out = _render_explore(chat_id, topic, scope, res, cfg, api)
-    _edit_status(chat_id, api, f"✅ Explore ho gaya — {util.truncate(topic, 80)}")
+    _edit_loading(f"✅ Explore ho gaya — {util.truncate(topic, 80)}")
     out["items"] = int(out.get("items") or 0)
     out["archive_items"] = int(res.get("items") or 0)
     if dork:
