@@ -881,3 +881,84 @@ puri tarah kaam karta hai.
 **PHASE REVIEW — PHASE 44: READY**
 
 ---
+
+## 38. PHASE REVIEW — PHASE 45 — Discovery Ranking + Safety (2.9.0)
+
+**CONTEXT:** P44 ke baad discovery candidates ke paas relevance nahi thi —
+ranking sirf `check_channel` ke recency/volume/subs par thi, spam/scam
+channels bhi active ki tarah dikhte the, aur Telegram handles case-insensitive
+hote hue bhi `dict.fromkeys` case-sensitive dedupe karta tha.
+
+**CHANGES:**
+- Naya `jin_agent/discovery_rank.py` (stdlib-only): `relevance()` /
+  `relevance_detail()` / `relevance_reason()` (query terms -> title/handle/
+  descr/preview, 0-10; Urdu/Arabic/Cyrillic fallback), `spam_reason()`
+  (English + Roman Urdu + Urdu/Arabic lafz; FRP/FMI/MDM/IMEI/carrier-bypass
+  NAHI — wo `policy.py` hai), `blocked_reason()` (`policy.BLOCK_PATTERNS` ka
+  bina badla istemal), `dedupe_handles()` (case-insensitive).
+- `channels.py`: `score(rec, cfg, query="")` aur
+  `channel_signs(rec, cfg, query="")` ab relevance feed karte hain;
+  `check_channel(channel, cfg, query="")` spam -> `status='spam'` (score 0),
+  `policy` blocked -> `status='blocked'` (score 0); `parse_preview` me
+  `descr` + `preview` (message text) — relevance/spam ke liye.
+- `discovery.py`: `probe(merge=True)` ab `sources` (handle -> engine) aur
+  `records` (Lyzem post/article/message) deta hai; `merge_web_probe` dono
+  merge karta hai.
+- `run_discovery`: case-insensitive dedupe (known/manual bhi lower), har
+  `probe_rows`/summary me `source` (engine) + `relevance` + `reason`, aur
+  `rank` (1..N: active -> score -> relevance); output me `summaries` +
+  `lyzem_records`.
+
+**VERIFICATION:** `compileall` OK · **749 tests OK (skipped=1)** (715 + 19
+`test_discovery_rank.py` + 15 `test_explore_ux.py`). Naye tests: relevance
+ordering, spam match/false-positive, FRP blocked (spam NAHI), case-insensitive
+dedupe, source diversity, rank field.
+
+**LIMITATION (honest):** Relevance terms `util.terms` (latin) + whitespace
+fallback (non-latin) par based hai — stemming/morphology nahi. Spam list
+chhoti hai; novel scam phrasing pakd sakti hai. Source engine sirf tab janta
+hai jab web search chala; archive/pool candidates ka `source` khaali rehta
+hai.
+
+**PHASE REVIEW — PHASE 45: READY**
+
+---
+
+## 39. PHASE REVIEW — PHASE 46 — Telegram Explore UX (2.9.0)
+
+**CONTEXT:** `/explore` cards me sirf naam/@handle/score/subs/status tha —
+zaban, relevance reason, source link, post preview aur per-card actions nahi.
+Loading/empty/error ka UX bhi adhoora tha.
+
+**CHANGES:**
+- `format_explore_cards_v2` ab HTML card deta hai: title, `@handle`,
+  `https://t.me/<handle>` + `https://t.me/s/<handle>`, status badge, score,
+  subs, last-post date, zaban (`query_variants.detect_language`), relevance
+  reason (max 2 terms), `📡 <engine>` source badge. Post/article/message
+  cards me 140-char preview + post link.
+- `_render_explore` `parse_mode='HTML'` + `highlight.split_html` se
+  tag-balanced 4096 chunks bhejta hai (koi adhura tag nahi).
+- Har card par 4 actions: `🔗 Channel` / `🗂 Posts` (URL) + `🌐 Translate`
+  (`tr:<topic_hash>:<item_hash>` — `llm.translate_text`) + `🔄 Refine`
+  (`refine:<topic_hash>` — naya variant set). ✅/❌ gate + bulk ✅/❌ +
+  `🔄 Aur explore karo` barqarar.
+- `_run_explore`: pehle `⏳ Explore chal raha hai — <topic>` message, phir
+  wahi message `✅ Explore ho gaya` / `⚠️ Explore me masla hua — <wajah>;
+  detail local console par hai.` par edit. Khaali par saaf Roman Urdu
+  `Koi naya item nahi mila — <wajah>`.
+- `scheduler.explore`: `run_discovery` ke sath aye Lyzem records use karta
+  hai (doosri network call nahi); offline me koi call NAHI.
+
+**VERIFICATION:** **749 tests OK (skipped=1)**. Naye
+`test_explore_ux.py` (15 tests): card fields, Urdu/Roman Urdu label, HTML
+escape, post preview + 140-char truncate, 4 actions + bulk, translate/refine
+callback, loading/empty/error, balanced chunks ≤4096.
+
+**LIMITATION (honest):** Translate local LLM band hon to `available nahi`
+ka paighaam deta hai (jhoota translation nahi). Post date Lyzem nahi deta,
+is liye post card me date khaali. Refine variants discovery ke liye hote
+hain, alag "variant picker" UI nahi.
+
+**PHASE REVIEW — PHASE 46: READY**
+
+---
