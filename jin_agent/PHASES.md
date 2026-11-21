@@ -1,4 +1,4 @@
-# PHASES — JIN Agent P13–P42
+# PHASES — JIN Agent P13–P43
 
 **Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
 **Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
@@ -801,5 +801,42 @@ is liye archive asli khabaron se bharta hai. `VERSION` `2.9.0`, `is_owner`,
 untouched.
 
 **PHASE REVIEW — PHASE 42: READY**
+
+---
+
+## 36. PHASE REVIEW — PHASE 43 — Multilingual Query Variants (2.9.0)
+
+**CONTEXT:** User ka `/explore` sirf English keyword samajhta tha. Urdu/Arabic/Roman
+Urdu query par dhoond bohat kamzor thi (transliteration ka koi rasta nahi tha).
+Saath hi `TELEGRAM_DISCOVERY_PLAN.md` likha gaya — 5-option architecture
+comparison (Bot API / MTProto / search APIs / crawler / hybrid), gap analysis
+G1–G24, P1–P5 phases, rollout + rollback.
+
+**DECISION:** Hybrid architecture (free-first search providers + `t.me/s/`
+preview + apni index); MTProto **opt-in** hi rahega (ToS + ban risk). Bot API me
+channel-search method mojood hi nahi — ye verified fact hai, is liye Bot API sirf
+`getChat` enrichment ke liye.
+
+**CHANGES:**
+- Naya `jin_agent/query_variants.py` (stdlib-only, default network-free):
+  `script_of()`, `detect_language()` (script + stopword scoring),
+  `transliterate()` (Urdu→Roman, Roman→Urdu, Arabic→Latin, Latin→Arabic),
+  `translate_query()` (LLM on hone par LLM; warna ~35 EN↔UR↔AR builtin pairs;
+  anu lafz par **khali dict** — jhoot nahi), `synonyms()`, `variants()`,
+  `variant_texts()`.
+- `channels.run_discovery(..., variants=None)` — variants ko web-probe fan-out
+  me istemal karti hai (har variant par probe), output me `variants` darj.
+- `scheduler.explore(..., variants=None)` forward.
+- `telegram_bot._run_explore` — payload me `query_variants.variants(topic, cfg, 6)`.
+
+**VERIFICATION:** `python3 -m compileall -q jin_agent` → COMPILE_OK.
+`JIN_AGENT_DATA=$(mktemp -d) python3 -m unittest discover -s jin_agent/tests -t . -q`
+→ **700 tests OK (skipped=1)** (669 + 31 naye `test_query_variants.py`).
+
+**LIMITATION (honest):** Translation/transliteration abhi **offline builtin**
+hai — bara coverage LLM ya paid API se hi milega. Discovery provider abhi bhi
+RightDAO (rate-limit) + Bing/DDG fallback (bemusarir). Ye Phase 3 ka kaam hai.
+
+**PHASE REVIEW — PHASE 43: READY**
 
 ---

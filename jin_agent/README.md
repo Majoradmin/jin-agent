@@ -59,7 +59,8 @@ startup par ek dafa, best-effort):
 | `/channels` | Saved channels ki list + clickable `t.me` links |
 | `/channels add <link>` | Channel memory me rakho (✅/❌ confirm gate) |
 | `/channels rm <@handle>` | Channel archive (delete nahi) |
-| `/explore [topic]` | Channels + sites discovery, scored cards, har item par ✅ rakhna / ❌ skip gate |
+| `explore [topic]` | Channels + sites discovery, scored cards, har item par ✅ rakhna / ❌ skip gate |
+| `/explore <topic>` — multilingual | Keyword ka **language detect** (Urdu/Arabic/Roman-Urdu/English/Cyrillic), **transliteration** (`موبائل`↔`mobail`, `securiti`→`سیکیورٹی`), **translation** (EN↔UR↔AR) aur **synonyms** → query variants; discovery har variant par chalti hai (`jin_agent/query_variants.py`) |
 | `/status` | Agent + explore block: channels active/dead/archived/stale, sites, sources health breakdown, Telegram discovery (engine + candidates/probed/added + fail wajah), last explore, pending candidates |
 | `/report [md\|html]` | Aakhri report dobara bhejo (default `md`; HTML stdlib-only template) |
 | `/help` | Yeh menu |
@@ -170,8 +171,8 @@ parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
 | `logging_setup.py`, `metrics.py`, `ci_gate.py` | JSON-lines logs (redacted), in-memory metrics, offline CI gate |
 | `server.py`, `web/` | Loopback Agent Console |
 | `canonical.py`, `snapshots.py`, `ratelimit.py` | URL canonical dedup, page change detection, per-host rate limits |
-| `tests/` | 580 offline tests (1 skipped) |
-| `PHASES.md` | P13–P41 `PHASE REVIEW` record |
+| `tests/` | 700 offline tests (1 skipped) |
+| `PHASES.md` | P13–P43 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.
 
