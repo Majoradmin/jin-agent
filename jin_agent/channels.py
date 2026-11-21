@@ -33,7 +33,7 @@ import re
 import time
 import urllib.parse
 
-from . import adapters, config, store, util
+from . import adapters, config, discovery_rank, store, util
 
 VERSION = "1.0"
 
@@ -539,7 +539,7 @@ def merge_web_probe(infos: list[dict]) -> dict:
     infos = [i for i in (infos or []) if isinstance(i, dict)]
     if not infos:
         return {"engine": "", "candidates": 0, "anomaly": False,
-                "error": "", "tried": []}
+                "error": "", "tried": [], "sources": {}, "records": []}
     engine = ""
     for i in infos:
         if i.get("engine"):
@@ -553,12 +553,30 @@ def merge_web_probe(infos: list[dict]) -> dict:
     for i in infos:
         if i.get("error"):
             error = str(i["error"])
+    sources: dict[str, str] = {}
+    for i in infos:
+        for handle, name in (i.get("sources") or {}).items():
+            sources.setdefault(str(handle).lower(), str(name))
+    records: list[dict] = []
+    seen_rec: set[tuple] = set()
+    for i in infos:
+        for rec in (i.get("records") or []):
+            if not isinstance(rec, dict):
+                continue
+            k = (str(rec.get("handle") or ""),
+                 str(rec.get("msg_id") or rec.get("url") or ""))
+            if k in seen_rec:
+                continue
+            seen_rec.add(k)
+            records.append(rec)
     return {
         "engine": engine,
         "candidates": sum(int(i.get("candidates") or 0) for i in infos),
         "anomaly": all(bool(i.get("anomaly")) for i in infos),
         "error": error,
         "tried": [t for i in infos for t in (i.get("tried") or [])],
+        "sources": sources,
+        "records": records,
     }
 
 
@@ -592,6 +610,10 @@ def parse_preview(html: str, channel: str) -> dict:
     m = re.search(r'og:title" content="([^"]{1,120})"', html)
     if m:
         title = m.group(1)
+    descr = ""
+    d = re.search(r'og:description" content="([^"]{0,400})"', html)
+    if d:
+        descr = re.sub(r"\s+", " ", _html.unescape(d.group(1))).strip()
     last_post_at = ""
     t = re.search(r'<time datetime="([^"]{10,40})"', html)
     if t:
@@ -604,6 +626,7 @@ def parse_preview(html: str, channel: str) -> dict:
     texts = re.findall(r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>',
                        html, re.S)
     avg_len = (sum(len(x) for x in texts) // len(texts)) if texts else 0
+    preview = " ".join(re.sub(r"<[^>]+>", " ", t) for t in texts)[:300]
     # Preview harvest: is channel ke posts me jo aur channels mention hon
     harvested = extract_handles(" ".join(texts)[:20000])
     return {
@@ -611,9 +634,11 @@ def parse_preview(html: str, channel: str) -> dict:
         "alive": bool(posts),
         "post_count": len(posts),
         "title": title,
+        "descr": descr,
         "last_post_at": last_post_at,
         "subscribers": subscribers,
         "avg_text_len": avg_len,
+        "preview": preview,
         "harvested": harvested[:30],
         "checked_at": util.epoch(),
     }
@@ -684,13 +709,16 @@ def _subscribers_value(raw: str) -> float:
     return val
 
 
-def score(rec: dict, cfg: dict | None = None) -> int:
+def score(rec: dict, cfg: dict | None = None, query: str = "") -> int:
     """Informative score 0-10 — LOG-SCALE (tgden/chatcrawler methodology).
 
     Linear thresholds (posts>=10 +2, subs>=10k +2) bade channels ko
     over-reward karte the. Ab activity aur subscribers ``lg(1+x)`` par
     scale hote hain, taake 1M-subs channel 10k-subs se sirf thoda behtar
     awe. Recency/topic/text signals wahi rehte hain.
+
+    ``query`` diya ho to relevance (``discovery_rank``) bhi score me jurti
+    hai (max +2); na ho to purana hardcoded topic-keyword block chalta hai.
     """
     cfg = cfg or config.load()
     s = 0.0
@@ -722,41 +750,54 @@ def score(rec: dict, cfg: dict | None = None) -> int:
         s += 0.3 * math.log1p(val) / math.log(101)
     if int(rec.get("avg_text_len") or 0) >= 80:
         s += 1
-    # topic relevance: keywords title ya (offline me) channel name par
+    # topic relevance: query (P45) ya keywords title/channel name par
     title = (str(rec.get("title") or "") + " " + str(rec.get("channel") or "")).lower()
-    topics = [str(t).lower() for t in (cfg.get("topics") or [])]
-    kws = {"firmware", "android", "security", "gsm", "osint", "ai", "tech",
-           "news", "mobile", "telecom", "hack", "cyber", "mod", "rom"}
-    for kw in kws:
-        if kw in title:
-            s += 1
-            break
-    for t in topics:
-        words = [w for w in re.findall(r"[a-z]{4,}", t)]
-        if any(w in title for w in words):
-            s += 1
-            break
+    if query:
+        rel = discovery_rank.relevance(query, " ".join([
+            str(rec.get("title") or ""), str(rec.get("channel") or ""),
+            str(rec.get("descr") or ""), str(rec.get("preview") or "")]))
+        s += min(2.0, rel * 0.2)
+    else:
+        topics = [str(t).lower() for t in (cfg.get("topics") or [])]
+        kws = {"firmware", "android", "security", "gsm", "osint", "ai", "tech",
+               "news", "mobile", "telecom", "hack", "cyber", "mod", "rom"}
+        for kw in kws:
+            if kw in title:
+                s += 1
+                break
+        for t in topics:
+            words = [w for w in re.findall(r"[a-z]{4,}", t)]
+            if any(w in title for w in words):
+                s += 1
+                break
     return max(0, min(10, round(s)))
 
 
-def channel_signs(rec: dict, cfg: dict | None = None) -> dict:
+def channel_signs(rec: dict, cfg: dict | None = None, query: str = "") -> dict:
     """Positive signals ka hisaab (kam-az-kam-3-signs gate).
 
     Returns ``{"signs": int, "recent": bool, "topic_match": bool}``.
+    ``query`` diya ho to ``topic_match`` relevance (``discovery_rank``) se;
+    na ho to purana hardcoded keyword set.
     """
     cfg = cfg or config.load()
     age_days = _age_days(rec.get("last_post_at") or "")
     recent = age_days <= 30
     title = (str(rec.get("title") or "") + " " + str(rec.get("channel") or "")).lower()
-    kws = {"firmware", "android", "security", "gsm", "osint", "ai", "tech",
-           "news", "mobile", "telecom", "hack", "cyber", "mod", "rom"}
-    topic_match = any(kw in title for kw in kws)
-    if not topic_match:
-        for t in [str(x).lower() for x in (cfg.get("topics") or [])]:
-            words = [w for w in re.findall(r"[a-z]{4,}", t)]
-            if any(w in title for w in words):
-                topic_match = True
-                break
+    if query:
+        topic_match = discovery_rank.relevance(query, " ".join([
+            str(rec.get("title") or ""), str(rec.get("channel") or ""),
+            str(rec.get("descr") or ""), str(rec.get("preview") or "")])) >= 4
+    else:
+        kws = {"firmware", "android", "security", "gsm", "osint", "ai", "tech",
+               "news", "mobile", "telecom", "hack", "cyber", "mod", "rom"}
+        topic_match = any(kw in title for kw in kws)
+        if not topic_match:
+            for t in [str(x).lower() for x in (cfg.get("topics") or [])]:
+                words = [w for w in re.findall(r"[a-z]{4,}", t)]
+                if any(w in title for w in words):
+                    topic_match = True
+                    break
     signs = sum([
         bool(rec.get("alive")),
         int(rec.get("post_count") or 0) > 0,
@@ -769,8 +810,14 @@ def channel_signs(rec: dict, cfg: dict | None = None) -> dict:
             "topic_match": bool(topic_match)}
 
 
-def check_channel(channel: str, cfg: dict | None = None) -> dict:
-    """Ek channel probe karo, row update karo (dead -> archive, delete nahi)."""
+def check_channel(channel: str, cfg: dict | None = None,
+                  query: str = "") -> dict:
+    """Ek channel probe karo, row update karo (dead -> archive, delete nahi).
+
+    ``query`` diya ho to relevance (``discovery_rank``) score/signs me jurti
+    hai. Spam/scam (``status='spam'``) aur ``policy`` blocked pattern
+    (``status='blocked'``) yahan hi chhoote hain — dono score 0.
+    """
     cfg = cfg or config.load()
     ensure_table()
     clean = clean_handle(channel)
@@ -792,24 +839,42 @@ def check_channel(channel: str, cfg: dict | None = None) -> dict:
                     "UPDATE tg_channels SET last_checked=?, note=? WHERE channel=?",
                     (util.epoch(), f"probe error: {type(exc).__name__}", clean))
         return {"channel": clean, "alive": False, "status": "dead",
-                "score": 0, "error": type(exc).__name__,
+                "score": 0, "relevance": 0, "reason": "",
+                "error": type(exc).__name__,
                 "note": f"probe error: {type(exc).__name__}", "harvested": []}
-    sc = score(rec, cfg)
-    info = channel_signs(rec, cfg)
-    if not rec["alive"]:
-        status = "dead"
-        note = f"dead: {rec['post_count']} posts on preview"
-    elif not info["recent"]:
-        # 30-din rule: preview zinda ho magar aakhri post 30 din se purani.
-        age = _age_days(rec.get("last_post_at") or "")
-        status = "dead"
-        note = f"dead: aakhri post {age} din purani (30-din rule)"
-    elif info["signs"] < 3:
-        status = "insufficient_data"
-        note = f"insufficient_data: sirf {info['signs']} positive signs"
+    # Spam/blocked sirf title/descr/note par (preview text par nahi — waja:
+    # khabar me "loan" waghera lafz a sakta hai). Relevance ke liye preview
+    # alag se istemal hota hai.
+    safety_text = " ".join([
+        str(rec.get("title") or ""), str(rec.get("descr") or ""),
+        str(rec.get("note") or "")])
+    blocked = discovery_rank.blocked_reason(safety_text)
+    spam = "" if blocked else discovery_rank.spam_reason(safety_text)
+    if blocked:
+        status = "blocked"
+        note = "blocked: " + util.truncate(blocked, 60)
+        sc = 0
+    elif spam:
+        status = "spam"
+        note = "spam: " + spam
+        sc = 0
     else:
-        status = "active"
-        note = "auto-discovered liveness check"
+        sc = score(rec, cfg, query=query)
+        info = channel_signs(rec, cfg, query=query)
+        if not rec["alive"]:
+            status = "dead"
+            note = f"dead: {rec['post_count']} posts on preview"
+        elif not info["recent"]:
+            # 30-din rule: preview zinda ho magar aakhri post 30 din se purani.
+            age = _age_days(rec.get("last_post_at") or "")
+            status = "dead"
+            note = f"dead: aakhri post {age} din purani (30-din rule)"
+        elif info["signs"] < 3:
+            status = "insufficient_data"
+            note = f"insufficient_data: sirf {info['signs']} positive signs"
+        else:
+            status = "active"
+            note = "auto-discovered liveness check"
     with store.session() as con:
         con.execute(
             "INSERT OR IGNORE INTO tg_channels(channel, status, origin, added_at) "
@@ -828,6 +893,11 @@ def check_channel(channel: str, cfg: dict | None = None) -> dict:
     out["status"] = status
     out["score"] = sc
     out["note"] = note
+    rel_text = " ".join([
+        str(rec.get("title") or ""), str(rec.get("channel") or ""),
+        str(rec.get("descr") or ""), str(rec.get("preview") or "")])
+    out["relevance"] = int(discovery_rank.relevance(query, rel_text)) if query else 0
+    out["reason"] = discovery_rank.relevance_reason(query, rel_text) if query else ""
     return out
 
 
@@ -865,8 +935,8 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
     for t in ([q] + var_texts):
         words |= set(util.terms(t, 20))
 
-    known = {r["channel"] for r in list_channels()}
-    manual = {clean_handle(c) for c in (cfg.get("telegram_channels") or [])}
+    known = {str(r["channel"]).lower() for r in list_channels()}
+    manual = {clean_handle(c).lower() for c in (cfg.get("telegram_channels") or [])}
     candidates: list[str] = []
     web_infos: list[dict] = []
 
@@ -892,6 +962,9 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
                 cfg, info))
             web_infos.append(info)
     web_info = merge_web_probe(web_infos)
+    # handle -> engine (source diversity): ``probe(merge=True)`` ke sources.
+    web_sources = {str(k).lower(): str(v)
+                   for k, v in (web_info.get("sources") or {}).items()}
 
     # 2) archive harvest (offline-safe) - query filter ke saath
     candidates.extend(harvest_archive(cfg, query=q))
@@ -909,8 +982,11 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
     else:
         candidates.extend(pool_handles)
 
-    candidates = [c for c in dict.fromkeys(candidates)
-                  if c not in known and c not in manual]
+    # Telegram handles case-insensitive hote hain — dedupe + known/manual bhi
+    # lower par (P45).
+    candidates = [c for c in discovery_rank.dedupe_handles(
+        clean_handle(c) for c in candidates)
+        if c and c.lower() not in known and c.lower() not in manual]
 
     # Pool consume karo (probed_at mark) taake wahi dead candidate dobara na aaye
     take_candidates(min(len(candidates), max_add * 3))
@@ -921,9 +997,10 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
     for cand in candidates[:max_add]:
         if auto_now >= max_auto:
             break
-        res = check_channel(cand, cfg)
+        res = check_channel(cand, cfg, query=q)
+        src = web_sources.get(str(res.get("channel") or "").lower(), "")
         summaries.append({"channel": res["channel"], "status": res["status"],
-                          "score": res["score"]})
+                          "score": res["score"], "source": src})
         probe_rows.append({
             "channel": res.get("channel"),
             "status": res.get("status"),
@@ -933,12 +1010,25 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
             "last_post_at": res.get("last_post_at") or "",
             "post_count": res.get("post_count") or 0,
             "note": res.get("note") or "",
+            "relevance": int(res.get("relevance") or 0),
+            "reason": res.get("reason") or "",
+            "source": src,
         })
         if res["status"] == "active" and res["score"] >= min_score:
             added.append(res["channel"])
             auto_now += 1
         else:
             dead.append(res["channel"])
+
+    # Rank (1..N): active pehle, phir score, phir relevance (P45).
+    ranked = sorted(probe_rows, key=lambda r: (
+        0 if str(r.get("status") or "") == "active" else 1,
+        -int(r.get("score") or 0),
+        -int(r.get("relevance") or 0),
+        str(r.get("channel") or "")))
+    for i, row in enumerate(ranked, 1):
+        row["rank"] = i
+    probe_rows = ranked
 
     # 4) liveness re-check: purane checked channels (dead/active dono).
     # Offline mode me koi network probe nahi hota (tests / no-internet rule).
@@ -959,6 +1049,11 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
            "counts": counts(), "web_search": web_info,
            # Query variants jo is run me istemal hue (Urdu/Roman/tarjuma)
            "variants": list(search_terms),
+           # Har probed candidate ka chhota summary (source engine ke saath)
+           "summaries": summaries,
+           # Lyzem post/article/message records (web probe ke saath) — /explore
+           # cards me post preview ke liye (doosri network call nahi).
+           "lyzem_records": list(web_info.get("records") or []),
            # Har probed candidate (active + dead/insufficient) — /explore card
            # ke liye. ``candidates`` count (int) barqarar hai (purane tests).
            "probe_rows": probe_rows}

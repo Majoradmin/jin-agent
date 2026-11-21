@@ -83,7 +83,7 @@ class TestRunDiscoveryProbeRows(unittest.TestCase):
              mock.patch.object(channels, "harvest_archive",
                                lambda cfg=None, query="": []), \
              mock.patch.object(channels, "check_channel",
-                               lambda ch, cfg=None: rows[ch]):
+                               lambda ch, cfg=None, query="": rows[ch]):
             out = channels.run_discovery(config.load(), offline=False,
                                          max_add=5, query="python")
         self.assertEqual(seen.get("web"), "python")
@@ -109,7 +109,7 @@ class TestRunDiscoveryProbeRows(unittest.TestCase):
              mock.patch.object(channels, "harvest_archive",
                                lambda cfg=None, query="": []), \
              mock.patch.object(channels, "check_channel",
-                               lambda ch, cfg=None: dict(row)):
+                               lambda ch, cfg=None, query="": dict(row)):
             out = channels.run_discovery(config.load(), offline=False,
                                          max_add=5, query="python")
         self.assertEqual(out["added"], ["act_ch"])
@@ -125,7 +125,7 @@ class TestRunDiscoveryProbeRows(unittest.TestCase):
              mock.patch.object(channels, "harvest_archive",
                                lambda cfg=None, query="": []), \
              mock.patch.object(channels, "check_channel",
-                               lambda ch, cfg=None: dict(row)):
+                               lambda ch, cfg=None, query="": dict(row)):
             out = channels.run_discovery(config.load(), offline=False,
                                          max_add=5, query="python")
         self.assertEqual(out["added"], [])

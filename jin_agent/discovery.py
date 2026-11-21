@@ -112,6 +112,8 @@ def _probe_merge(query: str, cfg: dict, provs: tuple,
     handles: list[str] = []
     seen: set[str] = set()
     engines: list[str] = []
+    sources: dict[str, str] = {}
+    records: list[dict] = []
     saw_results = False
     for name, url, kind in _engines(query, provs):
         try:
@@ -127,18 +129,26 @@ def _probe_merge(query: str, cfg: dict, provs: tuple,
             continue
         saw_results = True
         engines.append(name)
+        if kind == "lyzem":
+            try:
+                records = channels.parse_lyzem_html(html)
+            except Exception:
+                records = []
         for h in hs:
             if h not in seen:
                 seen.add(h)
                 handles.append(h)
+            sources.setdefault(h.lower(), name)
     if not handles:
         error = ("results me t.me channel nahi mila" if saw_results
                  else "kisi engine ne results nahi diye")
-        return {"handles": [], "engine": "", "engines": [],
+        return {"handles": [], "engine": "", "engines": [], "sources": {},
+                "records": records,
                 "candidates": 0, "anomaly": False, "error": error,
                 "tried": tried, "cached": False}
     return {"handles": handles[:60], "engine": ", ".join(engines),
-            "engines": engines, "candidates": len(handles),
+            "engines": engines, "sources": sources, "records": records,
+            "candidates": len(handles),
             "anomaly": False, "error": "", "tried": tried, "cached": False}
 
 
@@ -180,6 +190,8 @@ def probe(query: str, cfg: dict | None = None,
         saw_results = True
         if handles:
             out = {"handles": handles[:60], "engine": name,
+                   "sources": {h.lower(): name for h in handles[:60]},
+                   "records": [],
                    "candidates": len(handles), "anomaly": False,
                    "error": "", "tried": tried, "cached": False}
             cache_put(key, out, cfg)
@@ -195,7 +207,8 @@ def probe(query: str, cfg: dict | None = None,
     else:
         error = "kisi engine ne results nahi diye"
         engine = ""
-    out = {"handles": [], "engine": engine, "candidates": 0,
+    out = {"handles": [], "engine": engine, "engines": [], "sources": {},
+           "records": [], "candidates": 0,
            "anomaly": saw_anomaly and not saw_results,
            "error": error, "tried": tried, "cached": False}
     cache_put(key, out, cfg)

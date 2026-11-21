@@ -166,7 +166,7 @@ class TestScopes(unittest.TestCase):
         api = FakeAPI()
         self._dispatch_all(api)
         cbs = [b["callback_data"] for row in api.sent[-1][2]
-               for b in row]
+               for b in row if b.get("callback_data")]
         for scope in ("tg", "web", "oss", "deep"):
             self.assertTrue(any(c.startswith(f"exp:scope:{scope}:") for c in cbs),
                             scope)
@@ -175,7 +175,7 @@ class TestScopes(unittest.TestCase):
         api = FakeAPI()
         self._dispatch_all(api)
         deep_cb = [b["callback_data"] for row in api.sent[-1][2]
-                   for b in row
+                   for b in row if b.get("callback_data")
                    if b["callback_data"].startswith("exp:scope:deep:")][0]
 
         def no_onion(url, *a, **k):
@@ -203,7 +203,7 @@ class TestScopes(unittest.TestCase):
         api = FakeAPI()
         self._dispatch_all(api)
         tg_cb = [b["callback_data"] for row in api.sent[-1][2]
-                 for b in row
+                 for b in row if b.get("callback_data")
                  if b["callback_data"].startswith("exp:scope:tg:")][0]
         with mock.patch.object(tb.scheduler, "run_job",
                                lambda *a, **k: _res()):
@@ -255,7 +255,8 @@ class TestMoreExplore(unittest.TestCase):
                                lambda *a, **k: _res()):
             tb.dispatch(42, "/explore android security",
                         {"telegram_chat_id": "42"}, api=api)
-        cbs = [b["callback_data"] for row in api.sent[-1][2] for b in row]
+        cbs = [b["callback_data"] for row in api.sent[-1][2] for b in row
+               if b.get("callback_data")]
         self.assertTrue(any(c.startswith("exp:more:") for c in cbs))
 
     def test_more_callback_runs_discovery_and_shows_new(self):
@@ -269,7 +270,8 @@ class TestMoreExplore(unittest.TestCase):
         with mock.patch.object(tb.scheduler, "run_job", job):
             tb.dispatch(42, "/explore android security",
                         {"telegram_chat_id": "42"}, api=api)
-            cbs = [b["callback_data"] for row in api.sent[-1][2] for b in row]
+            cbs = [b["callback_data"] for row in api.sent[-1][2] for b in row
+                   if b.get("callback_data")]
             more = [c for c in cbs if c.startswith("exp:more:")][0]
             api.sent.clear()
             res = tb.handle_callback(42, more, {"telegram_chat_id": "42"},
@@ -343,7 +345,7 @@ class TestDiscoveryQuery(unittest.TestCase):
             seen["harvest_query"] = query
             return []
 
-        def fake_probe(channel, cfg=None):
+        def fake_probe(channel, cfg=None, query=""):
             return {"channel": channel, "status": "dead", "score": 0}
 
         with mock.patch.object(channels, "web_search_candidates", fake_web), \
