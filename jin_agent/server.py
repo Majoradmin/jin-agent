@@ -288,6 +288,14 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/backup":
                 store.init_db()
                 return self._json({"ok": True, "result": store.backup()})
+            if path == "/api/restore":
+                src = str(data.get("path") or "").strip()
+                if not src:
+                    return self._err("path lazmi hai")
+                if not bool(data.get("confirm")):
+                    return self._err("Restore ke liye confirm=true lazmi hai")
+                store.init_db()
+                return self._json({"ok": True, "result": store.restore(src, confirm=True)})
             if path == "/api/channels":
                 from . import channels as ch
                 action = str(data.get("action") or "list").lower()

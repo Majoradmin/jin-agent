@@ -174,6 +174,25 @@ def cmd_bot(args):
     return 0
 
 
+def cmd_restore(args):
+    """DB backup se restore — --confirm ke baghair kuch nahi hota."""
+    path = str(getattr(args, "from_path", None) or getattr(args, "path", None) or "").strip()
+    if not path:
+        print("Restore ke liye backup path daalein: restore --from <path> --confirm")
+        return 1
+    if not getattr(args, "confirm", False):
+        print("⚠️ Restore asli DB ko replace karega (pehle safety backup banegi). "
+              "Tasdeeq ke liye --confirm lagayein.")
+        return 1
+    try:
+        out = store.restore(path, confirm=True)
+    except ValueError as exc:
+        print(f"Restore fail: {exc}")
+        return 1
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_supervisor(args):
     from . import supervisor
     return supervisor.run(port=args.port, host=args.host,
@@ -224,6 +243,12 @@ def build_parser():
     cg2.set_defaults(fn=cmd_changes)
     bt = sub.add_parser("bot", help="Telegram bot long-polling front-end")
     bt.set_defaults(fn=cmd_bot)
+    rs = sub.add_parser("restore", help="Backup se DB restore (--confirm lazmi)")
+    rs.add_argument("path", nargs="?", help="backup .db path (positional)")
+    rs.add_argument("--from", dest="from_path", help="backup .db path (alternative)")
+    rs.add_argument("--confirm", action="store_true",
+                    help="restore ki tasdeeq (ke baghair kuch nahi hota)")
+    rs.set_defaults(fn=cmd_restore)
     sp = sub.add_parser("supervisor",
                         help="Console + Telegram bot ek saath (hosted deploy)")
     sp.add_argument("--port", type=int,

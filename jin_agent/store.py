@@ -882,8 +882,16 @@ def _prune_traces(days: int | None = None) -> int:
 def backup() -> dict:
     """SQLite online backup - stdlib, no external process. Rolling retention."""
     from pathlib import Path
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    # Microsecond timestamp: naam lexicographic tor par bhi qayam-e-tarteeb
+    # rehta hai, is liye _prune_backups sahi (taza-tarīn) backup rakhta hai.
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     dest = config.backups_dir() / f"jin_agent-{stamp}.db"
+    # Agar phir bhi collision ho to alag naam (prune ordering barqarar).
+    if dest.exists():
+        n = 1
+        while (config.backups_dir() / f"jin_agent-{stamp}-{n:03d}.db").exists():
+            n += 1
+        dest = config.backups_dir() / f"jin_agent-{stamp}-{n:03d}.db"
     source = connect()
     target = sqlite3.connect(str(dest))
     try:
@@ -902,3 +910,121 @@ def _backup_keep() -> int:
         return max(1, int(str(os.environ.get("JIN_AGENT_BACKUP_KEEP", "7") or 7)))
     except (TypeError, ValueError):
         return 7
+
+
+# Restore ke liye lazmi tables — backup inke baghair asli archive nahi ho sakti.
+RESTORE_REQUIRED_TABLES = ("items", "sources", "runs", "reports", "events")
+
+
+def _sqlite_tables(con: sqlite3.Connection) -> set[str]:
+    return {str(r[0]) for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def restore(path, *, confirm: bool = False) -> dict:
+    """Backup file se current DB restore karo (``confirm=True`` lazmi).
+
+    Khatra (DB overwrite) hai, is liye:
+    - bina ``confirm`` par ValueError;
+    - pehle current DB ka safety backup (``backup()``);
+    - source par ``PRAGMA integrity_check`` + required tables ki tasdeeq;
+    - atomic replace (temp file + ``os.replace``);
+    - baad me dobara integrity + schema verify.
+
+    Backup ``data/backups/`` ke andar hona lazmi nahi — koi bhi legitimate
+    absolute/relative path chalega, magar ``..`` traversal allowed nahi.
+
+    Return: ``{path, restored_from, bytes, safety_backup, integrity, items}``.
+    """
+    import shutil
+    from pathlib import Path
+
+    if not confirm:
+        raise ValueError("Restore ke liye confirm=True lazmi hai")
+    raw = Path(path)
+    if ".." in raw.parts:
+        raise ValueError("Backup path me path traversal (..) allowed nahi")
+    if not raw.is_file():
+        raise ValueError(f"Backup file mojood nahi: {path}")
+    resolved = raw.resolve()
+
+    try:
+        source = sqlite3.connect(str(resolved))
+    except sqlite3.Error as exc:
+        raise ValueError(f"Backup corrupt hai (open fail): {exc}") from exc
+    try:
+        try:
+            row = source.execute("PRAGMA integrity_check").fetchone()
+            integrity = str(row[0] if row else "")
+        except sqlite3.Error as exc:
+            raise ValueError(f"Backup corrupt hai (integrity_check fail): {exc}") from exc
+        if integrity.strip().lower() != "ok":
+            raise ValueError("Backup corrupt hai (integrity_check fail)")
+        try:
+            tables = _sqlite_tables(source)
+        except sqlite3.Error as exc:
+            raise ValueError(f"Backup corrupt hai (schema fail): {exc}") from exc
+        missing = [t for t in RESTORE_REQUIRED_TABLES if t not in tables]
+        if missing:
+            raise ValueError("Backup me required tables nahi: " + ", ".join(missing))
+    finally:
+        source.close()
+
+    dest = config.db_path()
+    # Source ko pehle staging file me copy karo: safety backup ke andar
+    # _prune_backups purana source delete kar de to bhi restore chalta rahe.
+    staging = dest.with_name(dest.name + ".restore-src")
+    try:
+        shutil.copyfile(resolved, staging)
+
+        # Pre-restore safety backup (current DB mojood ho to). Ye restore ke
+        # baad bhi jagah banaye ga — magar pehle maljoood data ka suragh rakhta hai.
+        safety = backup() if dest.is_file() else None
+
+        # Purani WAL/SHM/journal sidecars hatao — warna replace ke baad naya DB
+        # purani transactions se "Wahid" ho sakta hai.
+        for suffix in ("-wal", "-shm", "-journal"):
+            sidecar = dest.with_name(dest.name + suffix)
+            try:
+                sidecar.unlink()
+            except OSError:
+                pass
+
+        tmp = dest.with_name(dest.name + ".restore-tmp")
+        try:
+            shutil.copyfile(staging, tmp)
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, dest)
+        finally:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    finally:
+        try:
+            staging.unlink()
+        except OSError:
+            pass
+
+    # Baad me verify: schema (FTS migration), integrity, items count, tables.
+    init_db()
+    con = connect()
+    try:
+        row = con.execute("PRAGMA integrity_check").fetchone()
+        integrity = str(row[0] if row else "")
+        items = int(con.execute("SELECT COUNT(*) FROM items").fetchone()[0])
+        tables = _sqlite_tables(con)
+    finally:
+        con.close()
+    missing = [t for t in RESTORE_REQUIRED_TABLES if t not in tables]
+    if missing:
+        raise ValueError("Restore ke baad required tables nahi: " + ", ".join(missing))
+    if integrity.strip().lower() != "ok":
+        raise ValueError("Restore ke baad integrity_check fail")
+
+    out = {"path": str(dest), "restored_from": str(resolved),
+           "bytes": int(dest.stat().st_size), "safety_backup": safety,
+           "integrity": integrity, "items": items}
+    add_event("restore", f"Restored from {resolved.name} "
+                         f"({out['bytes']} bytes, {items} items)")
+    return out
