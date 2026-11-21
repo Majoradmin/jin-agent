@@ -1,11 +1,17 @@
 """P25 - Telegram bot front-end helpers: command parsing, chunks, allowlist, dispatch."""
 
 import os
+import socket
 import tempfile
 import unittest
 from unittest import mock
 
-from jin_agent import config, llm, store, telegram_bot as tb
+from jin_agent import config, llm, searchmemory, store, telegram_bot as tb
+
+
+def _public_dns(host, port, *args, **kwargs):
+    """Offline DNS mock — custom LLM endpoint public IP par resolve hota hai."""
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
 
 
 def setUpModule():
@@ -313,13 +319,15 @@ class TestRelatedSearchAndTranslation(unittest.TestCase):
 
     def test_llm_related_queries_parses_json_array(self):
         fake_chat = mock.MagicMock(return_value={"ok": True, "text": '["firmware unlock", "kernel panic fix"]'})
-        with mock.patch.object(llm, "chat", fake_chat):
+        with mock.patch.object(llm, "chat", fake_chat), \
+                mock.patch("socket.getaddrinfo", _public_dns):
             qs = llm.related_queries(self._llm_cfg(), "firmware")
         self.assertEqual(qs, ["firmware unlock", "kernel panic fix"])
 
     def test_llm_related_queries_bad_json_returns_empty(self):
         with mock.patch.object(llm, "chat", mock.MagicMock(
-                return_value={"ok": True, "text": "nahi samajh aaya"})):
+                return_value={"ok": True, "text": "nahi samajh aaya"})), \
+                mock.patch("socket.getaddrinfo", _public_dns):
             self.assertEqual(llm.related_queries(self._llm_cfg(), "x"), [])
 
     def test_llm_translate_text_disabled_returns_empty(self):
@@ -327,7 +335,8 @@ class TestRelatedSearchAndTranslation(unittest.TestCase):
 
     def test_llm_translate_text_returns_translation(self):
         with mock.patch.object(llm, "chat", mock.MagicMock(
-                return_value={"ok": True, "text": "Firmware unlock ka solution"})):
+                return_value={"ok": True, "text": "Firmware unlock ka solution"})), \
+                mock.patch("socket.getaddrinfo", _public_dns):
             self.assertEqual(llm.translate_text(self._llm_cfg(), "Firmware unlock ka solution"),
                              "Firmware unlock ka solution")
 

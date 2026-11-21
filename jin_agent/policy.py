@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 from urllib.parse import urlsplit
 
 POLICY_ID = "SAHULAT-SAFE-SERVICE-v1"
@@ -316,8 +317,20 @@ def check_url(url, extra_hosts=()) -> tuple[bool, str]:
     return True, ""
 
 
+def _resolved_addresses(host: str, port: int) -> list[str]:
+    """Hostname ko DNS se resolve karo (socket.getaddrinfo, SOCK_STREAM)."""
+    for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+        yield item[4][0]
+
+
 def trusted_public_endpoint(url: str) -> bool:
-    """Less strict check for a USER-supplied custom LLM host (no IP literals)."""
+    """Less strict check for a USER-supplied custom LLM host (no IP literals).
+
+    **SSRF (P1-5):** hostname ke saare resolved IP ``ipaddress`` par chalte
+    hain — koi bhi IP private / loopback / link-local / reserved / multicast /
+    unspecified ho to reject. DNS fail hon to bhi reject. Taake ``foo.example``
+    jaisa host jo ``169.254.169.254`` par resolve ho, pass na ho.
+    """
     try:
         p = urlsplit(str(url or "").strip())
         if p.scheme.lower() != "https" or p.username or p.password:
@@ -334,8 +347,27 @@ def trusted_public_endpoint(url: str) -> bool:
             return False
         except ValueError:
             pass
-        if p.port is not None and p.port not in (80, 443):
+        try:
+            port = int(p.port) if p.port is not None else 443
+        except ValueError:
             return False
+        if port not in (80, 443):
+            return False
+        try:
+            addresses = list(_resolved_addresses(host, port))
+        except (socket.gaierror, OSError, ValueError):
+            return False
+        if not addresses:
+            return False
+        for raw in addresses:
+            try:
+                ip = ipaddress.ip_address(str(raw).split("%")[0])
+            except ValueError:
+                return False
+            if (ip.is_private or ip.is_loopback or ip.is_link_local or
+                    ip.is_reserved or ip.is_multicast or ip.is_unspecified or
+                    not ip.is_global):
+                return False
         return True
     except Exception:
         return False

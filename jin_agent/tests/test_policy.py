@@ -1,14 +1,27 @@
 """P13 / P17 - legal source register, SSRF guard, safe-service boundary."""
 
 import os
+import socket
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.parse import urlsplit
 
 BASE = Path(__file__).resolve().parents[2]
 
 from jin_agent import config, policy, store  # noqa: E402
+
+
+def _fake_dns(mapping):
+    """``socket.getaddrinfo`` ka offline mock — host -> IP list."""
+    def fake(host, port, *args, **kwargs):
+        ips = mapping.get(str(host).lower())
+        if not ips:
+            raise socket.gaierror(-2, "Name or service not known")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port))
+                for ip in ips]
+    return fake
 
 
 def setUpModule():
@@ -110,10 +123,40 @@ class TestURLGuard(unittest.TestCase):
             self.assertFalse(policy.check_url(url)[0], url)
 
     def test_custom_endpoint_check(self):
-        self.assertTrue(policy.trusted_public_endpoint("https://llm.example.com/v1"))
+        # P1-5: hostname resolve kar ke hi allow hoga. DNS offline mock.
+        with mock.patch("socket.getaddrinfo",
+                        _fake_dns({"llm.example.com": ["93.184.216.34"]})):
+            self.assertTrue(policy.trusted_public_endpoint("https://llm.example.com/v1"))
         for url in ("http://127.0.0.1:11434/v1", "https://8.8.8.8/v1",
                     "https://foo.onion/v1", "http://llm.example.com/v1"):
             self.assertFalse(policy.trusted_public_endpoint(url))
+
+    def test_custom_endpoint_resolves_internal_ip_rejected(self):
+        # foo.example.com jaisa public naam jo internal IP par resolve ho.
+        for ip in ("127.0.0.1", "169.254.169.254", "10.1.2.3", "192.168.0.5",
+                   "169.254.0.1", "0.0.0.0", "224.0.0.1", "::1", "fc00::1"):
+            with mock.patch("socket.getaddrinfo",
+                            _fake_dns({"foo.example.com": [ip]})):
+                self.assertFalse(
+                    policy.trusted_public_endpoint("https://foo.example.com/v1"), ip)
+
+    def test_custom_endpoint_public_resolution_allowed(self):
+        with mock.patch("socket.getaddrinfo",
+                        _fake_dns({"llm.example.com": ["93.184.216.34"]})):
+            self.assertTrue(policy.trusted_public_endpoint("https://llm.example.com/v1"))
+
+    def test_custom_endpoint_mixed_public_private_rejected(self):
+        with mock.patch("socket.getaddrinfo",
+                        _fake_dns({"llm.example.com": ["93.184.216.34", "10.0.0.2"]})):
+            self.assertFalse(policy.trusted_public_endpoint("https://llm.example.com/v1"))
+
+    def test_custom_endpoint_dns_failure_rejected(self):
+        with mock.patch("socket.getaddrinfo",
+                        _fake_dns({"nx.example.org": ["93.184.216.34"]})):
+            self.assertFalse(policy.trusted_public_endpoint("https://llm.example.com/v1"))
+        with mock.patch("socket.getaddrinfo",
+                        side_effect=OSError("DNS down")):
+            self.assertFalse(policy.trusted_public_endpoint("https://llm.example.com/v1"))
 
 
 class TestSafeServiceBoundary(unittest.TestCase):

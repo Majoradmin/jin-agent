@@ -6,10 +6,17 @@ ho to asli summary; off ho to rule-based fallback (hallucination nahi).
 """
 
 import os
+import socket
 import tempfile
 import unittest
+from unittest import mock
 
 from jin_agent import briefer, config, report_export  # noqa: E402
+
+
+def _public_dns(host, port, *args, **kwargs):
+    """Offline DNS mock — custom endpoint public IP par resolve hota hai."""
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
 
 
 def setUpModule():
@@ -87,10 +94,11 @@ class TestItemSpecificKhulasa(unittest.TestCase):
 
         old = briefer.llm.chat
         briefer.llm.chat = fake_chat
-        try:
-            line = briefer.khulasa(_item("Free Dictionary API"), cfg)
-        finally:
-            briefer.llm.chat = old
+        with mock.patch("socket.getaddrinfo", _public_dns):
+            try:
+                line = briefer.khulasa(_item("Free Dictionary API"), cfg)
+            finally:
+                briefer.llm.chat = old
         self.assertEqual(line, "Yeh API free dictionary khaatir hai.")
 
     def test_llm_failure_falls_back_to_rule_based(self):
@@ -102,10 +110,11 @@ class TestItemSpecificKhulasa(unittest.TestCase):
 
         old = briefer.llm.chat
         briefer.llm.chat = fail_chat
-        try:
-            line = briefer.khulasa(_item("Android 17 patch"), cfg)
-        finally:
-            briefer.llm.chat = old
+        with mock.patch("socket.getaddrinfo", _public_dns):
+            try:
+                line = briefer.khulasa(_item("Android 17 patch"), cfg)
+            finally:
+                briefer.llm.chat = old
         self.assertIn("Android 17 patch", line)
         for hint in briefer.HINTS.values():
             self.assertNotIn(hint, line)
