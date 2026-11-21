@@ -733,20 +733,23 @@ def _table_exists(con, name: str) -> bool:
 
 
 def _retention_days(days: int | None = None) -> int:
-    """Retention window (din). Default 180, env ``JIN_AGENT_RETENTION_DAYS``."""
+    """Retention window (din). Default 90 (``config.DEFAULT`` jaisa hi),
+    env ``JIN_AGENT_RETENTION_DAYS``."""
     if days is None:
         try:
-            days = int(str(os.environ.get("JIN_AGENT_RETENTION_DAYS", "180") or 180))
+            days = int(str(os.environ.get("JIN_AGENT_RETENTION_DAYS", "90") or 90))
         except (TypeError, ValueError):
-            days = 180
-    return util.clamp(days, 1, 3650, 180)
+            days = 90
+    return util.clamp(days, 1, 3650, 90)
 
 
 def retention(days: int | None = None) -> dict:
     """Purani records ka sweep — items ke ilawa operational tables bhi bounded.
 
     Articles (items) ke saath ye tables bhi prune hote hain: ``events``,
-    ``runs``, ``reports``, ``jobs``, ``search_memory``, ``tg_candidates``.
+    ``runs``, ``reports``, ``jobs``, ``search_memory``, ``tg_candidates``,
+    ``chat_context``, ``feedback``, ``tg_sites``, ``tg_discovery_state``,
+    ``schedule_state`` aur ``page_snapshots`` (``snapshots.prune``).
     Dead ``tg_channels`` (30 din purane) delete hote hain taake registry
     unbounded na barhe. Sources / watchlist archive-not-delete rehte hain.
     """
@@ -771,6 +774,19 @@ def retention(days: int | None = None) -> dict:
         if _table_exists(con, "tg_candidates"):
             pruned["tg_candidates"] = con.execute(
                 "DELETE FROM tg_candidates WHERE found_at<?", (cutoff_epoch,)).rowcount
+        # P1-6: baqi operational tables bhi bounded rakhein — chat_context,
+        # feedback, tg_sites, tg_discovery_state, schedule_state. (page_snapshots
+        # neeche snapshots.prune se hota hai.)
+        for table, column, cutoff in (
+                ("chat_context", "updated_at", cutoff_epoch),
+                ("feedback", "created_at", cutoff_iso),
+                ("tg_sites", "added_at", cutoff_epoch),
+                ("tg_discovery_state", "updated_at", cutoff_epoch),
+                ("schedule_state", "last_ts", cutoff_epoch)):
+            if _table_exists(con, table):
+                pruned[table] = con.execute(
+                    f"DELETE FROM {table} WHERE {column}<>'' AND {column}>0 "
+                    f"AND {column}<?", (cutoff,)).rowcount
         # Freelist pages wapas le lo (auto_vacuum off ho to no-op bhi safe).
         try:
             con.execute("PRAGMA incremental_vacuum")
@@ -789,6 +805,13 @@ def retention(days: int | None = None) -> dict:
         pruned["sources_stale"] = mark_stale_sources()
     except Exception:
         pruned["sources_stale"] = 0
+    # P1-6: snapshots.prune production me koi aur nahi chalata — retention hi
+    # usay bhi sweep karay.
+    try:
+        from . import snapshots as snapshots_mod
+        pruned["page_snapshots"] = snapshots_mod.prune(days)
+    except Exception:
+        pruned["page_snapshots"] = 0
     try:
         pruned["traces"] = _prune_traces()
     except Exception:

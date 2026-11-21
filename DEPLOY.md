@@ -39,7 +39,7 @@ ya default `python bot.py` (yeh shim ab wahi supervisor chalata hai).
 | `JIN_AGENT_DATA` | na | data dir (DB / reports / backups / logs), default `jin_agent/data` |
 | `JIN_AGENT_VERBOSE` | na | set karne par HTTP access log bhi dikhta hai (default off) |
 | `JIN_AGENT_SCHEDULER` | na | `serve` par scheduler auto-start; `off` / `0` / `false` par band (default on) |
-| `JIN_AGENT_RETENTION_DAYS` | na | retention window (din), default `90` — items + events/runs/reports/jobs/search_memory/tg_candidates |
+| `JIN_AGENT_RETENTION_DAYS` | na | retention window (din), default `90` — items + events/runs/reports/jobs/search_memory/tg_candidates/chat_context/feedback/tg_sites/tg_discovery_state/schedule_state/page_snapshots |
 | `JIN_AGENT_BACKUP_KEEP` | na | `data/backups/` me rakhne wale backups, default `7` |
 | `JIN_AGENT_REPORT_DAYS` | na | `data/reports/` retention (din), default `90` |
 | `JIN_AGENT_MAX_ROUNDS` | na | research rounds ki cap, default `5` |

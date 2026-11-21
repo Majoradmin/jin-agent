@@ -60,6 +60,30 @@ class TestRetentionTables(unittest.TestCase):
                         "VALUES('newhandle',?)", (now_epoch,))
             con.execute("INSERT INTO tg_channels(channel,status,last_checked) "
                         "VALUES('newdead','dead',?)", (now_epoch,))
+            # P1-6: baqi operational tables (purani + nayi rows)
+            con.execute("INSERT INTO chat_context(chat_id,last_queries,updated_at) "
+                        "VALUES('1','[]',1)")
+            con.execute("INSERT INTO chat_context(chat_id,last_queries,updated_at) "
+                        "VALUES('2','[]',?)", (now_epoch,))
+            con.execute("INSERT INTO feedback(guid,useful,note,created_at) "
+                        "VALUES('old:guid',1,'old',?)", (OLD_ISO,))
+            con.execute("INSERT INTO feedback(guid,useful,note,created_at) "
+                        "VALUES('new:guid',1,'new',?)", (now_iso,))
+            con.execute("INSERT INTO page_snapshots(source_key,canonical,ts) "
+                        "VALUES('s','c',?)", (OLD_ISO,))
+            con.execute("INSERT INTO page_snapshots(source_key,canonical,ts) "
+                        "VALUES('s2','c2',?)", (now_iso,))
+            con.execute("INSERT INTO tg_sites(url,title,added_at) "
+                        "VALUES('https://old.example.com','old',1)")
+            con.execute("INSERT INTO tg_sites(url,title,added_at) "
+                        "VALUES('https://new.example.com','new',?)", (now_epoch,))
+            con.execute("INSERT INTO tg_discovery_state(key,value,updated_at) "
+                        "VALUES('oldk','v',1)")
+            con.execute("INSERT INTO tg_discovery_state(key,value,updated_at) "
+                        "VALUES('newk','v',?)", (now_epoch,))
+            con.execute("INSERT INTO schedule_state(key,last_ts) VALUES('oldjob',1)")
+            con.execute("INSERT INTO schedule_state(key,last_ts) VALUES('newjob',?)",
+                        (now_epoch,))
 
     def test_retention_prunes_each_operational_table(self):
         self._seed()
@@ -71,6 +95,10 @@ class TestRetentionTables(unittest.TestCase):
         self.assertGreaterEqual(out["pruned"].get("search_memory", 0), 1)
         self.assertGreaterEqual(out["pruned"].get("tg_candidates", 0), 1)
         self.assertGreaterEqual(out["pruned"].get("tg_channels_dead", 0), 1)
+        # P1-6: baqi tables bhi prune hui
+        for key in ("chat_context", "feedback", "page_snapshots", "tg_sites",
+                    "tg_discovery_state", "schedule_state"):
+            self.assertGreaterEqual(out["pruned"].get(key, 0), 1, key)
         # fresh rows bache
         with store.session() as con:
             self.assertEqual(con.execute(
@@ -91,15 +119,35 @@ class TestRetentionTables(unittest.TestCase):
             self.assertEqual(con.execute(
                 "SELECT COUNT(*) FROM tg_channels WHERE channel='newdead'"
             ).fetchone()[0], 1)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM chat_context WHERE chat_id='2'"
+            ).fetchone()[0], 1)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM feedback WHERE guid='new:guid'"
+            ).fetchone()[0], 1)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM page_snapshots WHERE source_key='s2'"
+            ).fetchone()[0], 1)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM tg_sites WHERE url='https://new.example.com'"
+            ).fetchone()[0], 1)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM tg_discovery_state WHERE key='newk'"
+            ).fetchone()[0], 1)
+            self.assertEqual(con.execute(
+                "SELECT COUNT(*) FROM schedule_state WHERE key='newjob'"
+            ).fetchone()[0], 1)
 
     def test_retention_days_env_default(self):
+        # P1-6: config.DEFAULT["retention_days"] = 90 — store fallback bhi 90.
+        self.assertEqual(config.DEFAULT.get("retention_days"), 90)
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("JIN_AGENT_RETENTION_DAYS", None)
-            self.assertEqual(store._retention_days(None), 180)
+            self.assertEqual(store._retention_days(None), 90)
         with mock.patch.dict(os.environ, {"JIN_AGENT_RETENTION_DAYS": "45"}):
             self.assertEqual(store._retention_days(None), 45)
         with mock.patch.dict(os.environ, {"JIN_AGENT_RETENTION_DAYS": "abc"}):
-            self.assertEqual(store._retention_days(None), 180)
+            self.assertEqual(store._retention_days(None), 90)
 
     def test_retention_sources_and_watchlist_survive(self):
         before_sources = store.counts()["sources"]
