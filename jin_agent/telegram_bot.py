@@ -1620,7 +1620,9 @@ def format_status_text(cfg: dict | None = None) -> str:
         f"• Policy: {cfg.get('policy_id') or 'SAHULAT-SAFE-SERVICE-v1'}",
         f"• Poll failures: {_poll_failures}",
         f"• Telegram: {ch.get('active', 0)} active / {ch.get('dead', 0)} dead / "
-        f"{ch.get('archived', 0)} archived / {ch.get('stale', 0)} stale",
+        f"{ch.get('archived', 0)} archived / {ch.get('stale', 0)} stale"
+        + (f" / {ch['spam']} spam / {ch['blocked']} blocked"
+           if (ch.get('spam') or ch.get('blocked')) else ""),
         f"• Sites memory: {sites.get('total', 0)} "
         f"(is hafte {sites.get('week', 0)})",
         f"• Sources: {health['total']} total — {health['auto']} auto / "
@@ -2395,9 +2397,13 @@ def format_channel_health() -> str:
         if age > 30:
             quiet.append((str(row.get("channel") or ""), int(age),
                           str(row.get("last_post_at") or "")))
-    lines = [f"🩺 Channel health: {counts.get('active', 0)} active / "
-             f"{counts.get('dead', 0)} dead / {counts.get('archived', 0)} archived / "
-             f"{counts.get('stale', 0)} stale"]
+    line = (f"🩺 Channel health: {counts.get('active', 0)} active / "
+            f"{counts.get('dead', 0)} dead / {counts.get('archived', 0)} archived / "
+            f"{counts.get('stale', 0)} stale")
+    if counts.get('spam') or counts.get('blocked'):
+        line += (f" / {counts.get('spam', 0)} spam / "
+                 f"{counts.get('blocked', 0)} blocked")
+    lines = [line]
     if quiet:
         lines += ["", "⚠️ Alive magar khamosh (last post > 30 din):"]
         for handle, age, last in quiet[:10]:
