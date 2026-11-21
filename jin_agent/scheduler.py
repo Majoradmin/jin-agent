@@ -120,6 +120,16 @@ def explore(topic: str = "", cfg: dict | None = None, offline: bool = True,
         scored = [i for i in scored if is_oss_item(i)]
     elif scope in ("tg", "deep"):
         scored = []
+    # Lyzem post/article/message records — /explore cards me preview ke liye.
+    # Pehle run_discovery ke sath aye records (doosri network call nahi);
+    # na hon to offline na ho to lyzem se lo. Offline mode me koi call NAHI.
+    lyzem_records: list[dict] = list(discovery.get("lyzem_records") or [])
+    if not lyzem_records and scope in ("all", "tg") and not offline:
+        try:
+            from . import discovery as discovery_mod
+            lyzem_records = discovery_mod.lyzem_records(topic, cfg)
+        except Exception:
+            lyzem_records = []
     out = orchestrator.digest(cfg)
     store.add_event("explore", f"topic={util.truncate(topic, 60)} scope={scope} "
                                 f"added={len(discovery.get('added') or [])} "
@@ -127,6 +137,7 @@ def explore(topic: str = "", cfg: dict | None = None, offline: bool = True,
                                 f"active={discovery.get('counts', {}).get('active', 0)}")
     return {"topic": topic, "query": topic, "scope": scope,
             "discovery": discovery, "scored": scored,
+            "lyzem_records": lyzem_records,
             "digest": str((out.get("saved") or {}).get("md") or ""),
             "items": int((out.get("report") or {}).get("facts_count") or 0)}
 

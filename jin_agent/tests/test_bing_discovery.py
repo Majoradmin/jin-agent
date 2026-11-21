@@ -301,7 +301,7 @@ class TestHonestEmptyMessage(unittest.TestCase):
                                             "error": "search engine ne results "
                                                      "nahi diye (anti-bot)"}}}
         reason = tb._explore_empty_reason(res, "all")
-        self.assertIn("koi naya channel nahi mila", reason)
+        self.assertIn("Koi naya item nahi mila", reason)
         self.assertIn("anti-bot", reason)
         self.assertIn("/status", reason)
 

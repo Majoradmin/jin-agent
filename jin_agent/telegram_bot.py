@@ -219,6 +219,11 @@ _EXPLORE_SCOPE_CB_RE = re.compile(
     r"^exp:scope:(all|tg|web|oss|deep):([a-f0-9]{6,24})$")
 # "Aur explore karo" — wahi topic dobara discovery (naye items).
 _EXPLORE_MORE_CB_RE = re.compile(r"^exp:more:([a-f0-9]{6,24})$")
+# Per-card actions (P46): ``tr:<topic_hash>:<item_hash>`` (translate) aur
+# ``refine:<topic_hash>`` (naya variant set). 64-byte callback limit ke andar.
+_EXPLORE_TR_CB_RE = re.compile(
+    r"^tr:([a-f0-9]{6,24}):([a-f0-9]{8,24})$")
+_EXPLORE_REFINE_CB_RE = re.compile(r"^refine:([a-f0-9]{6,24})$")
 
 # Global stop flag — /stop command set karta hai, research thread check karti hai.
 # Sirf bool se kaam nahi chalta: do concurrent /research (ya research + /stop)
@@ -755,6 +760,20 @@ def parse_explore_more_callback(data: str) -> str:
     return m.group(1) if m else ""
 
 
+def parse_explore_translate_callback(data: str) -> tuple[str, str]:
+    """``tr:<topic_hash>:<item_hash>`` -> (topic_hash, item_hash)."""
+    m = _EXPLORE_TR_CB_RE.match(str(data or "").strip())
+    if not m:
+        return "", ""
+    return m.group(1), m.group(2)
+
+
+def parse_explore_refine_callback(data: str) -> str:
+    """``refine:<topic_hash>`` -> hash (naya variant set)."""
+    m = _EXPLORE_REFINE_CB_RE.match(str(data or "").strip())
+    return m.group(1) if m else ""
+
+
 def parse_explore_scope_callback(data: str) -> tuple[str, str]:
     """``exp:scope:<scope>:<hash>`` -> (scope, hash)."""
     m = _EXPLORE_SCOPE_CB_RE.match(str(data or "").strip())
@@ -826,6 +845,52 @@ def _handle_explore_callback(chat_id: int, action: str, key: str,
     return {"ok": True, "action": "explore_skip", "kind": item.get("kind")}
 
 
+def _handle_explore_translate(chat_id: int, topic_hash: str, act_hash: str,
+                              cfg: dict, api) -> dict:
+    """``tr:<topic_hash>:<item_hash>`` — card ka matn user ki zaban me."""
+    pending = _EXPLORE_PENDING.get(int(chat_id)) or {}
+    item = None
+    for it in (pending.get("items") or {}).values():
+        if _explore_action_hash(it) == act_hash:
+            item = it
+            break
+    if not item:
+        api.send(chat_id, "Purana explore card hai. Naya /explore karein.")
+        return {"ok": False, "action": "explore_translate", "error": "expired"}
+    text = _explore_item_text(item)
+    translated = ""
+    try:
+        translated = llm.translate_text(cfg, text)
+    except Exception:
+        translated = ""
+    if not translated:
+        api.send(chat_id, "🌐 Translate abhi available nahi (local LLM band "
+                          "hai) — detail local console par hai.")
+        return {"ok": False, "action": "explore_translate", "error": "no llm"}
+    api.send(chat_id, util.truncate(translated, 3500))
+    return {"ok": True, "action": "explore_translate"}
+
+
+def _handle_explore_refine(chat_id: int, topic_hash: str, cfg: dict,
+                           api) -> dict:
+    """``refine:<topic_hash>`` — naya variant set (Urdu/Roman/tarjuma) chalao."""
+    topic = _EXPLORE_TOPICS.get(topic_hash, "")
+    if not topic:
+        api.send(chat_id, "Purana refine button hai. Naya /explore karein.")
+        return {"ok": False, "action": "explore_refine", "error": "expired"}
+    variants = query_variants.variants(topic, cfg, 6)
+    texts = []
+    for v in variants or []:
+        t = str(v.get("text") if isinstance(v, dict) else v or "").strip()
+        if t and t not in texts:
+            texts.append(t)
+    if texts:
+        api.send(chat_id, "🔄 Refine — naye variants:\n"
+                          + "\n".join("• " + util.truncate(t, 80)
+                                      for t in texts[:6]))
+    return _run_explore(chat_id, topic, "all", cfg, api, variants=variants)
+
+
 EXPLORE_SCOPES = [
     ("all", "🌐 Sab"), ("tg", "🐦 Telegram"), ("web", "🌐 Open web"),
     ("oss", "📚 Open source"), ("deep", "🕶️ Deep web"),
@@ -836,6 +901,8 @@ SCOPE_LABELS = {k: v for k, v in EXPLORE_SCOPES}
 EXPLORE_DISCOVERY_MAX_ADD = 15
 _EXPLORE_GROUP_CAP = {"tg": EXPLORE_DISCOVERY_MAX_ADD, "web": 5, "oss": 5,
                       "deep": 4}
+# Lyzem post/article/message cards ki cap (channel cap ke andar reserve).
+_EXPLORE_POST_CAP = 5
 
 
 def _explore_topic_hash(topic: str) -> str:
@@ -896,24 +963,68 @@ def _explore_item_key(item: dict) -> str:
     return "url:" + str(item.get("url") or "")
 
 
-# Card badge: active / stale / bot-private. ``check_channel`` ka note dekh kar
-# infer hota hai (liveness logic waisi hi rehti hai). Stale = last_post_at
-# 30+ din purana (note "aakhri post N din purani"), bot/private = note se.
+# Card badge: active / stale / bot-private / spam / blocked / post.
+# ``check_channel`` ka note dekh kar infer hota hai (liveness logic waisi hi
+# rehti hai). Stale = last_post_at 30+ din purana (note "aakhri post N din
+# purani"), bot/private = note se.
 _EXPLORE_BADGES = {
     "active": "✅ active",
     "stale": "⏳ stale (30+ din)",
     "botprivate": "🤖 bot/private",
+    "spam": "🚫 spam",
+    "blocked": "🚫 blocked",
+    "post": "📝 post",
 }
 _PRIVATE_BOT_MARKERS = ("0 posts on preview", "contact @", "probe error",
                         "private", "not found", "deactivated",
                         "unavailable", "404")
 
+_LANG_LABELS = {
+    "ur": "اردو (ur)", "ar": "العربية (ar)", "en": "English (en)",
+    "ru": "Русский (ru)", "hi": "हिन्दी (hi)",
+    "roman-urdu": "Roman Urdu", "mixed": "Mixed",
+}
+
+
+def _lang_label(text: str) -> str:
+    """Lyzem/preview text se zaban ka chhota label (``query_variants``)."""
+    try:
+        lang = str(query_variants.detect_language(text).get("lang") or "")
+    except Exception:
+        return ""
+    return _LANG_LABELS.get(lang, "")
+
+
+def _explore_action_hash(it: dict) -> str:
+    """Callback ke liye chhota item hash (64-byte limit ke andar)."""
+    return util.fingerprint(str((it or {}).get("key") or ""))[:8]
+
+
+def _explore_item_text(it: dict) -> str:
+    """Translate ke liye card ka matn (tamid/card)."""
+    if not isinstance(it, dict):
+        return ""
+    bits = [str(it.get("title") or ""), "@" + str(it.get("handle") or "")]
+    if it.get("kind") == "post" and it.get("preview"):
+        bits.append(str(it["preview"]))
+    elif it.get("reason"):
+        bits.append("🎯 " + str(it["reason"]))
+    if it.get("url"):
+        bits.append(str(it["url"]))
+    return " ".join(b for b in bits if b).strip()
+
 
 def _explore_row_kind(it: dict) -> str:
-    """Item ka badge-bucket: active | botprivate | stale."""
+    """Item ka badge-bucket: active | botprivate | stale | spam | blocked | post."""
+    if (it or {}).get("kind") == "post":
+        return "post"
     status = str(it.get("status") or "").lower()
     if status == "active":
         return "active"
+    if status == "spam":
+        return "spam"
+    if status == "blocked":
+        return "blocked"
     blob = " ".join(str(it.get(k) or "").lower()
                     for k in ("note", "title", "handle"))
     if any(w in blob for w in _PRIVATE_BOT_MARKERS):
@@ -928,34 +1039,91 @@ def _explore_status_badge(it: dict) -> str:
 
 
 def _explore_status_counts(items: list[dict]) -> str:
-    """``1 active · 8 stale · 6 private/bot`` — card heading ka summary."""
+    """``1 active · 8 stale · 6 private/bot [· 1 spam] [· 2 post]``."""
     n = len(items)
     active = sum(1 for it in items if _explore_row_kind(it) == "active")
     privbot = sum(1 for it in items
                   if _explore_row_kind(it) == "botprivate")
-    stale = n - active - privbot
-    return f"{active} active · {stale} stale · {privbot} private/bot"
+    spam = sum(1 for it in items if _explore_row_kind(it) == "spam")
+    blocked = sum(1 for it in items if _explore_row_kind(it) == "blocked")
+    post = sum(1 for it in items if _explore_row_kind(it) == "post")
+    stale = max(0, n - active - privbot - spam - blocked - post)
+    parts = [f"{active} active", f"{stale} stale", f"{privbot} private/bot"]
+    if spam:
+        parts.append(f"{spam} spam")
+    if blocked:
+        parts.append(f"{blocked} blocked")
+    if post:
+        parts.append(f"{post} post")
+    return " · ".join(parts)
 
 
 def _explore_channel_item(handle: str, rows: dict, status: str = "active",
                           auto_saved: bool = True, note: str = "",
                           last_post_at: str = "", title: str = "",
-                          subs: str = "", score: int | None = None) -> dict:
+                          subs: str = "", score: int | None = None,
+                          reason: str = "", source: str = "",
+                          relevance: int = 0) -> dict:
     row = rows.get(handle) or {}
+    title = str(title or row.get("title") or handle)
+    note = str(note or row.get("note") or "")
     return {"kind": "channel", "key": "ch:" + str(handle),
             "handle": str(handle),
-            "title": str(title or row.get("title") or handle),
+            "title": title,
             "score": int(score if score is not None
                          else (row.get("score") or 0)),
             "subs": str(subs or row.get("subscribers") or ""),
             "status": str(status or row.get("status") or "active"),
-            "note": str(note or row.get("note") or ""),
+            "note": note,
             "last_post_at": str(last_post_at or row.get("last_post_at") or ""),
+            "date": str(last_post_at or row.get("last_post_at") or "")[:10],
             # run_discovery active + score>=min ko origin='auto' se tg_channels
             # me save karta hai — card par saaf dikhao (sirf active par).
             "auto_saved": bool(auto_saved),
             "url": "https://t.me/" + str(handle),
+            "source_url": "https://t.me/s/" + str(handle),
+            "lang": _lang_label(title),
+            "reason": str(reason or ""),
+            "source": str(source or ""),
+            "relevance": int(relevance or 0),
             "label": "@" + str(handle)}
+
+
+def _explore_post_items(res: dict, topic: str = "") -> list[dict]:
+    """Lyzem post/article/message records -> card items (preview + source).
+
+    ``scheduler.explore`` ``res["lyzem_records"]`` bhar deta hai. Post ke
+    liye chhota preview (140 char) + post link + ``t.me/s`` source link.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    for rec in (res or {}).get("lyzem_records") or []:
+        if not isinstance(rec, dict):
+            continue
+        kind = str(rec.get("kind") or "").lower()
+        if kind not in ("post", "article", "message"):
+            continue
+        handle = channels_mod.clean_handle(str(rec.get("handle") or ""))
+        url = str(rec.get("url") or "").strip()
+        if not handle or not url:
+            continue
+        msg_id = str(rec.get("msg_id") or "")
+        key = "post:" + handle + (":" + msg_id if msg_id else ":" + url)
+        if key in seen:
+            continue
+        seen.add(key)
+        title = str(rec.get("title") or handle)
+        descr = str(rec.get("descr") or "")
+        out.append({
+            "kind": "post", "key": key, "handle": handle,
+            "title": title, "preview": descr[:140],
+            "url": url, "source_url": "https://t.me/s/" + handle,
+            "lang": _lang_label(descr or title),
+            "date": "", "source": "lyzem",
+            "reason": "", "relevance": 0,
+            "label": "@" + handle,
+        })
+    return out
 
 
 def _explore_site_item(it: dict, url: str, topic: str, idx: int) -> dict:
@@ -1002,11 +1170,22 @@ def _explore_groups(res: dict, topic: str, scope: str) -> dict:
                     last_post_at=str(pr.get("last_post_at") or ""),
                     title=str(pr.get("title") or ""),
                     subs=str(pr.get("subscribers") or ""),
-                    score=int(pr.get("score") or 0)))
+                    score=int(pr.get("score") or 0),
+                    reason=str(pr.get("reason") or ""),
+                    source=str(pr.get("source") or ""),
+                    relevance=int(pr.get("relevance") or 0)))
         else:
             # Purana shape (``added`` ke saath) — tamam active maan ke.
             for handle in (disc.get("added") or [])[:_EXPLORE_GROUP_CAP["tg"]]:
                 groups["tg"].append(_explore_channel_item(str(handle), rows))
+        # Lyzem post/article/message cards (preview + post link). Channel cap
+        # ke andar reserve: posts ke saath channels 10, warna 15.
+        posts = _explore_post_items(res, topic)[:_EXPLORE_POST_CAP]
+        if posts:
+            keep = max(0, _EXPLORE_GROUP_CAP["tg"] - len(posts))
+            groups["tg"] = groups["tg"][:keep] + posts
+        else:
+            groups["tg"] = groups["tg"][:_EXPLORE_GROUP_CAP["tg"]]
     idx = 0
     if scope in ("all", "web", "oss"):
         for it in scored:
@@ -1048,10 +1227,52 @@ def _explore_filter_items(groups: dict, chat_id: int) -> dict:
     return out
 
 
+def _format_tg_card(idx: int, it: dict) -> list[str]:
+    """Telegram channel/post card — title, @handle, badge, score, subs, date,
+    zaban, relevance reason, source link (P46)."""
+    handle = _html_escape(str(it.get("handle") or ""))
+    title = _html_escape(util.truncate(
+        str(it.get("title") or it.get("handle") or ""), 70))
+    if it.get("kind") == "post":
+        bits = ["📝 post"]
+        if it.get("lang"):
+            bits.append(it["lang"])
+        if it.get("source"):
+            bits.append("📡 " + _html_escape(str(it["source"])))
+        if it.get("date"):
+            bits.append("📅 " + _html_escape(str(it["date"])))
+        lines = [f"{idx}. <b>{title}</b> — @{handle}",
+                 "   " + " · ".join(bits)]
+        preview = util.truncate(str(it.get("preview") or ""), 140)
+        if preview:
+            lines.append("   " + _html_escape(preview))
+        url = _html_escape(str(it.get("url") or ("https://t.me/" + handle)))
+        lines.append("   🔗 " + url)
+        return lines
+    bits = [_explore_status_badge(it), f"score {it.get('score', 0)}"]
+    if it.get("subs"):
+        bits.append(_html_escape(str(it["subs"])) + " subs")
+    if it.get("date"):
+        bits.append("📅 " + _html_escape(str(it["date"])))
+    if it.get("lang"):
+        bits.append(_html_escape(str(it["lang"])))
+    if it.get("source"):
+        bits.append("📡 " + _html_escape(str(it["source"])))
+    if it.get("auto_saved"):
+        bits.append("auto-save ✅")
+    lines = [f"{idx}. <b>{title}</b> — @{handle}",
+             "   " + " · ".join(bits)]
+    if it.get("reason"):
+        lines.append("   🎯 " + _html_escape(util.truncate(str(it["reason"]), 80)))
+    lines.append("   🔗 https://t.me/" + handle
+                 + " · 🗂 https://t.me/s/" + handle)
+    return lines
+
+
 def format_explore_cards_v2(topic: str, scope: str, groups: dict) -> str:
-    """Ek hi message: har scope ka heading + clickable link + score."""
+    """Ek hi message: har scope ka heading + clickable link + score (HTML)."""
     label = SCOPE_LABELS.get(scope, scope)
-    lines = [f"🧭 Explore: {util.truncate(topic, 80)} · {label}", ""]
+    lines = [f"🧭 Explore: {_html_escape(util.truncate(topic, 80))} · {label}", ""]
     for g, head in (("tg", "📡 Telegram"), ("web", "🌐 Open web"),
                     ("oss", "📚 Papers & code"), ("deep", "🕶️ Deep web links")):
         items = groups.get(g) or []
@@ -1064,21 +1285,16 @@ def format_explore_cards_v2(topic: str, scope: str, groups: dict) -> str:
         else:
             lines.append(f"{head} ({len(items)}){suffix}")
         for i, it in enumerate(items, 1):
-            title = util.truncate(str(it.get("title") or it.get("url") or ""), 70)
             if g == "tg":
-                bits = [b for b in (f"score {it.get('score', 0)}",
-                                    (str(it.get("subs") or "") + " subs")
-                                    if it.get("subs") else "",
-                                    _explore_status_badge(it)) if b]
-                if it.get("auto_saved"):
-                    bits.append("auto-save ✅")  # run_discovery ne memory me rakha
-                lines.append(f"{i}. {title} — @{it.get('handle')}")
-                lines.append(f"   {' · '.join(bits)}")
+                lines.extend(_format_tg_card(i, it))
             else:
-                src = f" · {it['source']}" if it.get("source") else ""
+                title = _html_escape(util.truncate(
+                    str(it.get("title") or it.get("url") or ""), 70))
+                src = (" · " + _html_escape(str(it["source"]))
+                       if it.get("source") else "")
                 score = f" · score {it['score']}" if it.get("score") else ""
-                lines.append(f"{i}. {title}{src}{score}")
-            lines.append(f"   {it.get('url')}")
+                lines.append(f"{i}. <b>{title}</b>{src}{score}")
+                lines.append("   " + _html_escape(str(it.get("url") or "")))
         lines.append("")
     if len(lines) <= 2:
         lines.append("Koi naya item nahi mila.")
@@ -1086,9 +1302,30 @@ def format_explore_cards_v2(topic: str, scope: str, groups: dict) -> str:
     return util.truncate("\n".join(lines), 3500)
 
 
-def _explore_buttons(groups: dict) -> list[list[dict]]:
-    """Har item par ✅/❌ (purana callback format barqarar)."""
+def _explore_action_row(it: dict, topic_hash: str) -> list[dict]:
+    """Har Telegram card par 4 inline actions (P46).
+
+    🔗 Channel / 🗂 Posts URL buttons; 🌐 Translate / 🔄 Refine callback.
+    """
+    if (it or {}).get("kind") not in ("channel", "post"):
+        return []
+    handle = str(it.get("handle") or "")
+    if not handle:
+        return []
+    act = _explore_action_hash(it)
+    return [
+        {"text": "🔗 Channel", "url": "https://t.me/" + handle},
+        {"text": "🗂 Posts", "url": "https://t.me/s/" + handle},
+        {"text": "🌐 Translate",
+         "callback_data": f"tr:{topic_hash}:{act}"},
+        {"text": "🔄 Refine", "callback_data": f"refine:{topic_hash}"},
+    ]
+
+
+def _explore_buttons(groups: dict, topic: str = "") -> list[list[dict]]:
+    """Har item par ✅/❌ gate (pehle) + 4 action buttons (P46)."""
     buttons: list[list[dict]] = []
+    th = _explore_topic_hash(topic)
     for g in ("tg", "web", "oss", "deep"):
         for it in groups.get(g) or []:
             buttons.append([
@@ -1096,6 +1333,7 @@ def _explore_buttons(groups: dict) -> list[list[dict]]:
                  "callback_data": "exp:keep:" + it["key"]},
                 {"text": "❌", "callback_data": "exp:skip:" + it["key"]},
             ])
+            buttons.append(_explore_action_row(it, th))
     return buttons
 
 
@@ -1118,13 +1356,33 @@ def _explore_empty_reason(res: dict, scope: str) -> str:
     if scope in ("all", "tg") and int(disc.get("candidates") or 0) == 0:
         ws = disc.get("web_search") or {}
         if ws.get("anomaly"):
-            return ("📡 Telegram: is dafa koi naya channel nahi mila — search "
-                    "engine ne results nahi diye (anti-bot). `/status` par "
-                    "engine health dekhein.")
+            return ("Koi naya item nahi mila — search engine ne results nahi "
+                    "diye (anti-bot). `/status` par engine health dekhein.")
         if ws.get("error"):
-            return (f"📡 Telegram: koi naya channel nahi mila — "
-                    f"{util.truncate(str(ws['error']), 120)}.")
-    return "Koi naya item nahi mila (ya sab pehle dikhaye chuke hain)."
+            return ("Koi naya item nahi mila — "
+                    + util.truncate(str(ws["error"]), 120) + ".")
+    return "Koi naya item nahi mila — sab pehle dikhaye chuke hain."
+
+
+def _send_explore_cards(api, chat_id: int, html: str, buttons) -> None:
+    """Explore cards — ``parse_mode='HTML'`` + tag-balanced chunks (P46)."""
+    try:
+        chunks = highlight_mod.split_html(html, 4096)
+    except Exception:
+        chunks = [html]
+    for i, chunk in enumerate(chunks):
+        if i and SEND_DELAY > 0:
+            time.sleep(SEND_DELAY)
+        btns = buttons if i == 0 else None
+        try:
+            api.send(chat_id, chunk, buttons=btns, parse_mode="HTML")
+        except TypeError:  # purana/fake API jis me parse_mode nahi
+            api.send(chat_id, chunk, buttons=btns)
+        except Exception:
+            try:
+                api.send(chat_id, chunk, buttons=btns)
+            except Exception:
+                pass
 
 
 def _render_explore(chat_id: int, topic: str, scope: str, res: dict,
@@ -1167,10 +1425,10 @@ def _render_explore(chat_id: int, topic: str, scope: str, res: dict,
     _EXPLORE_TOPICS[_explore_topic_hash(topic)] = topic
     more_btn = [{"text": "🔄 Aur explore karo",
                  "callback_data": "exp:more:" + _explore_topic_hash(topic)}]
-    buttons = (_explore_buttons(groups) + [more_btn]
+    buttons = (_explore_buttons(groups, topic) + [more_btn]
                + explore_scope_buttons(topic) + [_explore_bulk_buttons()])
-    api.send(chat_id, format_explore_cards_v2(topic, scope, groups),
-             buttons=buttons)
+    _send_explore_cards(api, chat_id,
+                        format_explore_cards_v2(topic, scope, groups), buttons)
     return {"ok": True, "action": "explore", "topic": topic, "scope": scope,
             "items": len(items), "empty": False}
 
@@ -1195,10 +1453,13 @@ def _send_dork(chat_id: int, query: str, cfg: dict, api) -> dict:
     return {"ok": True, "action": "dork", "query": q, "results": len(results)}
 
 
-def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
+def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api,
+                 variants: list | None = None) -> dict:
     """``/explore <topic>`` — topic required; scope default all.
 
     ``--dork`` flag par dork presets + backend links bhi bheje jate hain.
+    Pehle ``⏳ Explore chal raha hai`` message bhejo, phir wahi message
+    completion/error par edit karo (P46).
     """
     topic, dork = split_dork_flag(topic)
     topic = str(topic or "").strip()
@@ -1212,6 +1473,20 @@ def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
                  "📚 Open source · 🕶️ Deep web.",
                  buttons=explore_topic_buttons(cfg))
         return {"ok": True, "action": "explore_topics"}
+    if variants is None:
+        variants = query_variants.variants(topic, cfg, 6)
+    loading = f"⏳ Explore chal raha hai — {util.truncate(topic, 80)}"
+    if variants:
+        loading += " (refine)"
+    header_res = None
+    try:
+        header_res = api.send(chat_id, loading)
+    except Exception:
+        header_res = None
+    if _status_supported(api) and isinstance(header_res, dict):
+        mid = int((header_res.get("result") or {}).get("message_id") or 0)
+        if mid:
+            _STATUS_MESSAGES[int(chat_id)] = mid
     try:
         # Manual explore: asli discovery (network probes) chalao, topic ke saath.
         # max_add=15: ek run me 10-15 channels probe/dikhao.
@@ -1219,13 +1494,16 @@ def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
         res = scheduler.run_job("explore",
                                 {"query": topic, "scope": scope,
                                  "max_add": EXPLORE_DISCOVERY_MAX_ADD,
-                                 "variants": query_variants.variants(topic, cfg, 6)},
+                                 "variants": variants},
                                 cfg, offline=False)
     except Exception as exc:
-        api.send(chat_id, f"❌ Explore fail: {type(exc).__name__}: "
-                          f"{util.truncate(str(exc), 200)}")
+        msg = (f"⚠️ Explore me masla hua — {type(exc).__name__}: "
+               f"{util.truncate(str(exc), 120)}; detail local console par hai.")
+        if not _edit_status(chat_id, api, msg):
+            api.send(chat_id, msg)
         return {"ok": False, "action": "explore", "error": "explore failed"}
     out = _render_explore(chat_id, topic, scope, res, cfg, api)
+    _edit_status(chat_id, api, f"✅ Explore ho gaya — {util.truncate(topic, 80)}")
     out["items"] = int(out.get("items") or 0)
     out["archive_items"] = int(res.get("items") or 0)
     if dork:
@@ -2525,6 +2803,12 @@ def handle_callback(chat_id: int, data: str, cfg: dict | None = None, api=None,
             return _render_explore(chat_id, topic, scope, None, cfg, api,
                                    groups=groups)
         return _run_explore(chat_id, topic, scope, cfg, api)
+    tr_topic, tr_act = parse_explore_translate_callback(data)
+    if tr_topic:
+        return _handle_explore_translate(chat_id, tr_topic, tr_act, cfg, api)
+    refine_hash = parse_explore_refine_callback(data)
+    if refine_hash:
+        return _handle_explore_refine(chat_id, refine_hash, cfg, api)
     exp_action, exp_key = parse_explore_callback(data)
     if exp_action:
         return _handle_explore_callback(chat_id, exp_action, exp_key, cfg, api)
