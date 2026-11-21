@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sqlite3
+import stat
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -186,8 +187,66 @@ ITEM_FIELDS = (
 )
 
 
+def _set_owner_only(path: Path, mode: int) -> str:
+    """Path ka mode tab badlo jab wo current process ke ho. Warna warning.
+
+    Symlink par nahi (lstat) — nahi to kisi aur file ka mode badal jata.
+    """
+    try:
+        st = os.lstat(path)
+    except OSError as exc:
+        return f"{path}: stat fail ({exc})"
+    if not (stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)):
+        return f"{path}: regular file/dir nahi — chmod skip"
+    if st.st_uid != os.getuid():
+        return f"{path}: is process ke malik nahi (uid {st.st_uid}) — chmod skip"
+    try:
+        os.chmod(path, mode)
+    except OSError as exc:
+        return f"{path}: chmod fail ({exc})"
+    return ""
+
+
+def secure_permissions() -> dict:
+    """Data dir (0700) aur DB (0600) restrictive karo — sirf apne files par.
+
+    Multi-user host par DB me poora archive hota hai; dusre users ko parhna
+    na chahiye. Windows par skip (POSIX permission model nahi). Result me
+    dir/db modes aur warnings (naam nahi, sirf mode/uid) darj hain.
+    """
+    result = {"dir": None, "db": None, "skipped": "", "warnings": []}
+    if os.name == "nt":
+        result["skipped"] = "windows"
+        return result
+    d = config.data_dir()
+    if d.is_dir():
+        warn = _set_owner_only(d, 0o700)
+        if warn:
+            result["warnings"].append(warn)
+        else:
+            result["dir"] = 0o700
+        # Sensitive subdirs bhi owner-only (reports/backups/runs).
+        for sub in ("reports", "backups", "runs"):
+            p = d / sub
+            if p.is_dir():
+                warn = _set_owner_only(p, 0o700)
+                if warn:
+                    result["warnings"].append(warn)
+    else:
+        result["warnings"].append(f"{d}: mojood nahi")
+    db = config.db_path()
+    if db.is_file():
+        warn = _set_owner_only(db, 0o600)
+        if warn:
+            result["warnings"].append(warn)
+        else:
+            result["db"] = 0o600
+    return result
+
+
 def connect() -> sqlite3.Connection:
     config.ensure_dirs()
+    secure_permissions()
     con = sqlite3.connect(str(config.db_path()), timeout=15)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")

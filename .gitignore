@@ -10,7 +10,12 @@ jin_agent/data/jin_agent.db
 jin_agent/data/metrics.json
 jin_agent/data/runs/
 *.log
-.env
+.env*
+jin_agent/data/*.db-shm
+jin_agent/data/*.db-wal
+*.sqlite-wal
+*.sqlite-shm
+*.db-journal
 
 # Category probe ka generated transcript
 tests/category_probe.json
