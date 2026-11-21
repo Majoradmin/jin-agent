@@ -65,7 +65,7 @@ startup par ek dafa, best-effort):
 | `/report [md\|html]` | Aakhri report dobara bhejo (default `md`; HTML stdlib-only template) |
 | `/help` | Yeh menu |
 
-Sources register: **130** legal/public sources — **57 auto** (adapter wired,
+Sources register: **131** legal/public sources — **58 auto** (adapter wired,
 automatic fetch) + **73 registry-only** (verified manually; koi stable feed ya
 adapter nahi). P40/P41 key-free engine list (web/regional/academic/patents/OSS/
 archive/news/social/TG dirs) ka har engine yahan hai; jo block (captcha/429/
@@ -74,6 +74,14 @@ nahi). `/dork <query>` Google-dork (site:t.me/s, intitle, filetype:pdf, ...)
 banata hai — backend Bing kaam karta hai, baqi block (auto=False). `/status` is
 breakdown ke saath non-overlapping health buckets bhi dikhta hai: ok / failed /
 stale / disabled (fail/stale ka naam + wajah), aur **Dork** block.
+
+**Telegram discovery (P44):** `/explore <topic>` pehle keyword ki variants
+banata hai (language detect + transliteration + translation + synonyms), phir
+`rightdao` aur `lyzem` (Telegram-wide search engine, bina login/key) dono se
+handles **merge** karta hai — source diversity ke liye. Provider kram, TTL cache
+aur fan-out `jin_agent/discovery.py` me hain; cache `discovery_cache_seconds`
+(default 900s, `0` = band). Ranking abhi bhi `t.me/s/` preview ke 30-din rule +
+signs (subs, post volume, text richness) par based hai.
 
 Multi-turn: chhota follow-up (`aur`, `iske baare me`, `phir`, `more`) pichhle
 sawal ke context se jurre hota hai; `/new` context saaf karta hai.
@@ -171,8 +179,8 @@ parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
 | `logging_setup.py`, `metrics.py`, `ci_gate.py` | JSON-lines logs (redacted), in-memory metrics, offline CI gate |
 | `server.py`, `web/` | Loopback Agent Console |
 | `canonical.py`, `snapshots.py`, `ratelimit.py` | URL canonical dedup, page change detection, per-host rate limits |
-| `tests/` | 700 offline tests (1 skipped) |
-| `PHASES.md` | P13–P43 `PHASE REVIEW` record |
+| `tests/` | 715 offline tests (1 skipped) |
+| `PHASES.md` | P13–P44 `PHASE REVIEW` record |
 
 Assumptions, N/A justifications aur verification numbers `PHASES.md` mein hain.
 

@@ -1,4 +1,4 @@
-# PHASES — JIN Agent P13–P43
+# PHASES — JIN Agent P13–P44
 
 **Status:** ALL PHASES READY · **Date:** 2026-11-19 · **Version:** 2.9.0
 **Version note:** Purane section labels `(2.10.0)` / `(2.11.0)` kabhi release nahi
@@ -838,5 +838,46 @@ hai — bara coverage LLM ya paid API se hi milega. Discovery provider abhi bhi
 RightDAO (rate-limit) + Bing/DDG fallback (bemusarir). Ye Phase 3 ka kaam hai.
 
 **PHASE REVIEW — PHASE 43: READY**
+
+---
+
+## 37. PHASE REVIEW — PHASE 44 — Lyzem Provider + Discovery Layer (2.9.0)
+
+**CONTEXT:** RightDAO akela discovery provider tha — burst ke baad rate-limit,
+aur kuch queries par 0 handles. User ko Telegram-wide discovery chahiye jo
+kisi bhi zaban ke keyword par kaam kare.
+
+**INVESTIGATION (2026-11-21, live):** `https://lyzem.com/search?q=<keyword>`
+bina login / bina API key kaam karta hai. Har query par 10 results, har result
+ke saath `title="channel|group|bot|post|article|message"` aur
+`https://t.me/<handle>(/<msg_id>)`. `android security` → 10 (channel/group/bot)،
+`free api key` → 10، `firmware unlock` → 10، Urdu `موبائل` → 10 (post/channel).
+Posts ke liye title aksar khaali hota hai aur descr me matched keyword `<em>`
+se highlight hota hai.
+
+**CHANGES:**
+- Naya `jin_agent/discovery.py` (stdlib-only): `PROVIDERS = (rightdao, lyzem,
+  bing, ddg-html, ddg-lite)`، `probe()`، `probe(merge=True)` (saare providers se
+   handles ikhatte — source diversity)، `lyzem_records()` (type/handle/title/
+  descr/url/msg_id)، TTL cache (`discovery_cache_seconds`, default 900s، `0` =
+  band)، `clear_cache()`.
+- `channels.py`: `LYZEM_SEARCH_URL`، `parse_lyzem_html()`، `lyzem_has_results()`؛
+  `web_search_probe`/`web_search_candidates` ab `discovery` par muntaqil.
+- `run_discovery` topic branch: `rightdao` + `lyzem` se **merge** (pehle
+  first-wins tha) — live `android security` par web candidates 3 → 16.
+- `policy.py`: `lyzem.com` allowlist + register entry (130 → 131).
+
+**VERIFICATION:** `compileall` OK · **715 tests OK (skipped=1)** (700 + 16
+naye `test_lyzem_discovery.py`). Live: `run_discovery("android security")` →
+`web_search.engine = "rightdao, lyzem"`، tried `[rightdao, lyzem]`،
+candidates 34، probed 15، added `android_broadcast`. Urdu query par candidates
+45 (variants + merge). Koi `example.org` / synthetic nahi.
+
+**LIMITATION (honest):** Lyzem subscriber count nahi deta؛ ranking abhi bhi
+`check_channel` ke 30-din rule + signs par based hai. Telemetr/TGStat/tgAtlas
+paid ya key-wale hain — Phase 3 ki "additional provider" free option (Lyzem)
+puri tarah kaam karta hai.
+
+**PHASE REVIEW — PHASE 44: READY**
 
 ---
