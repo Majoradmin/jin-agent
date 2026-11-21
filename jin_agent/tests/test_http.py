@@ -21,6 +21,8 @@ PORT = 0
 def setUpModule():
     global HTTPD, THREAD, PORT
     os.environ["JIN_AGENT_DATA"] = tempfile.mkdtemp(prefix="jin-http-")
+    # P0-1: console ab admin-token gate karti hai — tests bhi token ke saath chalein.
+    os.environ["JIN_AGENT_ADMIN_TOKEN"] = "jin-test-admin-token"
     HTTPD = server.make_server(0)
     PORT = HTTPD.server_address[1]
     THREAD = threading.Thread(target=HTTPD.serve_forever,
@@ -34,9 +36,13 @@ def tearDownModule():
     THREAD.join(5)
 
 
-def req(path, method="GET", body=None):
+def req(path, method="GET", body=None, token=None):
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"Content-Type": "application/json"} if data else {}
+    if token is None:
+        token = os.environ.get("JIN_AGENT_ADMIN_TOKEN", "")
+    if token:
+        headers["Authorization"] = "Bearer " + token
     r = urllib.request.Request(f"http://127.0.0.1:{PORT}{path}", data=data,
                                method=method, headers=headers)
     try:
@@ -46,8 +52,8 @@ def req(path, method="GET", body=None):
         return exc.code, exc.read(), dict(exc.headers)
 
 
-def get_json(path, method="GET", body=None):
-    code, raw, headers = req(path, method, body)
+def get_json(path, method="GET", body=None, token=None):
+    code, raw, headers = req(path, method, body, token=token)
     try:
         parsed = json.loads(raw.decode("utf-8"))
     except ValueError:
@@ -178,6 +184,46 @@ class TestConsole(unittest.TestCase):
         self.assertIn("run", snap["latency"])
         self.assertNotIn("sk-", json.dumps(body))
         self.assertNotIn("telegram_bot_token", json.dumps(body))
+
+    # --- P0-1: console admin authorization (JIN_AGENT_ADMIN_TOKEN) ---
+
+    def test_22_admin_gate_blocks_anonymous(self):
+        # Token ke baghair (loopback par bhi) allow-all NAHI — 401
+        self.assertEqual(req("/api/status", token="")[0], 401)
+        self.assertEqual(req("/api/status", token="ghalat-token")[0], 401)
+        self.assertEqual(req("/api/settings", "POST", {}, token="")[0], 401)
+        self.assertEqual(req("/api/run", "POST", {"query": "x"}, token="")[0], 401)
+
+    def test_23_admin_gate_challenge_header(self):
+        code, _, headers = req("/api/status", token="")
+        self.assertEqual(code, 401)
+        self.assertEqual(headers.get("WWW-Authenticate"), "Bearer")
+
+    def test_24_admin_gate_accepts_bearer(self):
+        code, body, _ = get_json("/api/status")
+        self.assertEqual(code, 200)
+        self.assertEqual(body["version"], "2.9.0")
+
+    def test_25_admin_gate_accepts_x_admin_token(self):
+        r = urllib.request.Request(
+            f"http://127.0.0.1:{PORT}/api/status",
+            headers={"X-Admin-Token": os.environ["JIN_AGENT_ADMIN_TOKEN"]})
+        with urllib.request.urlopen(r, timeout=30) as resp:
+            self.assertEqual(resp.status, 200)
+
+    def test_26_health_stays_public(self):
+        # /api/health public hai (render.yaml healthCheckPath) — token ke baghair bhi 200
+        code, raw, _ = req("/api/health", token="")
+        body = json.loads(raw.decode("utf-8"))
+        self.assertEqual(code, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["version"], "2.9.0")
+
+    def test_27_admin_token_never_logged(self):
+        src = (BASE / "jin_agent" / "server.py").read_text(encoding="utf-8")
+        # token sirf env se padha jata hai; log/error path me print nahi hota
+        self.assertIn("JIN_AGENT_ADMIN_TOKEN", src)
+        self.assertIn("hmac.compare_digest", src)
 
 
 if __name__ == "__main__":

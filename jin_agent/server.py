@@ -9,6 +9,7 @@ P26: ``GET /api/health`` (DB + data dir + uptime + ``llm_enabled`` flag) aur
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
@@ -28,6 +29,27 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
        "base-uri 'self'; frame-ancestors 'none'")
 
 _SCHEDULER: scheduler.Scheduler | None = None
+
+# Public (unauthenticated) console paths. Sirf health check — render.yaml کا
+# healthCheckPath. Baqi tamam GET/POST authorized hone chahiye.
+PUBLIC_PATHS = frozenset({"/api/health"})
+
+
+def admin_token() -> str:
+    """Console admin bearer token (env ``JIN_AGENT_ADMIN_TOKEN``).
+
+    Khaali hone par console **loopback-only** rehta hai (default bind
+    ``127.0.0.1``), yaani local administrator ke liye koi token zaroori nahi.
+    ``JIN_AGENT_HOST=0.0.0.0`` jaisi public bind par token lazmi set karein.
+    Token kabhi log/error/HTML me nahi aata.
+    """
+    return str(os.environ.get("JIN_AGENT_ADMIN_TOKEN") or "").strip()
+
+
+def _is_loopback(peer: str) -> bool:
+    """Peer address loopback hai? (IPv4 + IPv6 + localhost)."""
+    p = str(peer or "").strip().strip("[]")
+    return p in ("127.0.0.1", "::1", "localhost") or p.startswith("127.")
 
 
 def data_writable() -> tuple[bool, str]:
@@ -96,6 +118,39 @@ class Handler(BaseHTTPRequestHandler):
     def _err(self, message: str, code: int = 400):
         self._json({"ok": False, "error": message}, code)
 
+    def _denied(self):
+        """401 — koi token nahi / ghalat token. Kabhi 200 nahi."""
+        body = json.dumps({"ok": False, "error": "Unauthorized"}).encode("utf-8")
+        self.send_response(401)
+        self._headers({"Content-Length": str(len(body)),
+                       "WWW-Authenticate": "Bearer"})
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _authorized(self, path: str) -> bool:
+        """Console authorization.
+
+        - ``/api/health`` public (health check).
+        - ``JIN_AGENT_ADMIN_TOKEN`` set ho to har baqi path ke liye
+          ``Authorization: Bearer <token>`` ya ``X-Admin-Token: <token>``
+          chahiye; comparison ``hmac.compare_digest`` se (timing-safe).
+        - Token khaali ho to **sirf loopback** peer allow (default bind
+          ``127.0.0.1``). Public bind par 401.
+        """
+        if path in PUBLIC_PATHS:
+            return True
+        token = admin_token()
+        peer = self.client_address[0] if self.client_address else ""
+        if not token:
+            return _is_loopback(peer)
+        auth = self.headers.get("Authorization") or ""
+        supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        if not supplied:
+            supplied = (self.headers.get("X-Admin-Token") or "").strip()
+        if not supplied:
+            return False
+        return hmac.compare_digest(supplied, token)
+
     def _static(self, name: str):
         path = WEB / name
         if not path.is_file():
@@ -131,6 +186,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlsplit(self.path)
         path, q = parsed.path, urllib.parse.parse_qs(parsed.query)
+        if not self._authorized(path):
+            return self._denied()
         try:
             if path in ("/", "/index.html"):
                 return self._static("index.html")
@@ -214,6 +271,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlsplit(self.path).path
+        if not self._authorized(path):
+            return self._denied()
         try:
             data = self._body()
             if path == "/api/run":

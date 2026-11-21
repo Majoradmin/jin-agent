@@ -11,6 +11,7 @@ jin_agent/data/metrics.json
 jin_agent/data/runs/
 *.log
 .env*
+!.env.example
 jin_agent/data/*.db-shm
 jin_agent/data/*.db-wal
 *.sqlite-wal
