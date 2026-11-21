@@ -157,6 +157,13 @@ def cmd_bot(args):
     if not token:
         print("Bot token config me nahi hai. /api/settings ya data/config.json me daayein.")
         return 1
+    # P0-2: require mode me unset/ghalat chat id = allow-all silent mode.
+    # Bot is halat me start na ho (kohi bhi chat use control kar le).
+    if tb.require_chat_id() and not tb.chat_id_is_valid(cfg):
+        print("❌ JIN_AGENT_REQUIRE_CHAT_ID=1 hai magar telegram_chat_id khaali/"
+              "ghalat hai. Allow-all silent mode me bot start nahi hoga — pehle "
+              "numeric chat id set karein (data/config.json ya /api/settings).")
+        return 1
     print("Telegram bot chal raha hai (long polling). Rokne ke liye Ctrl+C.")
     import threading
     stop = threading.Event()

@@ -539,11 +539,13 @@ def send_chunks(api, chat_id: int, text: str, delay: float | None = None,
 
 
 def is_owner(chat_id: int | None, cfg: dict | None = None) -> bool:
-    """Sirf wohi chat allowed (telegram_chat_id).
+    """Sirf wohi chat allowed (``telegram_chat_id``).
 
-    Unset = allow-all (first run) — magar ``JIN_AGENT_REQUIRE_CHAT_ID=1`` on
-    ho to unset par reject (production opt-in). Default raw behaviour tests
-    ke mutabiq barqarar hai.
+    **Unset = allow-all** (first-run state). Ye default deliberately allow-all
+    hai — tests bhi wahi assert karte hain aur isay badalna nahi. Production me
+    ``JIN_AGENT_REQUIRE_CHAT_ID=1`` set karein: tab unset/ghalat chat par False
+    (reject). Matlab allow-all ka "kohi bhi" nahi — bahar wale chat ko ab bhi
+    throttled khabardari milti hai (``_unauthorized_reply``).
     """
     cfg = cfg or config.load()
     raw = str(cfg.get("telegram_chat_id") or "").strip()
@@ -553,6 +555,62 @@ def is_owner(chat_id: int | None, cfg: dict | None = None) -> bool:
         return int(chat_id or -1) == int(raw)
     except ValueError:
         return False
+
+
+def chat_id_is_valid(cfg: dict | None = None) -> bool:
+    """``telegram_chat_id`` numeric hai? (bot startup ka safe-failure guard)."""
+    cfg = cfg or config.load()
+    raw = str(cfg.get("telegram_chat_id") or "").strip()
+    if not raw:
+        return False
+    try:
+        int(raw)
+    except ValueError:
+        return False
+    return True
+
+
+# Unauthorized chat par throttled khabardari: per chat 60s me aik dafa. Spam
+# se bachne ke liye; magar allow-all mode (require_chat_id off) me kuch nahi —
+# wahan har chat authorized hai. Tests ``tb._UNAUTH_LAST`` ko reset karte hain.
+_UNAUTH_LAST: dict[int, float] = {}
+_UNAUTH_LOCK = threading.Lock()
+_UNAUTH_INTERVAL = 60.0
+UNAUTHORIZED_TEXT = "⚠️ Aap is bot ke authorized user nahi hain."
+
+
+def _unauth_due(chat_id: int) -> bool:
+    """Is chat ke liye throttle ka waqt agaya? (thread-safe hisaab)."""
+    now = time.monotonic()
+    with _UNAUTH_LOCK:
+        last = _UNAUTH_LAST.get(chat_id)
+        if last is None or now - last >= _UNAUTH_INTERVAL:
+            _UNAUTH_LAST[chat_id] = now
+            return True
+    return False
+
+
+def _unauthorized_reply(chat_id: int, api, callback_id: str = "") -> bool:
+    """Unauthorized chat ko throttled khabardari (normal 200-OK jaisa reply).
+
+    ``JIN_AGENT_REQUIRE_CHAT_ID`` off ho to allow-all hai — koi reply nahi
+    (tests bhi wahi assert karte hain). Callback par ``answer_callback`` (toast
+    + spinner band) aur chat me paighaam dono.
+    """
+    if not require_chat_id():
+        return False
+    if not _unauth_due(int(chat_id or 0)):
+        return False
+    if callback_id:
+        try:
+            api.answer_callback(callback_id, UNAUTHORIZED_TEXT)
+        except Exception:
+            pass
+    try:
+        api.send(chat_id, UNAUTHORIZED_TEXT)
+    except Exception:
+        return False
+    return True
 
 
 def forwarded_handle(msg: dict) -> str:
@@ -2970,6 +3028,12 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                                 cfg=cfg, api=api,
                                 callback_id=str(cb.get("id") or ""),
                             )
+                        else:
+                            # Unauthorized button: throttled khabardari
+                            # (callback toast + chat paighaam).
+                            _unauthorized_reply(
+                                cb_chat_id, api,
+                                callback_id=str(cb.get("id") or ""))
                     except Exception:
                         time.sleep(2)
                     continue
@@ -2982,6 +3046,8 @@ def run(token: str, cfg: dict | None = None, stop=None, api=None) -> None:
                 if not text or text == "/addchannel ":
                     continue
                 if not is_owner(chat_id, cfg):
+                    # Unauthorized chat: throttled khabardari (60s me aik dafa).
+                    _unauthorized_reply(chat_id, api)
                     continue
                 # Bounded pool: dispatch loop ko block nahi karta aur flood par
                 # threads ki tadad env cap ke andar rehti hai. /stop aur /status
