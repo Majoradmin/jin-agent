@@ -222,5 +222,42 @@ class TestVacuum(unittest.TestCase):
         self.assertIn("freelist_before", out["vacuum"])
 
 
+class TestExportDelete(unittest.TestCase):
+    """P1-7: data export + /delete (chat-scoped asli delete)."""
+
+    def test_export_contains_chat_rows(self):
+        searchmemory.begin(42, "export me")
+        store.save_chat_query(42, "export me")
+        store.record_run("export me")
+        data = store.export_data(42)
+        self.assertEqual(data["chat_id"], "42")
+        self.assertTrue(any(r["query"] == "export me"
+                            for r in data["search_memory"]))
+        self.assertTrue(any(r["chat_id"] == "42"
+                            for r in data["chat_context"]))
+        self.assertTrue(any(r["query"] == "export me" for r in data["runs"]))
+        self.assertIn("note", data)
+
+    def test_delete_chat_only(self):
+        searchmemory.begin(42, "del me")
+        store.save_chat_query(42, "del me")
+        searchmemory.begin(43, "keep me")
+        store.save_chat_query(43, "keep me")
+        res = store.delete_chat_data(42)
+        self.assertTrue(res["deleted"])
+        self.assertGreaterEqual(res["search_memory"], 1)
+        self.assertGreaterEqual(res["chat_context"], 1)
+        self.assertEqual(store.last_chat_query(42), "")
+        self.assertEqual(store.last_chat_query(43), "keep me")
+        self.assertEqual(searchmemory.recent(43, 5)[0]["query"], "keep me")
+
+    def test_delete_unknown_chat_noop(self):
+        store.save_chat_query(7, "q")
+        res = store.delete_chat_data(999)
+        self.assertEqual(res["chat_context"], 0)
+        self.assertEqual(res["search_memory"], 0)
+        self.assertEqual(store.last_chat_query(7), "q")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -146,7 +146,8 @@ HELP_TEXT = (
     "/memoryaudit — memory audit\n"
     "/selftest — parser/selftest chalao\n"
     "/new — naya research session\n"
-    "/stop — chalte research ko roko\n\n"
+    "/stop — chalte research ko roko\n"
+    "/delete — chat ka data asli delete (research memory + context)\n\n"
     "Seedha matn bhi likh sakte hain — wo /research ban jata hai.\n\n"
     "Har report ke baad bot poochta hai: mil gaya ya nahi. 'Nahi mila' par naye "
     "sources/channels try hote hain (purane skip). Policy SAHULAT-SAFE-SERVICE-v1; "
@@ -2220,6 +2221,22 @@ def _do_report(chat_id: int, arg: str, api) -> dict:
     return {"ok": True, "action": "report", "fmt": "md", "path": md_path}
 
 
+def _do_delete(chat_id: int, api) -> dict:
+    """``/delete`` — chat ka data asli delete (soft-delete nahi)."""
+    try:
+        res = store.delete_chat_data(chat_id)
+    except Exception as exc:
+        api.send(chat_id, f"❌ Delete nahi ho saka: {type(exc).__name__}: "
+                          f"{util.truncate(str(exc), 150)}")
+        return {"ok": False, "action": "delete", "error": "delete failed"}
+    api.send(chat_id, f"🗑️ Chat ka data asli delete ho gaya — "
+                      f"search_memory: {res['search_memory']}, "
+                      f"chat_context: {res['chat_context']}.\n"
+                      f"(feedback/runs chat se linked nahi hote, wo console-global "
+                      f"rahay. Telegram message body hamesha store nahi hota.)")
+    return {"ok": True, "action": "delete", **res}
+
+
 def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             research=None, probe=None, tg_search=None) -> dict:
     """Handle one private chat command. Returns {'ok':.., 'action':..}."""
@@ -2441,6 +2458,8 @@ def dispatch(chat_id: int, text: str, cfg: dict | None = None, api=None,
             send_chunks(api, chat_id, format_deep(query))
             res["deep"] = True
         return res
+    if cmd in ("delete", "forget"):
+        return _do_delete(chat_id, api)
     api.send(chat_id, "Maaf kijiye, yeh command samajh nahi aaya. /help use kijiye.")
     return {"ok": False, "action": "unknown", "error": "unknown command"}
 

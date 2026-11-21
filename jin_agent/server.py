@@ -9,7 +9,9 @@ P26: ``GET /api/health`` (DB + data dir + uptime + ``llm_enabled`` flag) aur
 
 from __future__ import annotations
 
+import csv
 import hmac
+import io
 import json
 import os
 import re
@@ -229,6 +231,15 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/overview":
                 store.init_db()
                 return self._json({"ok": True, "overview": store.overview()})
+            if path == "/api/export":
+                store.init_db()
+                cid = q.get("chat_id", [""])[0] or str(
+                    config.load().get("telegram_chat_id") or "")
+                fmt = str(q.get("format", ["json"])[0] or "json").strip().lower()
+                data = store.export_data(cid)
+                if fmt == "csv":
+                    return self._export_csv(data)
+                return self._json({"ok": True, "chat_id": cid, "data": data})
             if path == "/api/events":
                 store.init_db()
                 return self._json({"ok": True, "items": store.list_events()})
@@ -268,6 +279,36 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", CSP)
         self.end_headers()
         self.wfile.write(text.encode("utf-8"))
+
+    def _export_csv(self, data: dict):
+        """Export ka CSV serialization (``/api/export?format=csv``).
+
+        Har section (search_memory / chat_context / runs / feedback) ke rows
+        ``section`` column ke saath flat hote hain. fields union se aiki
+        tables ke schema ghair-mutahida bhi export ho sakti hain.
+        """
+        fields = ["section", "id", "chat_id", "query", "query_key", "status",
+                  "useful", "note", "created_at", "updated_at", "started_at",
+                  "finished_at", "mode", "last_queries", "guid"]
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        for section in ("search_memory", "chat_context", "runs", "feedback"):
+            for row in (data.get(section) or []):
+                rec = dict(row)
+                rec["section"] = section
+                writer.writerow(rec)
+        body = buf.getvalue().encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", CSP)
+        self.send_header("Content-Disposition",
+                         'attachment; filename="jin-agent-export.csv"')
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self):
         path = urllib.parse.urlsplit(self.path).path

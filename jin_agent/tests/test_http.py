@@ -11,7 +11,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[2]
 
-from jin_agent import server, store  # noqa: E402
+from jin_agent import searchmemory, server, store  # noqa: E402
 
 HTTPD = None
 THREAD = None
@@ -224,6 +224,35 @@ class TestConsole(unittest.TestCase):
         # token sirf env se padha jata hai; log/error path me print nahi hota
         self.assertIn("JIN_AGENT_ADMIN_TOKEN", src)
         self.assertIn("hmac.compare_digest", src)
+
+    def test_28_export_json(self):
+        searchmemory.ensure_table()
+        store.save_chat_query(42, "export query")
+        searchmemory.begin(42, "export query")
+        code, body, _ = get_json("/api/export?chat_id=42")
+        self.assertEqual(code, 200)
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["chat_id"], "42")
+        data = body["data"]
+        self.assertTrue(any(r.get("query") == "export query"
+                            for r in data["search_memory"]))
+        self.assertTrue(any(r.get("chat_id") == "42"
+                            for r in data["chat_context"]))
+        self.assertIn("note", data)
+
+    def test_29_export_csv(self):
+        searchmemory.ensure_table()
+        store.save_chat_query(42, "csv query")
+        searchmemory.begin(42, "csv query")
+        code, raw, headers = req("/api/export?chat_id=42&format=csv")
+        self.assertEqual(code, 200)
+        self.assertIn("text/csv", headers.get("Content-Type", ""))
+        self.assertIn(b"search_memory", raw)
+        self.assertIn("csv query".encode("utf-8"), raw)
+
+    def test_30_export_requires_auth(self):
+        code, _, _ = req("/api/export?chat_id=42", token="")
+        self.assertEqual(code, 401)
 
 
 if __name__ == "__main__":

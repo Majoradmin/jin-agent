@@ -363,5 +363,44 @@ class TestRelatedSearchAndTranslation(unittest.TestCase):
         self.assertIn("Related: rel1", joined)
 
 
+class TestDeleteCommand(unittest.TestCase):
+    """P1-7: /delete — chat ka data asli delete (doosri chat ko chhuo mat)."""
+
+    def setUp(self):
+        searchmemory.ensure_table()
+
+    def test_dispatch_delete_removes_chat_rows(self):
+        api = FakeAPI()
+        store.save_chat_query(42, "old query")
+        searchmemory.begin(42, "old query")
+        store.save_chat_query(43, "other")
+        searchmemory.begin(43, "other")
+        res = tb.dispatch(42, "/delete", {"telegram_chat_id": "42"}, api=api)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["action"], "delete")
+        self.assertEqual(store.last_chat_query(42), "")
+        self.assertEqual(searchmemory.recent(42, 5), [])
+        # doosri chat ka data bacha rehna chahiye
+        self.assertEqual(store.last_chat_query(43), "other")
+        self.assertTrue(searchmemory.recent(43, 5))
+        self.assertIn("delete ho gaya", api.sent[0][1])
+
+    def test_dispatch_forget_alias(self):
+        api = FakeAPI()
+        store.save_chat_query(42, "q")
+        res = tb.dispatch(42, "/forget", {"telegram_chat_id": "42"}, api=api)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["action"], "delete")
+
+    def test_delete_unknown_chat_deletes_nothing(self):
+        api = FakeAPI()
+        store.save_chat_query(7, "q")
+        res = tb.dispatch(999, "/delete", {"telegram_chat_id": "999"}, api=api)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["chat_context"], 0)
+        self.assertEqual(res["search_memory"], 0)
+        self.assertEqual(store.last_chat_query(7), "q")
+
+
 if __name__ == "__main__":
     unittest.main()

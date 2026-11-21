@@ -962,3 +962,44 @@ hain, alag "variant picker" UI nahi.
 **PHASE REVIEW — PHASE 46: READY**
 
 ---
+
+## 40. PHASE REVIEW — PHASE 47 — Audit P1 fixes (2.9.0)
+
+**CONTEXT:** Audit ke P1 masail: (5) custom LLM endpoint ka SSRF
+DNS-resolve check nahi karta tha; (6) retention default/parity mismatch aur
+chandi tables unbounded; (7) data export + `/delete` hi nahi tha.
+
+**CHANGES:**
+- **P1-5 (SSRF):** `policy.trusted_public_endpoint` ab hostname ko
+  `socket.getaddrinfo` se resolve kar ke har IP ko `ipaddress` par check
+  karta hai (private / loopback / link-local / reserved / multicast /
+  unspecified). DNS fail = reject. `127.0.0.1` / `169.254.169.254` literal
+  to pehle hi theek, magar hostname jo internal IP par resolve hota hai ab
+  reject. `llm.py` isi ko use karta hai.
+- **P1-6 (retention parity + unbounded tables):** `store._retention_days`
+  fallback 180 → **90** (`config.DEFAULT["retention_days"] = 90` se match).
+  `store.retention` me `chat_context`, `feedback`, `tg_sites`,
+  `tg_discovery_state`, `schedule_state` bhi prune; `snapshots.prune()` ko
+  retention se jora (pehle production me koi nahi chalata tha).
+- **P1-7 (data deletion + export):** `GET /api/export` (console, authenticated;
+  JSON, `?format=csv` bhi) — `search_memory` + `chat_context` (chat se
+  related), `runs.query`, `feedback`. `/delete` + `/forget` Telegram command
+  chat-scoped **asli delete** (`search_memory` + `chat_context`);
+  confirmation paighaam bhejta hai.
+
+**VERIFICATION:** **796 tests OK (skipped=1)**. Naye tests: `test_policy.py`
++4 (internal IP resolution, public allow, mixed reject, DNS failure),
+`test_lifetime_store.py` +3 (export/delete + baqi retention tables),
+`test_http.py` +3 (export JSON/CSV + admin gate), `test_telegram_bot.py` +3
+(`/delete`, `/forget`, unknown chat = no-op).
+
+**LIMITATION (honest):** `feedback` aur `runs` me `chat_id` column nahi,
+is liye `/delete` un ki rows nahi hatta — export me unhe saaf shakal me
+dikha jata hai. Telegram message body kabhi store nahi hota (sirf query).
+`/delete` aik-step confirmation ke baghair hai (authorized chat me hi chalta
+hai). Export authorised console + admin token/loopback gate par mehfooz
+hai; token ke baghair 401.
+
+**PHASE REVIEW — PHASE 47: READY**
+
+---

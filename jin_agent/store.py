@@ -579,6 +579,77 @@ def clear_chat_context(chat_id) -> int:
         return int(cur.rowcount)
 
 
+def export_data(chat_id) -> dict:
+    """User ka data export (P1-7) — chat-scoped rows + console operator data.
+
+    ``search_memory`` (chat ke research queries) aur ``chat_context`` chat_id
+    se filter hote hain. ``runs``/``feedback`` me chat_id column nahi hota,
+    is liye wo console-global hain. **Telegram message body kabhi store nahi
+    hota** — sirf research query text (search_memory) ya chat-context rows
+    jaa rahe hain.
+    """
+    init_db()
+    cid = str(chat_id)
+    with session() as con:
+        def rows(table, sql, params):
+            if not _table_exists(con, table):
+                return []
+            return [dict(r) for r in con.execute(sql, params)]
+        search = rows("search_memory",
+                      "SELECT * FROM search_memory WHERE chat_id=? ORDER BY id",
+                      (cid,))
+        context = rows("chat_context",
+                       "SELECT * FROM chat_context WHERE chat_id=? "
+                       "ORDER BY chat_id", (cid,))
+        runs = rows("runs",
+                    "SELECT id,query,mode,started_at,finished_at,status "
+                    "FROM runs ORDER BY id", ())
+        feedback = rows("feedback",
+                        "SELECT id,guid,useful,note,created_at "
+                        "FROM feedback ORDER BY id", ())
+    return {
+        "chat_id": cid,
+        "search_memory": search,
+        "chat_context": context,
+        "runs": runs,
+        "feedback": feedback,
+        "note": ("Telegram message body store nahi hota; sirf research query "
+                 "text (search_memory/chat_context) aur console runs/feedback "
+                 "export hote hain."),
+    }
+
+
+def delete_chat_data(chat_id) -> dict:
+    """``/delete`` — chat ka data asli delete (soft-delete nahi).
+
+    Chat-scoped tables: ``chat_context`` + ``search_memory``. ``feedback`` aur
+    ``runs`` me chat_id column nahi, is liye un se koi relation nahi — unhi
+    ki waja se wo 0 rehte hain (risky heuristic nahi lagatay).
+    """
+    init_db()
+    cid = str(chat_id)
+    with session() as con:
+        context = feedback = runs = 0
+        if _table_exists(con, "chat_context"):
+            context = int(con.execute(
+                "DELETE FROM chat_context WHERE chat_id=?", (cid,)).rowcount or 0)
+        if _table_exists(con, "search_memory"):
+            search_memory = int(con.execute(
+                "DELETE FROM search_memory WHERE chat_id=?", (cid,)).rowcount or 0)
+        else:
+            search_memory = 0
+    return {
+        "chat_id": cid,
+        "chat_context": context,
+        "search_memory": int(search_memory),
+        "feedback": feedback,
+        "runs": runs,
+        "deleted": True,
+        "note": ("feedback/runs me chat_id link nahi hai, is liye un ki rows "
+                 "nahi hata — inhe ``/api/export`` se asli data dekh lo."),
+    }
+
+
 def record_run(query: str, mode: str = "offline") -> int:
     with session() as con:
         cur = con.execute("INSERT INTO runs(query,mode,started_at,status) VALUES(?,?,?,'running')",
