@@ -39,14 +39,16 @@ ya default `python bot.py` (yeh shim ab wahi supervisor chalata hai).
 | `JIN_AGENT_DATA` | na | data dir (DB / reports / backups / logs), default `jin_agent/data` |
 | `JIN_AGENT_VERBOSE` | na | set karne par HTTP access log bhi dikhta hai (default off) |
 | `JIN_AGENT_SCHEDULER` | na | `serve` par scheduler auto-start; `off` / `0` / `false` par band (default on) |
-| `JIN_AGENT_RETENTION_DAYS` | na | retention window (din), default `180` — items + events/runs/reports/jobs/search_memory/tg_candidates |
+| `JIN_AGENT_RETENTION_DAYS` | na | retention window (din), default `90` — items + events/runs/reports/jobs/search_memory/tg_candidates |
 | `JIN_AGENT_BACKUP_KEEP` | na | `data/backups/` me rakhne wale backups, default `7` |
 | `JIN_AGENT_REPORT_DAYS` | na | `data/reports/` retention (din), default `90` |
 | `JIN_AGENT_MAX_ROUNDS` | na | research rounds ki cap, default `5` |
 | `JIN_AGENT_CHANNEL_NEGATIVE_TTL_DAYS` | na | failed channel ki negative memory TTL (din), default `7` — agla round unhe skip karega |
 | `JIN_AGENT_CHANNEL_DEAD_TTL_DAYS` | na | dead `tg_channels` registry TTL (din), default `30` — purani dead rows retention delete karta hai |
 | `JIN_AGENT_REPORT_CONFIDENCE` | na | report confidence gate (0–1), default `0.6` — is se niche "bharosemand nahi" payam, file nahi |
-| `JIN_AGENT_REQUIRE_CHAT_ID` | na | `1` par unset `TELEGRAM_CHAT_ID` reject (default off = allow-all) |
+| `JIN_AGENT_REQUIRE_CHAT_ID` | production par haan | `1` par unset `TELEGRAM_CHAT_ID` reject (default off = allow-all). `1` ke waqt chat id khaali/ghalat ho to bot **start nahi hoga** (allow-all silent mode rokne ke liye) |
+| `JIN_AGENT_ADMIN_TOKEN` | public bind par haan | Console bearer token (`Authorization: Bearer <token>`). Khaali par console sirf loopback (default `127.0.0.1`); `JIN_AGENT_HOST=0.0.0.0` par lazmi set karein. `/api/health` public rehta hai |
+| `JIN_AGENT_SCHEDULER_OFFLINE` | na | `serve` scheduler mode: `0` = live (default), `1` = offline; band karne ke liye `JIN_AGENT_SCHEDULER=off` |
 | `JIN_AGENT_SOURCE_STALE_DAYS` | na | source `stale` mark karne ki window (din), default `30` |
 | `JIN_AGENT_CHANNEL_STALE_DAYS` | na | active channel `stale` (khamosh) window (din), default `30` |
 | `JIN_AGENT_TRACE_DAYS` | na | `data/runs/` per-run trace retention (din), default `30` |
@@ -110,5 +112,26 @@ Docker:
 ```bash
 docker build -t jin-agent .
 docker run -p 8766:8766 -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_CHAT_ID=... \
-  -e JIN_AGENT_HOST=0.0.0.0 jin-agent
+  -e JIN_AGENT_HOST=0.0.0.0 -e JIN_AGENT_ADMIN_TOKEN=... jin-agent
 ```
+
+`Dockerfile` me `VOLUME /app/jin_agent/data` hai — DB, reports aur backups container
+rebuild/restart ke baad bhi barqarar rehte hain. Data dir `0700` (owner-only) aur
+DB `0600` set hoti hai (sirf process ke hone par).
+
+### DB backup / restore
+
+Backup: `POST /api/backup` (admin token) ya `store.backup()` — `data/backups/` me
+`jin_agent-<UTC>.db`, rolling retention `JIN_AGENT_BACKUP_KEEP` (default 7).
+
+Restore (DB overwrite — **confirm lazmi**):
+
+```bash
+python -m jin_agent restore --from data/backups/jin_agent-<stamp>.db --confirm
+```
+
+Console: `POST /api/restore` body `{"path": "...", "confirm": true}`.
+`--confirm` / `confirm:true` ke baghair CLI `1` return karta hai aur server `400`
+detā hai. Restore se pehle current DB ka safety backup apne aap banta hai; source
+par `PRAGMA integrity_check` + required tables ki tasdeeq hoti hai, replace
+atomic (`os.replace`) hai.

@@ -156,6 +156,25 @@ parh lein. Console ka default hamesha loopback rehta hai; `0.0.0.0` sirf
   hote hain magar `synthetic=1` flag se user-facing search (`/explore`,
   `/digest`, `/reports`) se hamesha bahar rehte hain.
 
+## Security Hardening (P0 audit)
+
+- **Console admin token (P0-1):** `JIN_AGENT_ADMIN_TOKEN` set ho to tamam
+  console paths (siwaye `/api/health`) `Authorization: Bearer <token>` ya
+  `X-Admin-Token` maangti hain (timing-safe compare). Token khaali par console
+  sirf loopback peer allow karta hai — `0.0.0.0` par token lazmi.
+- **Telegram authorization (P0-2):** `telegram_chat_id` unset = allow-all
+  (first-run default, deliberate). Production me `JIN_AGENT_REQUIRE_CHAT_ID=1`
+  set karein — to bot unset/ghalat chat id par **start hi nahi hoga**, aur
+  bahar wale chat ko 60s me aik throttled khabardari milti hai. `is_owner` ka
+  allow-all default barqarar hai (tests assert karte hain).
+- **DB durability/permissions (P0-3):** `VOLUME /app/jin_agent/data`, data dir
+  `0700` aur DB `0600` (sirf process ke hone par); `.gitignore` me WAL/SHM/
+  journal sidecars aur `.env*`.
+- **Backup restore (P0-4):** `store.restore(path, confirm=True)` — confirm gate,
+  integrity + schema check, pre-restore safety backup, atomic replace. CLI:
+  `python -m jin_agent restore --from <path> --confirm`; console:
+  `POST /api/restore {"path": ..., "confirm": true}`.
+
 ## Boundaries
 
 - Sahulat & Safe Service Policy (`SAHULAT-SAFE-SERVICE-v1`) barqarar: koi Huawei ID / Google FRP / Samsung Knox / MDM / carrier / iCloud bypass automation ya step-by-step tareeqa nahi; koi device write / erase / flash / IMEI operation nahi.
