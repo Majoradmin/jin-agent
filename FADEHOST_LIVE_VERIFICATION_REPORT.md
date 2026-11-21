@@ -247,6 +247,52 @@ Live bot:
 
 ---
 
+## 9. FadeHost console verification (read-only) — 21 Nov 2026
+
+Console (`https://laplace.fadehost.com/bots/bot_f399a85a1ab2417ebee2116a2362b561`) logged-in read-only verify. Koi setting nahi badli.
+
+| Item | Observed | Status |
+|---|---|---|
+| App state | `jin-agent` **running**; repo `Majoradmin/jin-agent`, branch `main` | PASS |
+| Deployed commit | **`65925a1`** `docs(audit): AUDIT_REPORT.md — P0/P1 remediation status (796 tests)` (37–38 min ago) | PASS (app code = `fd6d680` + P0 commits; docs-only last) |
+| Runtime | Python 3.13.18, `python bot.py`, supervisor interval 10s | PASS |
+| RAM | **125 / 256 MB** (Free limit) | PASS |
+| Disk | **135 MB of 3 GB** (`disk: 134M of 3.0G used`) | PASS |
+| Traffic | **450 MB of 1 GB today** | PARTIAL — 45% din ka quota |
+| Log retention | Free par **3 din** | PARTIAL |
+| Alerts | "No alert channel set up, so nothing was sent" — Notifications abhi set nahi | PARTIAL — masla par SMS/notify nahi jata |
+| Env vars (4 set) | `TELEGRAM_BOT_TOKEN` (len 46), `LLM_PROVIDER=custom`, `LLM_ENDPOINT=https://api.groq.com/openai/v1`, `LLM_MODEL=llama-3.3-70b-versatile` | PASS |
+| Env vars (missing) | `TELEGRAM_CHAT_ID`, `JIN_AGENT_REQUIRE_CHAT_ID`, `JIN_AGENT_ADMIN_TOKEN`, `JIN_AGENT_HOST`, `JIN_AGENT_SCHEDULER_OFFLINE` | GAP |
+| Console bind | log: `JIN Agent console: http://127.0.0.1:8080` → **loopback only** (`JIN_AGENT_HOST` unset) | **PASS** — console bahar se reachable NAHI |
+| Console auth | `JIN_AGENT_ADMIN_TOKEN` unset → loopback fallback (`server.py` `Handler._authorized`) | PARTIAL — loopback is liye mehfooz; token defense-in-depth ke liye |
+| Allow-all | `[bot] KHABARDAAR: telegram_chat_id unset — allow-all mode` | **GAP** — production me `TELEGRAM_CHAT_ID` + `JIN_AGENT_REQUIRE_CHAT_ID=1` |
+| DB durability | `Dockerfile:15` `VOLUME /app/jin_agent/data`, `mkdir -m 0700`, `chmod 0700` (P0-3 deployed) | PASS (code) |
+| DB browse | Files tab repo-backed app par khali; DB directly read NAHI ho saki | NOT VERIFIED |
+| Backup | `store.backup()` rolling-7 + `store.restore(confirm=True)` + CLI + `POST /api/restore` (code `f39e326`); FadeHost Backups tab Free par usable nahi | PARTIAL — code hai, hosted-level verify nahi |
+| FadeHost scanner | `[runtime] FLAGGED: worth a look in jin_agent/discovery_rank.py: stablecoin payments, loan offer` | Note — hamare spam-filter keywords (warning, block nahi) |
+| Privacy commands | `/delete` + `/forget` live (`/help` me) | PRESENT — **test NAHI kiya (destructive)** |
+
+Console evidence (verbatim excerpt):
+
+```
+[runtime] deployed 65925a1ab42aa0065d8cb35f20329e0624446a0c docs(audit): AUDIT_REPORT.md — P0/P1 remediation status (796 tests)
+[runtime] Python 3.13.18
+[runtime] runtime=python starting: python bot.py
+supervisor: console started pid=178
+supervisor: bot started pid=180
+JIN Agent console: http://127.0.0.1:8080
+[server] scheduler auto-start (offline=False)
+Telegram bot chal raha hai (long polling). Rokne ke liye Ctrl+C.
+[bot] Telegram command menu set (6 commands)
+[bot] KHABARDAAR: telegram_chat_id unset — allow-all mode. Production me TELEGRAM_CHAT_ID set karein.
+[bot] update workers: 2 (JIN_AGENT_UPDATE_WORKERS)
+```
+
+Abhi bhi baqi (approval ke liye production change):
+1. `TELEGRAM_CHAT_ID` + `JIN_AGENT_REQUIRE_CHAT_ID=1` (allow-all band karne ke liye).
+2. `JIN_AGENT_ADMIN_TOKEN` (console token defense-in-depth).
+3. FadeHost Notifications (Discord/email) — masla par alert ke liye.
+
 ## Appendix A — commands executed (verbatim)
 
 ```
