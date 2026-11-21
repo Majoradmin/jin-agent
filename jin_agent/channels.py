@@ -838,12 +838,17 @@ def check_channel(channel: str, cfg: dict | None = None) -> dict:
 # --------------------------------------------------------------------------
 
 def run_discovery(cfg: dict | None = None, offline: bool = False,
-                  max_add: int | None = None, query: str = "") -> dict:
+                  max_add: int | None = None, query: str = "",
+                  variants: list | None = None) -> dict:
     """Poora cycle: candidates dhoondo -> probe -> good add, dead archive.
 
     ``query`` (topic) diya ho to web search, archive harvest aur pool isi
     query se filter hote hain — ``/explore <topic>`` us topic par hi explore
     kare (neutral rotation ke baghair). Query khaali = purana neutral rotate.
+
+    ``variants`` (``query_variants.variants()`` ka natija) diya ho to web
+    search un tamam variants par chalti hai (max 3) — yaani Urdu / Roman
+    Urdu / English / tarjuma sab ek saath dhoondha jata hai.
     """
     cfg = cfg or config.load()
     ensure_table()
@@ -852,7 +857,15 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
     min_score = int(util.clamp(cfg.get("channel_min_score"), 0, 10, 4))
     max_auto = int(util.clamp(cfg.get("channel_discovery_max_auto"), 1, 500, 60))
     q = str(query or "").strip()
-    words = set(util.terms(q, 20)) if q else set()
+    var_texts = []
+    for v in (variants or [])[:3]:
+        t = str(v.get("text") if isinstance(v, dict) else v or "").strip()
+        if t:
+            var_texts.append(t)
+    search_terms = var_texts or ([q] if q else [])
+    words = set()
+    for t in ([q] + var_texts):
+        words |= set(util.terms(t, 20))
 
     known = {r["channel"] for r in list_channels()}
     manual = {clean_handle(c) for c in (cfg.get("telegram_channels") or [])}
@@ -861,12 +874,14 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
 
     # 1) web search (bootstrap) - offline me skip
     if not offline and bool(cfg.get("channel_discovery_web", True)):
-        info: dict = {}
-        if q:
-            # topic-driven: sirf us topic ki search
-            candidates.extend(web_search_candidates(q, cfg, info))
-            web_infos.append(info)
+        if search_terms:
+            # topic-driven: query + us ke variants (Urdu/Roman/tarjuma)
+            for term in search_terms[:3]:
+                info: dict = {}
+                candidates.extend(web_search_candidates(term, cfg, info))
+                web_infos.append(info)
         else:
+            info: dict = {}
             topics = cfg.get("topics") or TOPIC_KEYWORDS
             kw = topics[int(time.time() // 3600) % len(topics)]
             candidates.extend(web_search_candidates(str(kw), cfg, info))
@@ -942,6 +957,8 @@ def run_discovery(cfg: dict | None = None, offline: bool = False,
     out = {"query": q, "candidates": len(candidates), "probed": len(summaries),
            "added": added, "dead": dead, "rechecked": rechecked,
            "counts": counts(), "web_search": web_info,
+           # Query variants jo is run me istemal hue (Urdu/Roman/tarjuma)
+           "variants": list(search_terms),
            # Har probed candidate (active + dead/insufficient) — /explore card
            # ke liye. ``candidates`` count (int) barqarar hai (purane tests).
            "probe_rows": probe_rows}

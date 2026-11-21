@@ -84,14 +84,16 @@ def firehose(query: str = "", cfg: dict | None = None,
 
 
 def explore(topic: str = "", cfg: dict | None = None, offline: bool = True,
-            scope: str = "all", max_add: int | None = None) -> dict:
+            scope: str = "all", max_add: int | None = None,
+            variants: list | None = None) -> dict:
     """Channels/sources explore kar ke scored digest do (rozana digest pattern).
 
     ``topic`` khaali ho to neutral rotating topic (config.TOPICS) — koi
     hardcoded niche default NAHI. ``scope`` = all | tg | web | oss | deep:
     tg = channels, web/oss = archive scored items, deep = sirf links (fetch nahi).
     ``max_add`` = ek run me probe hone wale candidates (``/explore`` 15 bhejta
-    hai taake 10-15 channels ek nazar me aayein).
+    hai taake 10-15 channels ek nazar me aayein). ``variants`` = query ke
+    zabani/roman/tarjuma variants (discovery un par bhi chalti hai).
     """
     cfg = cfg or config.load()
     store.init_db()
@@ -102,7 +104,7 @@ def explore(topic: str = "", cfg: dict | None = None, offline: bool = True,
     if scope in ("all", "tg"):
         # topic-driven discovery: query ke mutabiq candidates.
         discovery = channels.run_discovery(cfg, offline, max_add=max_add,
-                                           query=topic)
+                                           query=topic, variants=variants)
     else:
         # web/oss/deep scope me channel probe ki zaroorat nahi (bina probe).
         discovery = {"query": topic, "candidates": 0, "probed": 0, "added": [],

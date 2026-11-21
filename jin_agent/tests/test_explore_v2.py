@@ -358,7 +358,7 @@ class TestDiscoveryQuery(unittest.TestCase):
     def test_scheduler_explore_passes_query_to_discovery(self):
         seen = {}
 
-        def fake_discovery(cfg, offline, query="", max_add=None):
+        def fake_discovery(cfg, offline, query="", max_add=None, variants=None):
             seen["query"] = query
             seen["max_add"] = max_add
             return {"added": [], "dead": [], "counts": {"active": 0}}
@@ -375,7 +375,7 @@ class TestDiscoveryQuery(unittest.TestCase):
     def test_scheduler_explore_forwards_max_add(self):
         seen = {}
 
-        def fake_discovery(cfg, offline, query="", max_add=None):
+        def fake_discovery(cfg, offline, query="", max_add=None, variants=None):
             seen["max_add"] = max_add
             return {"added": [], "dead": [], "counts": {"active": 0}}
 

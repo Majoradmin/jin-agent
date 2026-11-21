@@ -39,8 +39,8 @@ except ImportError:
 
 from . import (VERSION, channels as channels_mod, chat_context, config,
                dorks, highlight as highlight_mod, llm, orchestrator, policy,
-               report_export, scheduler, searchmemory as memory_mod, store,
-               util, verifier)
+               query_variants, report_export, scheduler,
+               searchmemory as memory_mod, store, util, verifier)
 
 
 class BotAPIError(RuntimeError):
@@ -1215,9 +1215,11 @@ def _run_explore(chat_id: int, topic: str, scope: str, cfg: dict, api) -> dict:
     try:
         # Manual explore: asli discovery (network probes) chalao, topic ke saath.
         # max_add=15: ek run me 10-15 channels probe/dikhao.
+        # variants: Urdu/Roman/tarjuma — discovery un par bhi chalti hai.
         res = scheduler.run_job("explore",
                                 {"query": topic, "scope": scope,
-                                 "max_add": EXPLORE_DISCOVERY_MAX_ADD},
+                                 "max_add": EXPLORE_DISCOVERY_MAX_ADD,
+                                 "variants": query_variants.variants(topic, cfg, 6)},
                                 cfg, offline=False)
     except Exception as exc:
         api.send(chat_id, f"❌ Explore fail: {type(exc).__name__}: "
