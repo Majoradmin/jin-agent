@@ -253,28 +253,17 @@ SOURCE_REGISTER = [
 TRUST_LABELS = ((0.9, "Official"), (0.8, "Verified"), (0.6, "Reported"),
                 (0.4, "Unverified"), (0.0, "Rumor"))
 
-# Narrow ACTION-intent patterns only. Merely mentioning FRP / activation lock
-# in a research query is legitimate and must NOT be blocked.
-BLOCK_PATTERNS = [
-    (r"\bfrp\s*(bypass|remove|reset|off|unlock|erase|hata|hatana)\b", "google"),
-    (r"\b(erase|write|reset)\s+(the\s+)?(frp|persistent|seccfg|devinfo|modemst)\b", "google"),
-    (r"\b(fmi|activation lock|icloud lock)\s*(off|remove|bypass|unlock|hata)\b", "apple"),
-    (r"\b(huawei id|samsung account|knox guard|mdm)\s*(bypass|remove|unlock|off)\b", "oem"),
-    (r"\b(unlock code|imei change|imei repair|blacklist clean|blacklist remove|carrier unlock kar do)\b", "oem"),
-    (r"\b(gsx|icloud)\s*(login|account|lookup)\b.*\b(bypass|crack|without)\b", "apple"),
-]
-
-OFFICIAL_LINKS = {
-    "google": "https://support.google.com/android/answer/6160491",
-    "apple": "https://support.apple.com/108794",
-    "oem": "https://support.google.com/android/answer/6160491",
-}
-
-BLOCK_REASON = (
-    "Ye server-side ownership control hai; is ka koi bypass automation ya "
-    "step-by-step tareeqa is agent mein nahi. Sahulat & Safe Service Policy "
-    "(POLICY_ID = SAHULAT-SAFE-SERVICE-v1) barqarar hai."
-)
+# P47 — user ke hukm par query-level ACTION-intent block patterns retire ho
+# gaye (FRP / FMI / Huawei ID / Knox / MDM / IMEI / carrier unlock waghera).
+# Bot ab research aur educational queries par rokta nahi — Google / Telegram
+# search engine ki tarah. Qayam rehne wali qawaid:
+#   * sirf legal / public sources (``ALLOWED_HOSTS`` + ``SOURCE_REGISTER``)
+#   * onion links sirf DISPLAY (fetch mana — ``check_url``)
+#   * spam / scam channel-title filter (``discovery_rank.spam_reason``)
+# ``BLOCK_PATTERNS`` ab khali hai; ``classify()`` hamesha ``allowed`` deta hai.
+BLOCK_PATTERNS: list = []
+OFFICIAL_LINKS: dict = {}
+BLOCK_REASON = ""
 
 
 def check_url(url, extra_hosts=()) -> tuple[bool, str]:
@@ -374,26 +363,16 @@ def trusted_public_endpoint(url: str) -> bool:
 
 
 def classify(text) -> dict:
-    """Return a verdict for a user request. No bypass steps are ever produced."""
-    s = str(text or "")[:4000]
-    low = s.lower()
-    for pattern, brand in BLOCK_PATTERNS:
-        if re.search(pattern, low, re.I):
-            return {
-                "verdict": "blocked",
-                "reason": BLOCK_REASON,
-                "official_links": [OFFICIAL_LINKS[brand]],
-                "safe_steps": [
-                    "Malik ka purchase proof / identity verify karain.",
-                    "Official manufacturer support route par case open karain.",
-                    "Case aur consent ka local record rakhein.",
-                ],
-                "matched_rule": pattern,
-            }
+    """Return a verdict for a user request.
+
+    P47: query-level block patterns retire ho gaye — har request ``allowed`` hai.
+    Sirf onion/link policy (``tor_mode: links_only``) aur dark-web note qayam.
+    """
+    low = str(text or "")[:4000].lower()
     educational = bool(re.search(r"\b(dark web|deep web|onion|tor|ahmia)\b", low, re.I))
     return {
         "verdict": "allowed",
-        "reason": "",
+        "reason": BLOCK_REASON,
         "official_links": [],
         "safe_steps": [],
         "matched_rule": "",

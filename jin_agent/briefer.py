@@ -366,7 +366,7 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
                 recs.append(f"- **{category}:** {RECOMMENDATIONS[category]}")
         recs += [
             "- Har customer case mein official route, consent aur local record rakhein.",
-            "- Koi bhi FRP / MDM / account / activation lock bypass step is agent se mat maangein; ye policy ke khilaf hai.",
+            "- Ye report sirf research / educational maqsad ke liye hai; kisi b operation ke liye official route use karein.",
         ]
         lines += recs + [""]
     lines += ["## Not Verified / Limitations", ""]
@@ -402,6 +402,12 @@ def _markdown(query, items, diagnostics, cfg, plan_result, audit, metrics,
               f"- Provenance: {audit.get('provenance_pct', 100) if audit else 100}%",
               f"- Fabricated citations: {audit.get('fabricated', 0) if audit else 0}",
               f"- Source register: {len(policy.register())} entries, date checked {policy.DATE_CHECKED}",
+              "",
+              "## Disclaimer", "",
+              ("Ye report sirf **research / educational** maqsad ke liye tayyar ki gayi hai. "
+               "JIN Agent kisi b masle (FRP / MDM / account / activation lock waghera) ka "
+               "operation, bypass ya step-by-step tareeqa nahi deta; is par agent ki zimmedari nahi hoti. "
+               "Koi b qanooni ya technical kaam ke liye official manufacturer / regulator route use karein."),
               "",
               "## Metrics", "",
               "```json", json.dumps(metrics or {}, ensure_ascii=False, indent=2), "```", ""]

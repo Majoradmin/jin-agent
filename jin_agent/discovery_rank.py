@@ -2,8 +2,8 @@
 
 Ye module **ranking** (query relevance) aur **spam/scam** pehchan karta hai.
 Ownership-control patterns (FRP / FMI / HuaweiID / Knox / MDM / IMEI /
-carrier-bypass) yahan NAHI hain — wo ``policy.py`` ke ``BLOCK_PATTERNS`` hain
-aur bina badle istemal hote hain. Koi nayi dependency NAHI.
+carrier-bypass) P47 me retire ho gaye — bot ab research/educational queries
+par rokta nahi. Spam/scam channel-title filter qayam hai. Koi nayi dependency NAHI.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ __all__ = [
     "relevance_detail",
     "relevance_reason",
     "spam_reason",
-    "blocked_reason",
     "dedupe_handles",
 ]
 
@@ -111,17 +110,12 @@ def spam_reason(text) -> str:
 
 
 def blocked_reason(text) -> str:
-    """``policy.BLOCK_PATTERNS`` se blocked rule; na ho to ``""``."""
-    try:
-        verdict = policy.classify(str(text or ""))
-    except Exception:
-        return ""
-    if isinstance(verdict, dict) and verdict.get("verdict") == "blocked":
-        return str(verdict.get("matched_rule") or "policy")
-    return ""
+    """P47: query/title-level block retire — hamesha ``""`` (safety net).
 
-
-# --------------------------------------------------------------------------
+    Purani kahani: ``policy.BLOCK_PATTERNS`` se blocked rule. Ab koi block
+    pattern nahi, is liye ye function hamesha khali deta hai.
+    """
+    return ""# --------------------------------------------------------------------------
 # Dedupe (Telegram handles case-insensitive hote hain)
 # --------------------------------------------------------------------------
 

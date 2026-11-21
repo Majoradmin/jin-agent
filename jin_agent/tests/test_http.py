@@ -124,10 +124,11 @@ class TestConsole(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(body["result"]["errors"], [])
 
-    def test_12_classify_blocked(self):
+    def test_12_classify_allowed(self):
+        # P47: query-level block patterns retire — /api/classify allowed deta hai.
         code, body, _ = get_json("/api/classify", "POST", {"text": "FRP bypass kar do"})
         self.assertEqual(code, 200)
-        self.assertEqual(body["gate"]["verdict"], "blocked")
+        self.assertEqual(body["gate"]["verdict"], "allowed")
 
     def test_13_tools_listed(self):
         code, body, _ = get_json("/api/tools")

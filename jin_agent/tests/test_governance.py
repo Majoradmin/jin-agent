@@ -127,9 +127,11 @@ class TestBoundaries(unittest.TestCase):
     def test_policy_id(self):
         self.assertEqual(policy.POLICY_ID, "SAHULAT-SAFE-SERVICE-v1")
 
-    def test_bypass_still_blocked(self):
-        self.assertEqual(policy.classify("FRP bypass kar do")["verdict"], "blocked")
-        self.assertEqual(policy.classify("iCloud activation lock bypass")["verdict"], "blocked")
+    def test_query_blocks_retired(self):
+        # P47: user ke hukm par query-level block patterns retire ho gaye —
+        # bot ab research/educational queries par rokta nahi.
+        self.assertEqual(policy.classify("FRP bypass kar do")["verdict"], "allowed")
+        self.assertEqual(policy.classify("iCloud activation lock bypass")["verdict"], "allowed")
 
 
 if __name__ == "__main__":

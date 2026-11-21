@@ -93,11 +93,13 @@ class TestLegalInstitutionalSources(unittest.TestCase):
         ok, _ = policy.check_url("http://abcdefghijklmnop.onion/x")
         self.assertFalse(ok)
 
-    def test_bypass_patterns_not_removed(self):
-        blob = " ".join(p for p, _ in policy.BLOCK_PATTERNS).lower()
-        for word in ("frp", "fmi", "huawei id", "knox guard", "mdm", "imei",
-                     "carrier unlock"):
-            self.assertIn(word, blob)
+    def test_query_blocks_retired(self):
+        # P47 — user ke hukm par query-level block patterns retire ho gaye.
+        self.assertEqual(policy.BLOCK_PATTERNS, [])
+        for text in ("FRP bypass kar do", "samsung frp unlock", "imei change",
+                     "icloud lock remove", "mdm bypass", "blacklist clean",
+                     "carrier unlock kar do"):
+            self.assertEqual(policy.classify(text)["verdict"], "allowed", text)
 
 
 class TestURLGuard(unittest.TestCase):
@@ -160,14 +162,14 @@ class TestURLGuard(unittest.TestCase):
 
 
 class TestSafeServiceBoundary(unittest.TestCase):
-    def test_bypass_action_requests_blocked(self):
+    def test_bypass_action_requests_allowed(self):
+        # P47: ownership-control action queries bhi allowed (research/educational).
         for text in ("FRP bypass kar do", "erase frp partition", "FMI off karo",
                      "huawei id bypass", "imei change kar do", "mdm remove karo"):
             out = policy.classify(text)
-            self.assertEqual(out["verdict"], "blocked", text)
-            self.assertTrue(out["official_links"][0].startswith("https://"))
-            self.assertTrue(out["safe_steps"])
-            self.assertEqual(out["reason"], policy.BLOCK_REASON)
+            self.assertEqual(out["verdict"], "allowed", text)
+            self.assertEqual(out["official_links"], [])
+            self.assertEqual(out["safe_steps"], [])
 
     def test_legitimate_research_not_blocked(self):
         for text in ("Android security bulletin FRP research",
@@ -175,12 +177,11 @@ class TestSafeServiceBoundary(unittest.TestCase):
                      "Qualcomm firehose EDL 9008"):
             self.assertEqual(policy.classify(text)["verdict"], "allowed", text)
 
-    def test_banned_phrase_survives_padding_inside_window(self):
-        # classify() scans a bounded 4000-char window; orchestrator caps the
-        # query at the same bound. Padding inside that window cannot hide it.
-        out = policy.classify("news " * 300 + "frp bypass")
-        self.assertEqual(out["verdict"], "blocked")
-        self.assertEqual(policy.classify("frp bypass")["verdict"], "blocked")
+    def test_classify_long_text_safe(self):
+        # classify() pehle 4000 char par hai bounded; lamba text bhi mehfoos.
+        out = policy.classify("news " * 3000 + "frp bypass")
+        self.assertEqual(out["verdict"], "allowed")
+        self.assertIn("verdict", out)
 
     def test_educational_deep_web_note(self):
         out = policy.classify("legal dark web onion research")

@@ -105,15 +105,17 @@ class TestSpamFilter(unittest.TestCase):
             self.assertEqual(discovery_rank.spam_reason(text), "", text)
 
     def test_frp_not_spam_policy_is_separate(self):
-        # FRP/FMI/MDM/IMEI patterns spam filter me NAHI — wo policy.py hain.
+        # FRP/FMI/MDM/IMEI patterns spam filter me NAHI — aur P47 se policy block
+        # bhi retire, is liye blocked_reason hamesha "" deta hai.
         self.assertEqual(discovery_rank.spam_reason("FRP bypass kar do"), "")
-        self.assertIn("frp", discovery_rank.blocked_reason("FRP bypass kar do"))
+        self.assertEqual(discovery_rank.blocked_reason("FRP bypass kar do"), "")
 
 
 class TestBlockedFilter(unittest.TestCase):
-    def test_policy_blocked_detected(self):
-        self.assertTrue(discovery_rank.blocked_reason("FRP bypass kar do"))
-        self.assertTrue(discovery_rank.blocked_reason("iCloud activation lock bypass"))
+    def test_block_retired(self):
+        # P47: ownership-control title block retire — hamesha "" (safety net).
+        self.assertEqual(discovery_rank.blocked_reason("FRP bypass kar do"), "")
+        self.assertEqual(discovery_rank.blocked_reason("iCloud activation lock bypass"), "")
         self.assertEqual(discovery_rank.blocked_reason("Android Security"), "")
 
 
@@ -230,11 +232,12 @@ class TestCheckChannelSafety(unittest.TestCase):
         self.assertEqual(res["score"], 0)
         self.assertTrue(res["note"].startswith("spam:"))
 
-    def test_blocked_status(self):
+    def test_block_retired_title_not_blocked(self):
+        # P47: ownership-control title block retire — FRP title ab 'active'
+        # (ya liveness ke mutabiq koi aur status), 'blocked' nahi.
         res = self._check("FRP Bypass Tool")
-        self.assertEqual(res["status"], "blocked")
-        self.assertEqual(res["score"], 0)
-        self.assertTrue(res["note"].startswith("blocked:"))
+        self.assertNotEqual(res["status"], "blocked")
+        self.assertFalse(res["note"].startswith("blocked:"))
 
     def test_normal_active_with_relevance(self):
         res = self._check("Android Security", query="android security")
@@ -243,10 +246,10 @@ class TestCheckChannelSafety(unittest.TestCase):
         self.assertGreater(res["relevance"], 0)
         self.assertIn("android", res["reason"])
 
-    def test_frp_title_not_spam(self):
-        # FRP wala title blocked hai, spam NAHI — policy ka kaam alag hai.
+    def test_frp_title_not_blocked(self):
+        # P47: FRP wala title ab blocked NAHI — liveness ke mutabiq status.
         res = self._check("FRP Bypass Tool")
-        self.assertEqual(res["status"], "blocked")
+        self.assertNotEqual(res["status"], "blocked")
         self.assertFalse(res["note"].startswith("spam:"))
 
 
